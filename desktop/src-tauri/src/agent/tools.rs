@@ -188,12 +188,25 @@ mod tests {
     }
 
     #[test]
-    fn knowledge_save_requires_url() {
+    fn knowledge_save_requires_title_body_and_idempotency_key() {
         let tool = KnowledgeSaveTool;
+        let valid = serde_json::json!({
+            "title": "Note",
+            "body": "x",
+            "sourceUrl": "https://e.com",
+            "idempotencyKey": "k1"
+        });
+        assert!(tool.validate(&valid).is_ok());
+
+        // `body` is the first thing validated and must be non-empty.
         assert!(tool.validate(&serde_json::json!({"body": ""})).is_err());
+        // `title` and `idempotencyKey` are required by the tool's JSON schema.
         assert!(tool
-            .validate(&serde_json::json!({"body": "x", "sourceUrl": "https://e.com"}))
-            .is_ok());
+            .validate(&serde_json::json!({"body": "x", "idempotencyKey": "k1"}))
+            .is_err());
+        assert!(tool
+            .validate(&serde_json::json!({"title": "Note", "body": "x"}))
+            .is_err());
     }
 }
 

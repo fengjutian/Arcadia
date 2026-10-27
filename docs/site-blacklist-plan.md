@@ -28,7 +28,7 @@
 
 ### 2.1 设置页
 
-「设置 → 隐私」新增页签**「网站封杀 N」**（N 为名单数量），包含：
+「设置 → 隐私」新增页签**「网站封杀」**，包含：
 
 | 区块 | 行为 |
 | --- | --- |
@@ -36,7 +36,7 @@
 | 子资源开关 | 「同时阻断被封杀站点的嵌入资源」默认开启；关闭后只拦顶级页面导航。 |
 | 添加 | 输入域名或完整 URL，回车或点「添加」。支持 `example.com`、`https://example.com/path`、`*.example.com`、IDN（自动转 punycode）。重复项直接提示已存在。 |
 | 批量导入 | 多行文本一次导入，每行一个地址；也接受逗号/分号分隔。返回「新增 / 重复 / 无效」三类计数与无效原因。 |
-| 名单 | 每项显示主机名、包含子域、命中次数、最近命中时间、来源；提供启用/停用开关与删除。支持按主机名过滤。 |
+| 名单 | 每项显示主机名、是否仅本站（默认含子域）、命中次数、最近命中时间、来源；提供启用/停用开关与删除。支持按主机名过滤。 |
 | 统计 | 名单总数、启用数、累计命中次数；「清空全部」需二次确认。 |
 | 最近命中 | 最近 20 条顶级页面拦截记录（主机、URL、时间、标签）。 |
 | 导出 | 把启用中的主机名导出为 `.txt`（一行一个），便于迁移。 |
@@ -179,6 +179,7 @@ record_block(app, ...)          异步写事件表 + 累加命中计数（私密
 | --- | --- |
 | `browser_create` | 构建 WebView 之前检查；命中直接返回 `Err("site-blocked:<host>|<rule>")`，不创建 WebView、不发出请求。 |
 | `browser_navigate` | `.navigate()` 之前检查；命中返回同上错误，WebView 保持原页面。 |
+| `browser_reload` | 当前 URL 命中时返回同样的错误，不触发重载。 |
 | WebView2 `NavigationStarting`（Windows） | 检查 `NavigationStarting` 的 URL；命中时 `SetCancel(true)`，`emit("browser://site-blocked")`，并异步记录事件。覆盖页面内链接、重定向、表单提交、前进/后退、刷新。 |
 | `WebResourceRequested`（Windows） | 子资源开关开启时，在 ABP 判定之前检查主机；命中返回 `204 No Content`，计入隐私统计。 |
 | `on_new_window` | 新窗口 URL 进入前端后会走 `browser_create`，由该入口兜底；不在 Rust 侧重复判断。 |
@@ -195,6 +196,7 @@ record_block(app, ...)          异步写事件表 + 累加命中计数（私密
   "url": "https://example.com/a",
   "host": "example.com",
   "ruleHost": "example.com",
+  "entryId": "7f6c…",
   "resourceType": "document"
 }
 ```
@@ -211,10 +213,10 @@ record_block(app, ...)          异步写事件表 + 累加命中计数（私密
 导航类命令命中封杀时返回：
 
 ```text
-site-blocked:<host>|<ruleHost>
+site-blocked:<host>|<ruleHost>|<entryId>
 ```
 
-前端 `classifyNavigationError` 识别该前缀并转换为 `{ kind: 'site-blocked', host, ruleHost }`，不进入网络诊断流程（避免对被封杀站点发起探测请求）。
+前端 `classifyNavigationError` 识别该前缀并转换为 `{ kind: 'site-blocked', host, ruleHost, entryId }`，不进入网络诊断流程（避免对被封杀站点发起探测请求）。`entryId` 让拦截页可以直接解除对应规则。
 
 ### 5.6 记录与隐私
 

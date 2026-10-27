@@ -751,8 +751,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             },
           }
         : tab))
-      void stopNativeTab(tabId)
-      void hideNativeTab(tabId)
+      // The page is now blacklisted: close its WebView so no background work
+      // or audio survives the block. Reopening happens via `openNativeTab`.
+      void closeNativeTab(tabId)
       messageApi.success(`已封杀 ${entry.host}，可在「设置 → 隐私 → 网站封杀」中管理`)
     } catch (error) {
       messageApi.error(String(error))

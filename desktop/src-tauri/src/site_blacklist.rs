@@ -246,9 +246,14 @@ pub fn match_url(url: &str) -> Option<SiteMatch> {
     snapshot().match_url(url)
 }
 
-/// Whether sub-resource requests from blacklisted hosts must be blocked.
-pub fn blocks_subresources() -> bool {
-    snapshot().blocks_subresources()
+/// One-stop check for the sub-resource filter: honours the global switch and
+/// the "block embedded resources" setting, and reads the snapshot once.
+pub fn match_blocked_subresource(url: &str) -> Option<SiteMatch> {
+    let rules = snapshot();
+    if !rules.blocks_subresources() {
+        return None;
+    }
+    rules.match_url(url)
 }
 
 /// Error string understood by `classifyNavigationError` on the UI side.
@@ -676,9 +681,12 @@ pub fn site_blacklist_set_settings(
     let database = local_store::connection(&app)?;
     database
         .execute(
-            "UPDATE site_blacklist_settings
-             SET enabled = ?1, block_subresources = ?2, updated_at = ?3
-             WHERE id = 1",
+            "INSERT INTO site_blacklist_settings(id, enabled, block_subresources, updated_at)
+             VALUES(1, ?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET
+                 enabled = excluded.enabled,
+                 block_subresources = excluded.block_subresources,
+                 updated_at = excluded.updated_at",
             params![enabled as i64, block_subresources as i64, now_seconds()],
         )
         .map_err(|error| error.to_string())?;

@@ -42,6 +42,11 @@ function fail(message) {
   process.exit(1)
 }
 
+/** Node has no synchronous sleep; defer to a throwaway child process. */
+function sleepSync(ms) {
+  spawnSync(process.execPath, ['-e', `setTimeout(() => {}, ${ms})`], { stdio: 'ignore' })
+}
+
 /** Locates the newest x64 mt.exe shipped with the Windows SDK. */
 function findMt() {
   if (process.platform !== 'win32') return null
@@ -123,13 +128,20 @@ function stampManifests(executables) {
   }
 
   for (const executable of executables) {
-    const stamped = spawnSync(
-      mt,
-      ['-nologo', '-manifest', manifestPath, `-outputresource:${executable};#1`],
-      { encoding: 'utf8' },
-    )
-    if (stamped.status !== 0) {
-      process.stderr.write(stamped.stderr ?? stamped.stdout ?? '')
+    // A just-finished previous run (or an antivirus scan) can briefly hold the
+    // executable open, which makes mt.exe fail with a sharing violation.
+    let stamped = null
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      stamped = spawnSync(
+        mt,
+        ['-nologo', '-manifest', manifestPath, `-outputresource:${executable};#1`],
+        { encoding: 'utf8' },
+      )
+      if (stamped.status === 0) break
+      sleepSync(300 * (attempt + 1))
+    }
+    if (!stamped || stamped.status !== 0) {
+      process.stderr.write(stamped?.stderr ?? stamped?.stdout ?? '')
       fail(`mt.exe could not stamp ${executable}`)
     }
   }

@@ -47,21 +47,40 @@ pub fn match_request(set: &Arc<CompiledRuleSet>, meta: &RequestMeta) -> MatchOut
         }
     }
 
-    if let Some(host) = url_host_str.as_deref() {
-        if let Some(ids) = set.exact_hosts.get(host) {
-            for id in ids {
-                return MatchOutcome {
-                    matched: true,
-                    action: Some(RuleAction::Block),
-                    rule_id: Some(*id),
-                    reason: "exact host".into(),
-                };
-            }
+    // Spec B4: allow rules win, including generic ones, so they are consulted
+    // before any block bucket.
+    for pattern in set
+        .generic_patterns
+        .iter()
+        .filter(|p| matches!(p.action, RuleAction::Allow))
+    {
+        if pattern_matches(pattern, &meta.url) {
+            return MatchOutcome {
+                matched: true,
+                action: Some(pattern.action),
+                rule_id: Some(pattern.rule_id),
+                reason: "generic allow".into(),
+            };
         }
-        // Reverse-host walk for the suffix bucket.
+    }
+
+    if let Some(host) = url_host_str.as_deref() {
+        // Walk every suffix of the host (`a.b.c` → `a.b.c`, `b.c`, `c`):
+        // ABP's `||example.com^` matches the domain *and* its subdomains, so an
+        // exact-host-only lookup would miss `tracking.ads.example.com`.
         let parts: Vec<&str> = host.split('.').collect();
-        for window in parts.windows(1).rev() {
-            let needle = window.join(".");
+        for start in 0..parts.len() {
+            let needle = parts[start..].join(".");
+            if let Some(ids) = set.exact_hosts.get(&needle) {
+                if let Some(id) = ids.first() {
+                    return MatchOutcome {
+                        matched: true,
+                        action: Some(RuleAction::Block),
+                        rule_id: Some(*id),
+                        reason: "exact host".into(),
+                    };
+                }
+            }
             for rule in &set.suffix_hosts {
                 if matches(rule, &needle, meta, origin_host.as_deref()) {
                     return MatchOutcome {
@@ -75,13 +94,17 @@ pub fn match_request(set: &Arc<CompiledRuleSet>, meta: &RequestMeta) -> MatchOut
         }
     }
 
-    for pattern in &set.generic_patterns {
+    for pattern in set
+        .generic_patterns
+        .iter()
+        .filter(|p| !matches!(p.action, RuleAction::Allow))
+    {
         if pattern_matches(pattern, &meta.url) {
             return MatchOutcome {
                 matched: true,
-                action: Some(RuleAction::Allow), // allows only — blocks took the suffix path
+                action: Some(pattern.action),
                 rule_id: Some(pattern.rule_id),
-                reason: "generic allow".into(),
+                reason: "generic pattern".into(),
             };
         }
     }
@@ -224,9 +247,17 @@ mod tests {
     use super::*;
 
     fn set_with(rule: NetworkRule) -> Arc<CompiledRuleSet> {
-        let mut s = CompiledRuleSet::default();
-        s.suffix_hosts.push(rule);
-        Arc::new(s)
+        // Run the real compiler so the fixture lands in the same bucket
+        // production would use (host rules vs. generic wildcard patterns).
+        let parsed = crate::privacy::types::ParsedRule {
+            network: vec![rule],
+            cosmetic: vec![],
+            unsupported: vec![],
+        };
+        Arc::new(crate::privacy::compiler::compile(
+            &parsed,
+            &Default::default(),
+        ))
     }
 
     fn block_rule(pattern: &str) -> NetworkRule {

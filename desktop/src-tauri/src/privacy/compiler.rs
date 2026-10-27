@@ -45,6 +45,9 @@ impl CompiledRuleSet {
 #[derive(Debug, Clone)]
 pub struct CompiledPattern {
     pub rule_id: u64,
+    /// Carried so the matcher can honour both generic allow and generic block
+    /// rules; previously every generic pattern was assumed to be an allow.
+    pub action: crate::privacy::types::RuleAction,
     pub anchor_start: bool,
     pub anchor_end: bool,
     pub parts: Vec<String>,
@@ -54,26 +57,33 @@ pub fn compile(parsed: &ParsedRule, _opts: &ParserOptions) -> CompiledRuleSet {
     let mut out = CompiledRuleSet::default();
     for rule in &parsed.network {
         if let Some(host) = host_from_pattern(&rule.pattern) {
-            out.exact_hosts
-                .entry(host.to_ascii_lowercase())
-                .or_default()
-                .push(rule.id);
-            if matches!(rule.action, crate::privacy::types::RuleAction::Allow) {
-                out.allow_rules
-                    .entry(host.to_ascii_lowercase())
-                    .or_default()
-                    .push(rule.id);
-            }
-        } else {
-            // Pattern is generic — add to the suffix bucket; for `*` / `|url`
-            // / `url|` / regular patterns, we walk the generic matcher.
-            if matches!(rule.action, crate::privacy::types::RuleAction::Allow) {
-                // Allows take precedence over blocks; index allows separately
-                // so the matcher consults them first.
-                out.generic_patterns.push(compile_pattern(rule));
+            let host = host.to_ascii_lowercase();
+            // `exact_hosts` only stores rule ids, so it cannot express
+            // per-rule filters. Rules that carry a third-party or resource-type
+            // condition must stay in `suffix_hosts`, where the matcher has the
+            // full `NetworkRule` and can evaluate them.
+            let unconditional = rule.third_party.is_none() && rule.resource_types.is_empty();
+            if unconditional {
+                out.exact_hosts.entry(host.clone()).or_default().push(rule.id);
             } else {
                 out.suffix_hosts.push(rule.clone());
             }
+            if matches!(rule.action, crate::privacy::types::RuleAction::Allow) {
+                out.allow_rules.entry(host).or_default().push(rule.id);
+            }
+        } else if matches!(rule.action, crate::privacy::types::RuleAction::Allow) {
+            // Allows take precedence over blocks; index allows separately
+            // so the matcher consults them first.
+            out.generic_patterns.push(compile_pattern(rule));
+        } else if rule.pattern.starts_with("||") {
+            // Host-anchored but with a path / wildcard tail: the suffix walk
+            // still has a host to look up.
+            out.suffix_hosts.push(rule.clone());
+        } else {
+            // Purely generic block rule (`*/ads/*`, `|https://x/y|`, …). It has
+            // no host to index, so it must live in the generic bucket or it is
+            // silently never matched.
+            out.generic_patterns.push(compile_pattern(rule));
         }
     }
 
@@ -108,6 +118,7 @@ fn compile_pattern(rule: &NetworkRule) -> CompiledPattern {
     let inner = pattern.trim_matches('|');
     CompiledPattern {
         rule_id: rule.id,
+        action: rule.action,
         anchor_start,
         anchor_end,
         parts: inner.split('*').map(|p| p.to_string()).collect(),

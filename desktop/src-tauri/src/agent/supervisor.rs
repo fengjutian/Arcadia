@@ -332,7 +332,8 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE agent_runs(
-                id TEXT PRIMARY KEY, status TEXT NOT NULL, steps_json TEXT NOT NULL DEFAULT '[]',
+                id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL, steps_json TEXT NOT NULL DEFAULT '[]',
                 final_answer TEXT, last_error TEXT, started_at INTEGER NOT NULL DEFAULT 0,
                 finished_at INTEGER, objective TEXT NOT NULL DEFAULT '',
                 provider_id TEXT NOT NULL DEFAULT 'p', model TEXT NOT NULL DEFAULT 'm',

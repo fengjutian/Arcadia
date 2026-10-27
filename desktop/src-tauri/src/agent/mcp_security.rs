@@ -119,9 +119,12 @@ mod tests {
 
     #[test]
     fn http_to_localhost_is_blocked_by_default() {
+        // The scheme is tolerated for loopback hosts (local MCP servers are a
+        // supported deployment), so the rejection surfaces as the more precise
+        // `PrivateOrLocalBlocked` rather than `BadScheme`.
         assert!(matches!(
             validate_url("http://localhost:8080/mcp", &McpUrlPolicy::default()),
-            Err(McpUrlError::BadScheme(_))
+            Err(McpUrlError::PrivateOrLocalBlocked)
         ));
     }
 

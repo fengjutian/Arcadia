@@ -77,7 +77,7 @@ Provider 与网络：`reqwest` + `rustls-tls`，流式响应。
 │ React UI                                             │
 │ Browser / Library / Search / Assistant / Settings    │
 └────────────────────────┬─────────────────────────────┘
-                         │ Tauri commands（167 个）
+                         │ Tauri commands（178 个）
 ┌────────────────────────▼─────────────────────────────┐
 │ Tauri / Rust                                         │
 │  browser/        WebView 生命周期、导航、安全边界     │

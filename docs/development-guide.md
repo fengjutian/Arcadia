@@ -209,7 +209,7 @@ sequenceDiagram
 | `getSession(key)` / `setSession(key, value)` | `local_get_session` / `local_set_session` | 通用 K/V；非 Tauri 模式 get 返回 null、set no-op |
 | `exportBackup()` / `importBackup(backup)` | `local_export_backup` / `local_import_backup` | 导出 / 导入本地文档 + 会话状态为备份；版本号必须为 1；非 Tauri 模式导出空、导入返回零计数 |
 
-`api.ts` 同时是 RAG、隐私、插件、Agent、MCP、下载、历史、书签、集合、任务与阅读活动的统一入口，总计约 167 个 command。按组归纳：
+`api.ts` 同时是 RAG、隐私、插件、Agent、MCP、下载、历史、书签、集合、任务与阅读活动的统一入口，总计约 178 个 command。按组归纳：
 
 | 组 | 代表函数 | command 前缀 |
 | --- | --- | --- |
@@ -233,7 +233,7 @@ sequenceDiagram
 
 ### 6.1 Commands
 
-在 `lib.rs` 的 `generate_handler!` 中注册的 command 约 167 个，按组归纳见 §5.5；下表列出最基础的 WebView 与本地文档一组。所有 command 统一返回 `Result<T, String>`，错误以字符串回传前端。
+在 `lib.rs` 的 `generate_handler!` 中注册的 command 约 178 个，按组归纳见 §5.5；下表列出最基础的 WebView 与本地文档一组。所有 command 统一返回 `Result<T, String>`，错误以字符串回传前端。
 
 | Command | 参数 | 返回 | 说明 |
 | --- | --- | --- | --- |
