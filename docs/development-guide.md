@@ -58,6 +58,7 @@ AI Provider、RAG、隐私拦截、WASM 插件运行时和受控 Agent 均已实
 │       ├── src/rag/                 # 分块、索引、召回、融合、引用、评测
 │       ├── src/providers/           # openai / ollama / embedding
 │       ├── src/privacy/             # 规则编译与请求拦截
+│       ├── src/site_blacklist.rs    # 用户网站封杀名单（导航前拦截）
 │       ├── src/plugins/             # Manifest、安装器、WASM 运行时
 │       ├── src/agent/               # 受控 Agent
 │       ├── src/lib.rs               # Tauri commands 与启动入口
