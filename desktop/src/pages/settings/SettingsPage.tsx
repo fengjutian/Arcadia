@@ -6,6 +6,7 @@ import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInD
 import type { AIProvider, AIProviderType } from '../../types'
 import { normalizeOrigin, readSitePermissions, writeSitePermissions, type SitePermissionKind, type SitePermissionRule } from '../../features/browser/sitePermissions'
 import { KnowledgeBaseStatusPanel } from '../../features/settings/KnowledgeBaseStatusPanel'
+import { SiteBlacklistPanel } from '../../features/privacy/SiteBlacklistPanel'
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../features/settings/theme'
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS, writeSearchEngineConfig } from '../../features/browser/searchEngine'
 import { isSearchTemplateValid } from '../../features/browser/navigation'
@@ -872,6 +873,7 @@ function PrivacySettings() {
     { key: 'private', label: '私密浏览', children: privateContent },
     { key: 'history', label: `浏览历史 ${historyEntries.length}`, children: historyContent },
     { key: 'adblock', label: `广告拦截 ${adStats.totalBlocked}`, children: adBlockContent },
+    { key: 'site-blacklist', label: '网站封杀', children: <SiteBlacklistPanel /> },
     { key: 'rules', label: `规则集 ${blocklists.length}`, children: ruleListContent },
     { key: 'blocks', label: `最近拦截 ${recentBlocks.length}`, children: recentBlocksContent },
     { key: 'statistics', label: '访问统计', children: statisticsContent },

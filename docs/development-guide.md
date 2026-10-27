@@ -27,7 +27,7 @@ AI Provider、RAG、隐私拦截、WASM 插件运行时和受控 Agent 均已实
 | UI 组件层 | `components/ui/`（`@base-ui/react` + `lucide-react`） | 对外暴露对齐 Ant Design 用法的组件；**不依赖 `antd` 包** |
 | 桌面壳 | Tauri 2、Rust | 子 WebView、受控导航、页面快照、本地 SQLite、应用打包 |
 | 内容处理 | Mozilla Readability、Turndown、React Markdown + remark-gfm | 正文识别、HTML 清理、Markdown 转换和展示 |
-| 持久化 | `rusqlite`（bundled） + SQLite **FTS5** | 25 个顺序迁移；文档、标签、集合、任务、Provider、下载、历史、书签、工作区、阅读活动、凭证、RAG、Agent、插件、隐私统计 |
+| 持久化 | `rusqlite`（bundled） + SQLite **FTS5** | 26 个顺序迁移；文档、标签、集合、任务、Provider、下载、历史、书签、工作区、阅读活动、凭证、RAG、Agent、插件、隐私统计 |
 | 检索 | 自实现 BM25 / 向量索引 / RRF / Reranker / 引用校验 | 混合召回与带引用的问答 |
 | Provider | `reqwest` + `rustls-tls`（流式） | OpenAI Compatible、Ollama、Embedding |
 | 插件 | `wasmtime`（component-model + cranelift） | WASI Preview 2 组件运行时，Fuel / 内存 / 超时隔离 |
@@ -306,7 +306,7 @@ form-action 'self'
 
 检索走 FTS5（见 §7.2），只有在空查询或检索词全部被清洗掉时才降级为按 `starred DESC, created_at DESC` 全量列表。
 
-Schema 版本与迁移由 `schema_version` 表 + `MIGRATIONS` 常量管理，每次 `connection()` 调用 `run_migrations` 自动推进；当前共 25 个迁移（v1–v25）。`local_migration_status` command 暴露当前版本与 pending 数量。迁移是追加式的，只能新增版本号，不能修改已发布的条目。
+Schema 版本与迁移由 `schema_version` 表 + `MIGRATIONS` 常量管理，每次 `connection()` 调用 `run_migrations` 自动推进；当前共 26 个迁移（v1–v26）。`local_migration_status` command 暴露当前版本与 pending 数量。迁移是追加式的，只能新增版本号，不能修改已发布的条目。
 
 各版本内容：
 

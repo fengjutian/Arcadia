@@ -14,6 +14,7 @@ pub mod process_memory;
 pub mod providers;
 pub mod rag;
 pub mod session_lock;
+pub mod site_blacklist;
 pub mod webview_compat;
 
 use rusqlite::params;
@@ -694,6 +695,10 @@ async fn browser_create(
     let download_app = app.clone();
     let download_label = label.clone();
     let private_mode = private.unwrap_or(false);
+    if let Some(found) = site_blacklist::match_url(&nav_url) {
+        site_blacklist::block_document(&app, &nav_url, &found, Some(&label), private_mode);
+        return Err(site_blacklist::blocked_error(&found));
+    }
     let page_app = app.clone();
     let page_label = label.clone();
     let builder = tauri::webview::WebviewBuilder::new(&label, tauri::WebviewUrl::External(url))
@@ -855,6 +860,13 @@ async fn browser_navigate(
 ) -> Result<String, String> {
     validate_browser_label(&label)?;
     let url = external_url(&url)?;
+    let private = privacy::platform::tab_origin(&label)
+        .map(|state| state.private)
+        .unwrap_or(false);
+    if let Some(found) = site_blacklist::match_url(url.as_str()) {
+        site_blacklist::block_document(&app, url.as_str(), &found, Some(&label), private);
+        return Err(site_blacklist::blocked_error(&found));
+    }
     app.get_webview(&label)
         .ok_or_else(|| "browser tab webview not found".to_string())?
         .navigate(url.clone())
@@ -872,10 +884,19 @@ async fn browser_navigate(
 #[tauri::command]
 async fn browser_reload(app: tauri::AppHandle, label: String) -> Result<(), String> {
     validate_browser_label(&label)?;
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .reload()
-        .map_err(|error| error.to_string())
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    if let Ok(current) = webview.url() {
+        let private = privacy::platform::tab_origin(&label)
+            .map(|state| state.private)
+            .unwrap_or(false);
+        if let Some(found) = site_blacklist::match_url(current.as_str()) {
+            site_blacklist::block_document(&app, current.as_str(), &found, Some(&label), private);
+            return Err(site_blacklist::blocked_error(&found));
+        }
+    }
+    webview.reload().map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1245,7 +1266,13 @@ fn browser_toolbar_menu(
         return Ok(());
     }
     let id = |action: &str| format!("browser-toolbar|{label}|{action}");
-    let menu = MenuBuilder::new(&app)
+    // The native menu is built from Rust state, so it can label the entry
+    // correctly whether the current host is already blacklisted.
+    let blocked = app
+        .get_webview(&label)
+        .and_then(|view| view.url().ok())
+        .and_then(|url| site_blacklist::match_url(url.as_str()));
+    let builder = MenuBuilder::new(&app)
         .text(id("find"), "在页面中查找\tCtrl+F")
         .text(id("tab-search"), "搜索标签页\tCtrl+K")
         .text(id("history-search"), "浏览历史记录\tCtrl+H")
@@ -1259,7 +1286,15 @@ fn browser_toolbar_menu(
         .text(id("screenshot-visible"), "截取可视区域")
         .text(id("screenshot-full"), "截取整个网页")
         .text(id("devtools"), "开发者工具")
-        .text(id("clear-site-data"), "清除此网站数据")
+        .text(id("clear-site-data"), "清除此网站数据");
+    let builder = match blocked {
+        Some(found) => builder.text(
+            id("site-unblock"),
+            format!("解除封杀此网站（{}）", found.rule_host),
+        ),
+        None => builder.text(id("site-block"), "封杀此网站"),
+    };
+    let menu = builder
         .separator()
         .text(id("new-private"), "新建私密窗口\tCtrl+Shift+N")
         .text(id("fullscreen"), "进入/退出全屏\tF11")
@@ -1946,6 +1981,11 @@ pub fn run() {
                 }
             }
             plugins::installer::restore_enabled_plugins(app.handle());
+            // Compile the user site blacklist into memory before the first
+            // WebView exists so navigation callbacks never touch SQLite.
+            if let Err(error) = site_blacklist::reload(app.handle()) {
+                eprintln!("site_blacklist: initial load failed: {error}");
+            }
 
             // Stash the AppHandle in the event bus so background workers can
             // publish Tauri events. The default builder uses the `Wry`
@@ -2146,6 +2186,17 @@ pub fn run() {
             privacy::commands::privacy_set_site_setting,
             privacy::commands::privacy_list_block_events,
             privacy::commands::privacy_capability_report,
+            site_blacklist::site_blacklist_list,
+            site_blacklist::site_blacklist_add,
+            site_blacklist::site_blacklist_add_many,
+            site_blacklist::site_blacklist_remove,
+            site_blacklist::site_blacklist_set_enabled,
+            site_blacklist::site_blacklist_clear,
+            site_blacklist::site_blacklist_get_settings,
+            site_blacklist::site_blacklist_set_settings,
+            site_blacklist::site_blacklist_check,
+            site_blacklist::site_blacklist_events,
+            site_blacklist::site_blacklist_summary,
             ai_chat,
             ai_embed,
             ai_chat_stream,

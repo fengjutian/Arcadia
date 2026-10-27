@@ -7,7 +7,7 @@
 项目状态以 [docs/roadmap.md](../../docs/roadmap.md) 为准。简述：
 
 - 浏览器：多标签 WebView、下载中心、站点权限、证书拦截（Windows）、私密标签、工作区、会话与崩溃恢复。
-- 知识库：Readability + Turndown 提取、SQLite（25 个迁移）+ FTS5、集合、星标、笔记、备份恢复。
+- 知识库：Readability + Turndown 提取、SQLite（26 个迁移）+ FTS5、集合、星标、笔记、备份恢复。
 - 检索与 AI：OpenAI Compatible / Ollama Provider（Key 走系统密钥环）、流式摘要/问答/翻译/自动标签、混合检索（BM25 + 向量 + RRF + Reranker）与带引用 RAG、跨文档问答。
 - 隐私：规则编译、WebView2 请求拦截、站点级开关与统计（Windows；macOS/Linux 受限）。
 - 插件：`.arcadia-plugin` 安装器、权限授权、Wasmtime 组件运行时与审计。

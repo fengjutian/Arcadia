@@ -1820,3 +1820,175 @@ body[data-theme='github'] {
   .library-stats .ui-col,
   .document-cover { background: #fff !important; }
 }
+
+/* ------------------------------------------------------------------ */
+/* Site blacklist ("网站封杀")                                          */
+/* ------------------------------------------------------------------ */
+.site-blacklist {
+  &__switches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 28px;
+    margin: 0 0 16px;
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 13px;
+      color: var(--text-color, #1f2329);
+    }
+  }
+
+  &__add {
+    display: grid;
+    grid-template-columns: minmax(200px, 1.5fr) minmax(150px, 1fr) auto;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  &__toolbar { margin-bottom: 16px; }
+
+  &__stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+
+    > div {
+      min-width: 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border-color, #d9d9d9);
+      border-radius: 10px;
+      background: var(--surface, #fff);
+    }
+
+    .ui-statistic__value { font-size: 20px; }
+  }
+
+  &__filter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+
+    .ui-input { max-width: 320px; }
+  }
+
+  &__list {
+    max-height: 420px;
+    overflow: hidden auto;
+    border: 1px solid var(--accent-border, #dfe5df);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .55);
+  }
+
+  &__row {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.6fr) 64px 150px 68px 74px;
+    gap: 10px;
+    align-items: center;
+    padding: 9px 12px;
+    border-top: 1px solid var(--accent-border, #ecefec);
+    font-size: 13px;
+
+    &:first-child { border-top: 0; }
+
+    &--header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      color: #7a8580;
+      font-size: 12px;
+      background: rgba(255, 255, 255, .92);
+    }
+  }
+
+  &__host {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+
+    b {
+      overflow: hidden;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ui-tag { flex: none; }
+  }
+
+  &__events {
+    margin-top: 20px;
+
+    ul {
+      max-height: 220px;
+      margin: 8px 0 0;
+      padding: 0;
+      overflow: auto;
+      font-size: 12px;
+      list-style: none;
+    }
+
+    li {
+      display: grid;
+      grid-template-columns: 150px 150px minmax(0, 1fr);
+      gap: 10px;
+      padding: 6px 2px;
+      border-bottom: 1px dashed var(--accent-border, #e6eae7);
+      color: #5f6b64;
+    }
+
+    li span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__import-result {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f3f7f4;
+    font-size: 12px;
+
+    ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
+      color: #8a5a2b;
+    }
+  }
+}
+
+@media (max-width: 900px) {
+  .site-blacklist__add { grid-template-columns: 1fr; }
+  .site-blacklist__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .site-blacklist__row { grid-template-columns: minmax(130px, 1fr) 56px 68px 68px; }
+  .site-blacklist__row > span:nth-child(3) { display: none; }
+}
+
+/* The error surface also hosts the "site blocked" interstitial, which the
+   native child WebView must not cover (BrowserPage hides it on error). */
+.browser-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 72px 32px 48px;
+
+  .browser-error__url {
+    display: block;
+    max-width: 100%;
+    margin: 6px 0 18px;
+    overflow-wrap: anywhere;
+  }
+}
+
+.browser-error--blocked {
+  .eyebrow { color: #b4552f !important; }
+}

@@ -167,6 +167,16 @@ mod win {
         // `WebResourceRequested` have the right origin to compute first/third
         // party against. Updates happen on every navigation start.
         super::super::platform::set_tab_origin(label, &url);
+        // User-managed site blacklist wins over every other rule: cancel the
+        // navigation before any request is issued and surface the interstitial.
+        if let Some(found) = crate::site_blacklist::match_url(&url) {
+            let _ = unsafe { args.SetCancel(true) };
+            let private = super::super::platform::tab_origin(label)
+                .map(|state| state.private)
+                .unwrap_or(false);
+            crate::site_blacklist::block_document(app, &url, &found, Some(label), private);
+            return Ok(());
+        }
         let blocked = super::is_blocked_host(&url);
         if !blocked {
             if let Some(reg) = app.try_state::<super::NavBlockRegistry>() {

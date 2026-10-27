@@ -651,7 +651,24 @@ mod tests {
                 content_hash TEXT NOT NULL, token_count INTEGER NOT NULL DEFAULT 0,
                 start_offset INTEGER NOT NULL DEFAULT 0, end_offset INTEGER NOT NULL DEFAULT 0,
                 chunker_version TEXT NOT NULL DEFAULT 'markdown-structure-v1',
-                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);",
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE rag_index_jobs(
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                provider_id TEXT NOT NULL,
+                model TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('PENDING','CHUNKING','EMBEDDING','INDEXING','COMPLETED','FAILED','CANCELLED','STALE')),
+                chunker_version TEXT NOT NULL DEFAULT 'markdown-structure-v1',
+                total_chunks INTEGER NOT NULL DEFAULT 0,
+                completed_chunks INTEGER NOT NULL DEFAULT 0,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL DEFAULT 5,
+                available_at INTEGER NOT NULL,
+                started_at INTEGER,
+                finished_at INTEGER,
+                last_error TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL);",
         )
         .expect("create tables");
         conn
@@ -687,7 +704,7 @@ mod tests {
         let conn = fresh_db();
         let id1 = enqueue_document(&conn, "doc-1", "p1", "m1").unwrap();
         conn.execute(
-            "UPDATE rag_index_jobs SET status='COMPLETED', finished_at=1",
+            "UPDATE rag_index_jobs SET status='COMPLETED', finished_at=1 WHERE id=?1",
             params![id1],
         )
         .unwrap();

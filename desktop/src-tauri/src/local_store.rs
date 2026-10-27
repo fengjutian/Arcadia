@@ -617,6 +617,39 @@ const MIGRATIONS: &[(i64, &str)] = &[
         );
         CREATE INDEX idx_privacy_daily_stats_date ON privacy_daily_stats(stat_date DESC);",
     ),
+    (
+        26,
+        "CREATE TABLE site_blacklist (
+            id TEXT PRIMARY KEY,
+            host TEXT NOT NULL UNIQUE,
+            include_subdomains INTEGER NOT NULL DEFAULT 1,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            note TEXT,
+            source TEXT NOT NULL DEFAULT 'manual',
+            hit_count INTEGER NOT NULL DEFAULT 0,
+            last_blocked_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_site_blacklist_enabled ON site_blacklist(enabled);
+        CREATE TABLE site_blacklist_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            enabled INTEGER NOT NULL DEFAULT 1,
+            block_subresources INTEGER NOT NULL DEFAULT 1,
+            updated_at INTEGER NOT NULL
+        );
+        INSERT INTO site_blacklist_settings(id, enabled, block_subresources, updated_at)
+        VALUES (1, 1, 1, 0);
+        CREATE TABLE site_blacklist_events (
+            id TEXT PRIMARY KEY,
+            host TEXT NOT NULL,
+            rule_host TEXT NOT NULL,
+            url TEXT NOT NULL,
+            tab_label TEXT,
+            blocked_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_site_blacklist_events_blocked ON site_blacklist_events(blocked_at DESC);",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -802,7 +835,7 @@ pub struct LocalAIProvider {
     updated_at: String,
 }
 
-pub fn connection(app: &tauri::AppHandle) -> Result<Connection, String> {
+pub fn connection<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Connection, String> {
     let directory = app
         .path()
         .app_data_dir()
@@ -4291,6 +4324,26 @@ mod tests {
         ] {
             assert_index_exists(&database, index);
         }
+        // Site blacklist (migration 26)
+        for table in [
+            "site_blacklist",
+            "site_blacklist_settings",
+            "site_blacklist_events",
+        ] {
+            assert_table_exists(&database, table);
+        }
+        for index in [
+            "idx_site_blacklist_enabled",
+            "idx_site_blacklist_events_blocked",
+        ] {
+            assert_index_exists(&database, index);
+        }
+        let settings_rows: i64 = database
+            .query_row("SELECT COUNT(*) FROM site_blacklist_settings", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(settings_rows, 1, "the settings singleton row is seeded");
     }
 
     /// Simulates a user upgrading from v22 to current. The old tables and

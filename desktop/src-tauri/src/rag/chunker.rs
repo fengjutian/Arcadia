@@ -55,10 +55,12 @@ pub trait TokenCounter: Send + Sync {
     fn count(&self, text: &str) -> usize;
 }
 
-/// Cheap but functional approximation. It bills each ASCII word as ~1.3 tokens
-/// and each Han / Hiragana / Hangul codepoint as 1 token. Other scripts fall
-/// through to "1 codepoint per token" — accurate enough for batching purposes
-/// even on mixed-script documents.
+/// Cheap but functional approximation. It bills Latin text at roughly one
+/// token per five characters (the usual rule of thumb for English BPE
+/// vocabularies) and each Han / Hiragana / Hangul codepoint as 1 token.
+/// Punctuation that does not take surrounding whitespace also counts as one
+/// token. Other scripts fall through to "1 codepoint per token" — accurate
+/// enough for batching purposes even on mixed-script documents.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ApproxTokenCounter;
 
@@ -90,9 +92,9 @@ impl TokenCounter for ApproxTokenCounter {
 }
 
 fn latin_word_tokens(word_len: usize) -> usize {
-    // ~1.3 tokens per ASCII word. Ceiling keeps single-character tokens (e.g.
-    // "Rust" → 1, "minimax" → 1).
-    ((word_len as f64) / 1.3).ceil() as usize
+    // ~5 characters per token for English. Rounding up keeps single-character
+    // runs (e.g. "a", "I") at one token instead of zero.
+    (word_len as f64 / 5.0).ceil().max(1.0) as usize
 }
 
 fn is_cjk(ch: char) -> bool {
@@ -195,6 +197,7 @@ pub fn plan_chunks_with(
     }
 
     let blocks = parse_blocks(trimmed);
+    let blocks = expand_oversized_blocks(&blocks, counter);
     let groups = group_into_chunks(&blocks, counter);
 
     let mut chunks = Vec::with_capacity(groups.len());
@@ -320,6 +323,27 @@ pub fn parse_blocks(markdown: &str) -> Vec<MarkdownBlock> {
             }
         } else if matches!(current_kind, None) {
             // No current block — start a new paragraph with this line.
+            current_kind = Some(BlockKind::Paragraph);
+            current_start = start;
+            current_text = line_text.to_string();
+            current_raw = line_text.to_string();
+            current_depth = None;
+        } else if !matches!(
+            current_kind,
+            Some(BlockKind::Paragraph) | Some(BlockKind::ListItem) | Some(BlockKind::Quote)
+        ) {
+            // A plain text line after a heading / table / image / link starts a
+            // new paragraph. Without this, body text following a heading is
+            // swallowed into the heading block and the heading never ends.
+            let mut block = finalize_block(
+                &mut current_kind,
+                &mut current_text,
+                &mut current_raw,
+                &mut current_depth,
+                &mut current_start,
+            );
+            block.end_offset = start;
+            blocks.push(block);
             current_kind = Some(BlockKind::Paragraph);
             current_start = start;
             current_text = line_text.to_string();
@@ -525,6 +549,96 @@ fn finalize_block(
         start_offset: start,
         end_offset: start,
     }
+}
+
+/// Splits prose that exceeds [`HARD_MAX_TOKENS`] on its own into block-sized
+/// pieces.
+///
+/// `group_into_chunks` only closes a chunk *between* blocks, so a single
+/// paragraph holding thousands of tokens would otherwise be emitted whole and
+/// blow past the hard cap. Code fences, tables, headings and quotes are left
+/// untouched: splitting them would change their meaning (or break citations).
+fn expand_oversized_blocks(
+    blocks: &[MarkdownBlock],
+    counter: &dyn TokenCounter,
+) -> Vec<MarkdownBlock> {
+    let mut out: Vec<MarkdownBlock> = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        let splittable = matches!(block.kind, BlockKind::Paragraph | BlockKind::Unknown);
+        if !splittable || counter.count(block.raw.trim()) <= HARD_MAX_TOKENS {
+            out.push(block.clone());
+            continue;
+        }
+        for piece in split_prose(&block.raw, counter) {
+            out.push(MarkdownBlock {
+                kind: block.kind.clone(),
+                heading_depth: block.heading_depth,
+                text: piece.clone(),
+                raw: piece,
+                start_offset: block.start_offset,
+                end_offset: block.end_offset,
+            });
+        }
+    }
+    out
+}
+
+/// Breaks text into sentence-ish atoms, then packs them into chunks of roughly
+/// [`TARGET_TOKENS`]. A single atom longer than the target (a CJK run without
+/// punctuation, a minified blob) is hard-split by characters.
+fn split_prose(text: &str, counter: &dyn TokenCounter) -> Vec<String> {
+    let mut atoms: Vec<String> = Vec::new();
+    for sentence in split_sentences(text) {
+        if counter.count(&sentence) <= TARGET_TOKENS {
+            atoms.push(sentence);
+            continue;
+        }
+        let mut current = String::new();
+        for ch in sentence.chars() {
+            current.push(ch);
+            if counter.count(&current) >= TARGET_TOKENS {
+                atoms.push(std::mem::take(&mut current));
+            }
+        }
+        if !current.trim().is_empty() {
+            atoms.push(current);
+        }
+    }
+
+    let mut chunks: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut current_tokens = 0usize;
+    for atom in atoms {
+        let atom_tokens = counter.count(&atom);
+        if current_tokens + atom_tokens > TARGET_TOKENS && !current.is_empty() {
+            chunks.push(std::mem::take(&mut current));
+            current_tokens = 0;
+        }
+        current.push_str(&atom);
+        current_tokens += atom_tokens;
+    }
+    if !current.trim().is_empty() {
+        chunks.push(current);
+    }
+    chunks
+}
+
+/// Splits on sentence terminators and hard line breaks. Over-splitting on `.`
+/// (decimals, abbreviations) is harmless here: the pieces are re-packed by
+/// [`split_prose`] anyway.
+fn split_sentences(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for ch in text.chars() {
+        current.push(ch);
+        if matches!(ch, '。' | '！' | '？' | '；' | '!' | '?' | ';' | '.' | '\n') {
+            out.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.trim().is_empty() {
+        out.push(current);
+    }
+    out
 }
 
 /// Groups blocks into chunks respecting the token budget. Headings always

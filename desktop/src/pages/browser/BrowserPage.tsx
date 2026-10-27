@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AutoComplete, Badge, Button, Dropdown, Input, message, Modal, Popover, Space, Tabs, Tag, Tooltip, Typography, UI_MODAL_OVERLAY_EVENT, type InputRef, type MenuProps } from '../../components/ui'
-import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, AudioMutedOutlined, BookOutlined, CheckCircleOutlined, CloseCircleOutlined, CloseOutlined, CopyOutlined, DownloadOutlined, FullscreenOutlined, LoadingOutlined, MoreOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SoundOutlined, StarFilled, StarOutlined, ThunderboltOutlined, TranslationOutlined, WarningOutlined } from '../../components/ui/icons'
+import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, AudioMutedOutlined, BookOutlined, CheckCircleOutlined, CloseCircleOutlined, CloseOutlined, CopyOutlined, DownloadOutlined, FullscreenOutlined, LoadingOutlined, MoreOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SoundOutlined, StarFilled, StarOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined, WarningOutlined } from '../../components/ui/icons'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativeTab, editNativePage, ensureNativeTab, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeToolbarMenuAction, onPasswordCandidate, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativeTab, editNativePage, ensureNativeTab, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -64,6 +64,7 @@ import { cleanTrackingParameters, isTrackingCleanerEnabled, TRACKING_CLEANER_EVE
 import { AD_BLOCKER_EVENT, isAdBlockerEnabled } from '../../features/plugins/adBlocker'
 import { newTab, tabGroupColor } from '../../features/browser/browserUtils'
 import { classifyNavigationError, diagnoseNavigationError, safeFileName } from '../../features/browser/navigationErrors'
+import { addBlockedSite, findBlockingEntry, hostFromUrl, loadSiteBlacklist, removeBlockedSite, subscribeSiteBlacklist } from '../../features/privacy/siteBlacklist'
 import { renderSuggestion } from '../../features/browser/suggestionRenderer'
 import { BrowserErrorView } from '../../features/browser/BrowserErrorView'
 import { NewTab } from '../../features/browser/NewTabPage'
@@ -155,6 +156,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [sourceView, setSourceView] = useState<{ url: string; html: string } | null>(null)
   const [clearSiteDataOpen, setClearSiteDataOpen] = useState(false)
   const [passwordCandidate, setPasswordCandidate] = useState<PasswordCandidate | null>(null)
+  const [blacklistVersion, setBlacklistVersion] = useState(0)
+  const [blockPrompt, setBlockPrompt] = useState<{ url: string; host: string } | null>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const addressRef = useRef<InputRef>(null)
   const previousTab = useRef<string | undefined>(undefined)
@@ -176,6 +179,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const lastAdBlockCountRef = useRef<Record<string, number>>({})
   const active = tabs.find(tab => tab.id === activeTabId) ?? tabs[0]
   const nativeMode = hasNativeTab(active.id)
+  const currentHost = useMemo(() => hostFromUrl(active.url), [active.url])
+  // `blacklistVersion` forces a re-match after the list is mutated elsewhere.
+  const currentBlock = useMemo(() => findBlockingEntry(active.url), [active.url, blacklistVersion])
   const searchTemplate = useMemo(() => resolveActiveSearchTemplate(readSearchEngineConfig()), [])
   const addressSuggestions = useMemo(() => {
     const built = buildSuggestions({
@@ -201,7 +207,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }
 
   useEffect(() => {
-    if (!visible || readerArticle || !hasNativeTab(active.id)) return
+    if (!hasNativeTab(active.id)) return
+    // The native child WebView paints above the React surface, so any error
+    // view (site block, crash, load failure) must hide it.
+    if (!visible || readerArticle || active.error) {
+      void hideNativeTab(active.id)
+      return
+    }
     if (modalOverlayCount > 0 || toolbarOverlay === 'tab-menu') {
       void hideNativeTab(active.id)
       return
@@ -215,7 +227,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     }
     if (next) void resizeNativeTab(active.id, next).then(() => showNativeTab(active.id))
     else void showNativeTab(active.id)
-  }, [active.id, modalOverlayCount, readerArticle, toolbarOverlay, visible])
+  }, [active.error, active.id, modalOverlayCount, readerArticle, toolbarOverlay, visible])
 
   useEffect(() => {
     const onModalOverlayChange = (event: Event) => {
@@ -224,6 +236,49 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     }
     window.addEventListener(UI_MODAL_OVERLAY_EVENT, onModalOverlayChange)
     return () => window.removeEventListener(UI_MODAL_OVERLAY_EVENT, onModalOverlayChange)
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    void loadSiteBlacklist()
+      .then(() => { if (mounted) setBlacklistVersion(value => value + 1) })
+      .catch(() => undefined)
+    let stop: () => void = () => undefined
+    void subscribeSiteBlacklist(() => { if (mounted) setBlacklistVersion(value => value + 1) }).then(unsubscribe => {
+      if (mounted) stop = unsubscribe
+      else unsubscribe()
+    })
+    return () => { mounted = false; stop() }
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    void onNativeSiteBlocked(payload => {
+      const tabId = payload.tabLabel.replace(/^browser-/, '')
+      setTabs(current => current.map(tab => tab.id === tabId
+        ? {
+            ...tab,
+            url: payload.url,
+            title: payload.host,
+            loading: false,
+            error: {
+              kind: 'site-blocked',
+              message: `该网站已被封杀（${payload.ruleHost}）`,
+              host: payload.host,
+              ruleHost: payload.ruleHost,
+              entryId: payload.entryId,
+            },
+          }
+        : tab))
+      if (tabId === activeTabIdRef.current) setAddress(payload.url)
+      void hideNativeTab(tabId)
+      setBlacklistVersion(value => value + 1)
+    }).then(stop => {
+      if (disposed) stop()
+      else unlisten = stop
+    })
+    return () => { disposed = true; unlisten?.() }
   }, [])
 
   useEffect(() => {
@@ -323,7 +378,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
               if (tab.id === parsed.activeTabId && visibleRef.current) await showNativeTab(tab.id)
               else await hideNativeTab(tab.id)
             } catch (error) {
-              setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: { kind: 'load-failed', message: String(error) } } : item))
+              setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: classifyNavigationError(error) } : item))
             }
           }))
           await enforceLiveTabLimit(parsed.activeTabId)
@@ -435,7 +490,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     if (previousTab.current && previousTab.current !== active.id) void hideNativeTab(previousTab.current)
     previousTab.current = active.id
     if (hasNativeTab(active.id)) {
-      if (visible) {
+      if (visible && !active.error) {
         if (modalOverlayCount > 0 || toolbarOverlay === 'tab-menu') {
           void hideNativeTab(active.id)
         } else {
@@ -451,14 +506,34 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         void hideNativeTab(active.id)
       }
     }
-  }, [active.id, modalOverlayCount, toolbarOverlay, visible])
+  }, [active.error, active.id, modalOverlayCount, toolbarOverlay, visible])
 
   const tabRuntime = useTabRuntime({
     tab: active,
     visible,
     enabled: nativeMode && hasNativeTab(active.id),
     onApply: (patch) => {
-      setTabs(current => current.map(tab => tab.id === active.id ? { ...tab, ...patch, crashed: false } : tab))
+      // macOS / Linux fallback: no navigation guard, so the polling loop is the
+      // only place a redirect into a blacklisted host can be caught.
+      const blocked = typeof patch.url === 'string' && !active.error ? findBlockingEntry(patch.url) : null
+      if (blocked) void hideNativeTab(active.id)
+      setTabs(current => current.map(tab => {
+        if (tab.id !== active.id) return tab
+        if (!blocked) return { ...tab, ...patch, crashed: false }
+        return {
+          ...tab,
+          ...patch,
+          crashed: false,
+          loading: false,
+          error: {
+            kind: 'site-blocked',
+            message: `该网站已被封杀（${blocked.host}）`,
+            host: hostFromUrl(patch.url ?? '') ?? blocked.host,
+            ruleHost: blocked.host,
+            entryId: blocked.id,
+          },
+        }
+      }))
       if (typeof patch.url === 'string') setAddress(patch.url)
     },
     onReopen: () => {
@@ -645,6 +720,61 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     shortcutsEnabledRef.current = detail.enabled !== false
   }
 
+  function requestBlockCurrentSite() {
+    const url = active.url
+    const host = hostFromUrl(url)
+    if (!url || !host) {
+      messageApi.info('当前页面没有可封杀的网站')
+      return
+    }
+    setBlockPrompt({ url, host })
+  }
+
+  async function confirmBlockCurrentSite() {
+    const prompt = blockPrompt
+    if (!prompt) return
+    const tabId = activeTabIdRef.current
+    try {
+      const entry = await addBlockedSite(prompt.url, null, 'quick-block')
+      setBlockPrompt(null)
+      setBlacklistVersion(value => value + 1)
+      setTabs(current => current.map(tab => tab.id === tabId
+        ? {
+            ...tab,
+            loading: false,
+            error: {
+              kind: 'site-blocked',
+              message: `该网站已被封杀（${entry.host}）`,
+              host: prompt.host,
+              ruleHost: entry.host,
+              entryId: entry.id,
+            },
+          }
+        : tab))
+      void stopNativeTab(tabId)
+      void hideNativeTab(tabId)
+      messageApi.success(`已封杀 ${entry.host}，可在「设置 → 隐私 → 网站封杀」中管理`)
+    } catch (error) {
+      messageApi.error(String(error))
+    }
+  }
+
+  async function unblockAndVisit(entryId: string | undefined, url: string) {
+    try {
+      if (entryId) await removeBlockedSite(entryId)
+      setBlacklistVersion(value => value + 1)
+      setTabs(current => current.map(tab => tab.id === activeTabIdRef.current ? { ...tab, error: undefined, loading: true } : tab))
+      if (url) await navigate(url)
+    } catch (error) {
+      messageApi.error(`解除封杀失败：${String(error)}`)
+    }
+  }
+
+  async function unblockCurrentSite() {
+    if (!currentBlock) return
+    await unblockAndVisit(currentBlock.id, active.url)
+  }
+
   async function navigate(input: string) {
     const resolved = resolveNavigationInput(input, { searchTemplate })
     if (!resolved) return
@@ -732,7 +862,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, error: undefined } : item))
       await enforceLiveTabLimit(tab.id)
     } catch (error) {
-      setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: { kind: 'load-failed', message: String(error) } } : item))
+      setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: classifyNavigationError(error) } : item))
     }
   }
 
@@ -793,6 +923,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       case 'zoom-in': changeZoom(active.id, 0.1); break
       case 'zoom-reset': setZoom(active.id, 1); break
       case 'clear-site-data': setClearSiteDataOpen(true); break
+      case 'site-block': requestBlockCurrentSite(); break
+      case 'site-unblock': void unblockCurrentSite(); break
     }
   }
 
@@ -866,6 +998,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     { key: 'screenshot-visible', label: '截取可视区域', disabled: !nativeMode, onClick: () => runBrowserMenuAction('screenshot-visible') },
     { key: 'screenshot-full', label: '截取整个网页', disabled: !nativeMode, onClick: () => runBrowserMenuAction('screenshot-full') },
     { key: 'clear-site-data', label: '清除此网站数据', disabled: !active.url || !nativeMode, onClick: () => runBrowserMenuAction('clear-site-data') },
+    currentBlock
+      ? { key: 'site-unblock', label: '解除封杀此网站', icon: <StopOutlined/>, disabled: !nativeMode, onClick: () => runBrowserMenuAction('site-unblock') }
+      : { key: 'site-block', label: '封杀此网站', icon: <StopOutlined/>, disabled: !currentHost || !nativeMode, onClick: () => runBrowserMenuAction('site-block') },
     { type: 'divider' },
     { key: 'new-private', label: '新建私密窗口', icon: <LockOutlined/>, extra: 'Shift+Ctrl+N', onClick: () => runBrowserMenuAction('new-private') },
     { key: 'fullscreen', label: isWindowFullscreen ? '退出全屏' : '进入全屏', icon: <FullscreenOutlined/>, extra: 'F11', onClick: () => runBrowserMenuAction('fullscreen') },
@@ -1108,7 +1243,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           }
           setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: undefined } : item))
         } catch (error) {
-          setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, crashed: true, error: { kind: 'load-failed', message: String(error) } } : item))
+          setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, crashed: true, error: classifyNavigationError(error) } : item))
         }
       }))
     } else {
@@ -1316,7 +1451,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: undefined } : item))
           await enforceLiveTabLimit(tab.id)
         } catch (error) {
-          setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: { kind: 'load-failed', message: String(error) } } : item))
+          setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: classifyNavigationError(error) } : item))
         }
       })
     }
@@ -1590,7 +1725,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: undefined } : item))
         await enforceLiveTabLimit(tab.id)
       } catch (error) {
-        setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: { kind: 'load-failed', message: String(error) } } : item))
+        setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: classifyNavigationError(error) } : item))
       }
     })
   }
@@ -1779,7 +1914,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       : active.crashed
         ? <BrowserErrorView tab={{...active, error:{kind:'load-failed',message:'此标签页的底层视图已停止响应，可点击"重新打开"恢复。'}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
         : active.error
-          ? <BrowserErrorView tab={active} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
+          ? <BrowserErrorView tab={active} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl} onUnblock={active.error.kind === 'site-blocked' ? () => void unblockAndVisit(active.error?.entryId, active.url) : undefined}/>
         : nativeMode
           ? null
           : active.loading
@@ -1815,6 +1950,19 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     >
       <Typography.Paragraph>将清除 WebView2 Profile 中的全部 Cookie（包括 HTTP-only Cookie）、磁盘缓存、Cache Storage 与 Service Worker，并清除当前网页的本地存储、会话存储和 IndexedDB。</Typography.Paragraph>
       <Typography.Paragraph type="secondary">Cookie 与磁盘缓存由同一浏览器 Profile 共享，因此其他已打开网站可能需要重新登录或重新加载。</Typography.Paragraph>
+    </Modal>
+    <Modal
+      open={blockPrompt !== null}
+      title={`封杀 ${blockPrompt?.host ?? '此网站'}？`}
+      okText="封杀"
+      cancelText="取消"
+      okButtonProps={{ danger: true }}
+      onCancel={() => setBlockPrompt(null)}
+      onOk={() => void confirmBlockCurrentSite()}
+    >
+      <Typography.Paragraph>封杀后，命中名单的页面会在发出请求前被取消；开关开启时，其他站点嵌入该站点的脚本、图片与 iframe 也会被阻断。</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">可随时在「设置 → 隐私 → 网站封杀」中解除，或使用菜单里的「解除封杀此网站」。</Typography.Paragraph>
+      <Typography.Text code>{blockPrompt?.url}</Typography.Text>
     </Modal>
     <Modal
       open={passwordCandidate !== null}

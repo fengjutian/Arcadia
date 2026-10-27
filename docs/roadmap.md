@@ -9,7 +9,7 @@
 - [x] React 产品壳与核心页面
 - [x] Rust 端 SQLite + FTS5（迁移 #17：虚表 + 触发器同步 + BM25 排序 + 前缀匹配）
 - [x] Tauri 工程及插件权限（`capabilities/default.json`）
-- [x] 版本化迁移器：`schema_version` 表 + `MIGRATIONS` 常量 + 启动钩子，当前 25 个迁移
+- [x] 版本化迁移器：`schema_version` 表 + `MIGRATIONS` 常量 + 启动钩子，当前 26 个迁移
 - [x] 前端 Vitest + Rust cargo test（详见「已知阻塞」）
 
 ## Iteration 1：可浏览
@@ -46,6 +46,7 @@
 - [x] OpenAI Compatible 与 Ollama 两类 Provider，含 Base URL 校验
 - [x] 流式摘要、页面问答、翻译、自动标签
 - [x] 规则编译、网络拦截和站点级统计（Windows 真实拦截）
+- [x] 网站封杀名单：用户名单 + 导航前取消 + 子资源阻断 + 命中记录（迁移 #26）
 - [~] 敏感日志审计与权限集成测试 — 已有 `logRedaction` 与 Agent 审计日志，权限集成测试仍待补
 - [~] 隐私拦截跨平台 — macOS / Linux 受 WKWebView / WebKitGTK 接口限制，暂为 no-op
 

@@ -111,6 +111,7 @@ AI Knowledge Browser 是一款以浏览器为入口、以个人知识库为核�
 ### Privacy
 
 - 支持 URL、域名、Tracker 和 Cosmetic 规则模型。
+- 支持用户自管的网站封杀名单：命中后顶级导航在发出请求前被取消，可选阻断站外页面嵌入的被封杀资源。
 - 展示当前站点与全局的广告、追踪器、分析请求拦截数。
 - 允许按站点暂停保护，并清楚提示风险。
 
@@ -127,12 +128,12 @@ AI Knowledge Browser 是一款以浏览器为入口、以个人知识库为核�
 
 主实体：Document、Chunk、Collection、Tag、Embedding、Task、Run。
 
-数据库定义见 `desktop/src-tauri/src/local_store.rs` 的 `MIGRATIONS` 常量，**截至迁移 #25**，共 25 个顺序迁移。主要表分组：
+数据库定义见 `desktop/src-tauri/src/local_store.rs` 的 `MIGRATIONS` 常量，**截至迁移 #26**，共 26 个顺序迁移。主要表分组：
 
 - 文档与检索：`local_documents`、`local_documents_fts`、`document_chunks`、`document_chunks_fts`、`document_embeddings`、`embedding_index_state`、`rag_index_jobs`、`collections`、`collection_documents`
 - 会话与浏览：`local_session`、`session_locks`、`browser_history`、`browser_sessions`、`browser_tabs`、`closed_tabs`、`workspaces`、`bookmarks`、`site_permissions`、`saved_credentials`、`reading_activity`
 - 任务与 AI：`tasks`、`ai_providers`
-- 下载与隐私：`downloads`、`privacy_filter_lists`、`privacy_site_settings`、`privacy_block_events`、`privacy_daily_stats`
+- 下载与隐私：`downloads`、`privacy_filter_lists`、`privacy_site_settings`、`privacy_block_events`、`privacy_daily_stats`、`site_blacklist`、`site_blacklist_settings`、`site_blacklist_events`
 - Agent 与 MCP：`agent_runs`、`agent_steps`、`agent_tool_calls`、`agent_approvals`、`agent_checkpoints`、`agent_artifacts`、`mcp_servers`、`mcp_audit_log`
 - 插件：`plugins`、`plugin_grants`、`plugin_audit_log`
 

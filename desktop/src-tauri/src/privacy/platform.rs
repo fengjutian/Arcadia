@@ -466,6 +466,36 @@ mod win {
         let private = tab.as_ref().map(|t| t.private).unwrap_or(false);
         let request_host = host_of_url(&url);
         let third_party = is_third_party(&top_level_origin, &request_host);
+        let blocked_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        // The site blacklist runs before the ABP engine and is not subject to
+        // its `@@` exceptions: a host the user blocked stays blocked.
+        if crate::site_blacklist::blocks_subresources() {
+            if let Some(found) = crate::site_blacklist::match_url(&url) {
+                events.record_block();
+                events.try_send(super::super::events::PrivacyBlockEvent {
+                    tab_label: label.to_string(),
+                    top_level_origin: top_level_origin.clone(),
+                    request_host: found.host,
+                    resource_type,
+                    rule_id: None,
+                    category: Some("site-blacklist".into()),
+                    private,
+                    blocked_at,
+                });
+                if let Some(env) = env {
+                    let no_content = windows::core::HSTRING::from("No Content");
+                    let headers = windows::core::HSTRING::from("Content-Length: 0\r\n");
+                    let response =
+                        unsafe { env.CreateWebResourceResponse(None, 204, &no_content, &headers)? };
+                    unsafe { args.SetResponse(&response)? };
+                }
+                return Ok(());
+            }
+        }
 
         let outcome = decide(
             &url,
@@ -476,10 +506,6 @@ mod win {
         );
 
         // Record the decision in the channel (non-blocking).
-        let blocked_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
         match outcome {
             DecideOutcome::Blocked => {
                 events.record_block();

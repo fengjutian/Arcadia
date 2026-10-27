@@ -13,7 +13,8 @@
     "tauri:build:exe": "tauri build --bundles nsis",
     "tauri:build:windows": "tauri build --bundles msi,nsis",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:rust": "node scripts/run-rust-tests.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

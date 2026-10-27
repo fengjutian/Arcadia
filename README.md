@@ -37,6 +37,7 @@ Arcadia 是一款以浏览器为入口、以本地知识库为核心的桌面阅
 ### 隐私与插件
 
 - 广告与追踪规则编译、匹配、WebView2 请求拦截、站点级开关与真实拦截统计。
+- 网站封杀名单：用户维护的站点级黑名单，命中后在发出请求前取消导航，并可阻断站外页面嵌入的被封杀资源。
 - 插件采用 Wasmtime + WASI Preview 2 组件模型，默认零能力，配合 Fuel、内存上限与超时隔离。
 
 ## 快捷键
@@ -80,7 +81,7 @@ Provider 与网络：`reqwest` + `rustls-tls`，流式响应。
 ┌────────────────────────▼─────────────────────────────┐
 │ Tauri / Rust                                         │
 │  browser/        WebView 生命周期、导航、安全边界     │
-│  local_store.rs  SQLite + 25 个顺序迁移 + FTS5        │
+│  local_store.rs  SQLite + 26 个顺序迁移 + FTS5        │
 │  rag/            分块、索引、词法/向量召回、融合、引用 │
 │  providers/      OpenAI 兼容 / Ollama / Embedding     │
 │  privacy/        规则编译、请求拦截、统计             │
@@ -184,7 +185,7 @@ com.arcadia.knowledge-browser
 
 请不要在应用运行时直接修改数据库文件。备份时应先完全退出应用，再复制 `knowledge.db`。
 
-Schema 由 `desktop/src-tauri/src/local_store.rs` 中的 `MIGRATIONS` 常量管理，当前共 **25 个顺序迁移**，覆盖文档、会话、集合、任务、Provider、下载、历史、书签、工作区、阅读活动、凭证、MCP、Agent、插件、RAG 索引与隐私统计等表。应用内也提供「导出备份 / 从文件恢复」。
+Schema 由 `desktop/src-tauri/src/local_store.rs` 中的 `MIGRATIONS` 常量管理，当前共 **26 个顺序迁移**，覆盖文档、会话、集合、任务、Provider、下载、历史、书签、工作区、阅读活动、凭证、MCP、Agent、插件、RAG 索引与隐私统计等表。应用内也提供「导出备份 / 从文件恢复」。
 
 ## 保存网页
 
@@ -280,6 +281,7 @@ cargo test            # 见下方已知问题
 - [开发路线图](docs/roadmap.md)
 - [开发技术文档](docs/development-guide.md)
 - [WebView 原生能力矩阵](docs/browser-native-capability-matrix.md)
+- [网站封杀名单方案](docs/site-blacklist-plan.md)
 - [WASM 插件运行时方案](docs/wasm-plugin-runtime-plan.md)
 
 ## 贡献

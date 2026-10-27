@@ -128,6 +128,23 @@ export async function onNativeDownload(handler: (download: NativeDownloadUpdate)
   return listen<NativeDownloadUpdate>('browser://download', event => handler(event.payload))
 }
 
+/** A top-level navigation was cancelled because the host is user-blacklisted. */
+export interface NativeSiteBlockedEvent {
+  version: number
+  tabLabel: string
+  url: string
+  host: string
+  ruleHost: string
+  entryId: string
+  resourceType: string
+}
+export async function onNativeSiteBlocked(handler: (event: NativeSiteBlockedEvent) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return () => undefined
+  return listen<NativeSiteBlockedEvent>('browser://site-blocked', event => {
+    if (event.payload?.tabLabel) handler(event.payload)
+  })
+}
+
 export interface AdBlockUpdate { version: number; tabLabel: string; blockedCount: number }
 export async function onNativeAdBlockUpdate(handler: (update: AdBlockUpdate) => void): Promise<UnlistenFn> {
   if (!isTauri()) return () => undefined

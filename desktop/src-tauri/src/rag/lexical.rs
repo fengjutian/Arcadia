@@ -156,13 +156,20 @@ pub fn retrieve(
         sql.push_str(" AND ");
         sql.push_str(clause);
     }
-    sql.push_str(" ORDER BY bm25(document_chunks_fts) ASC LIMIT ?N");
-    sql = sql.replace("?N", "?").replace("?", "?2");
+    // `?1` pins the MATCH term; the filter clauses and this LIMIT use bare `?`,
+    // which SQLite numbers sequentially from 2. Do not rewrite placeholders
+    // textually — rewriting `?1` also corrupts `MATCH ?1` into `MATCH ?21`.
+    sql.push_str(" ORDER BY bm25(document_chunks_fts) ASC LIMIT ?");
 
     let mut stmt = database.prepare(&sql).map_err(|e| e.to_string())?;
     let k_string = candidate_k.to_string();
+    let mut bindings: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(bind.len() + 2);
+    bindings.push(&fts_query);
+    bindings.extend(bind.iter().map(|value| value as &dyn rusqlite::ToSql));
+    bindings.push(&k_string);
+
     let raw_rows = stmt
-        .query_map(rusqlite::params_from_iter([&fts_query, &k_string]), |row| {
+        .query_map(bindings.as_slice(), |row| {
             let heading_json: String = row.get(3)?;
             let heading_path: Vec<String> = serde_json::from_str(&heading_json).unwrap_or_default();
             Ok(LexicalHit {

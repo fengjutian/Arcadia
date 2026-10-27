@@ -4,15 +4,16 @@
 
 ```text
 React UI（Browser / Library / Search / Assistant / Settings）
-  │ 167 个 typed Tauri commands
+  │ 178 个 typed Tauri commands
 Tauri + Rust
   ├── browser/        WebView 生命周期、导航校验、快照
-  ├── local_store.rs  SQLite + 25 个顺序迁移 + FTS5 + 备份恢复
+  ├── local_store.rs  SQLite + 26 个顺序迁移 + FTS5 + 备份恢复
   ├── rag/            chunker / indexer / lexical / vector / fusion / reranker / citation / evaluator
   ├── providers/      openai / ollama / embedding
   ├── privacy/        parser / compiler / matcher / listener / events / platform
   ├── plugins/        manifest / installer / runtime（Wasmtime 组件）
   ├── agent/          runtime / supervisor / tools / approval / budget / checkpoint
+  ├── site_blacklist.rs  用户网站封杀名单（导航前拦截）
   ├── downloads.rs  mcp.rs  bookmarks.rs  session_lock.rs
   └── keyring         系统密钥环（Provider API Key）
         │ 可选远端
@@ -83,6 +84,7 @@ query
 ## 安全边界
 
 - WebView 页面与应用 UI 使用不同 origin，网页不能调用 privileged commands。
+- 网站封杀在导航前执行：`browser_create` / `browser_navigate` 与 WebView2 `NavigationStarting` 都会取消命中名单的请求，子资源过滤在 ABP 之前生效。
 - Tauri command 使用最小 capability（`capabilities/default.json`）；文件路径需 canonicalize 后校验允许目录。
 - Provider 密钥存系统密钥环（`keyring`：Credential Manager / Keychain / Secret Service），不进入前端包、日志或数据库。
 - Agent tool 定义风险级别；写入、删除、外发内容经策略检查，高风险动作必须确认，敏感调用写审计日志。

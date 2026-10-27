@@ -851,6 +851,116 @@ export async function privacyClearStats(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Site blacklist API surface (user-managed "封杀名单").
+// ---------------------------------------------------------------------------
+
+export interface SiteBlacklistEntry {
+  id: string
+  host: string
+  includeSubdomains: boolean
+  enabled: boolean
+  note: string | null
+  source: string
+  hitCount: number
+  lastBlockedAt: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface SiteBlacklistSettings {
+  enabled: boolean
+  blockSubresources: boolean
+  updatedAt: number
+}
+
+export interface SiteBlacklistEvent {
+  id: string
+  host: string
+  ruleHost: string
+  url: string
+  tabLabel: string | null
+  blockedAt: number
+}
+
+export interface SiteBlacklistMatch {
+  host: string
+  ruleHost: string
+  entryId: string
+}
+
+export interface SiteBlacklistSummary {
+  total: number
+  enabled: number
+  hitTotal: number
+  lastBlockedAt: number | null
+}
+
+export interface SiteBlacklistInvalidInput {
+  input: string
+  reason: string
+}
+
+export interface SiteBlacklistImportResult {
+  added: SiteBlacklistEntry[]
+  duplicates: string[]
+  invalid: SiteBlacklistInvalidInput[]
+}
+
+export async function siteBlacklistList(): Promise<SiteBlacklistEntry[]> {
+  if (!isTauri()) return []
+  return invoke<SiteBlacklistEntry[]>('site_blacklist_list')
+}
+
+export async function siteBlacklistAdd(input: string, note?: string | null, source?: string): Promise<SiteBlacklistEntry> {
+  return invoke<SiteBlacklistEntry>('site_blacklist_add', { input, note: note ?? null, source: source ?? null })
+}
+
+export async function siteBlacklistAddMany(input: string): Promise<SiteBlacklistImportResult> {
+  if (!isTauri()) return { added: [], duplicates: [], invalid: [] }
+  return invoke<SiteBlacklistImportResult>('site_blacklist_add_many', { input })
+}
+
+export async function siteBlacklistRemove(id: string): Promise<void> {
+  if (!isTauri()) return
+  await invoke('site_blacklist_remove', { id })
+}
+
+export async function siteBlacklistSetEnabled(id: string, enabled: boolean): Promise<void> {
+  if (!isTauri()) return
+  await invoke('site_blacklist_set_enabled', { id, enabled })
+}
+
+export async function siteBlacklistClear(): Promise<number> {
+  if (!isTauri()) return 0
+  return invoke<number>('site_blacklist_clear')
+}
+
+export async function siteBlacklistGetSettings(): Promise<SiteBlacklistSettings> {
+  if (!isTauri()) return { enabled: true, blockSubresources: true, updatedAt: 0 }
+  return invoke<SiteBlacklistSettings>('site_blacklist_get_settings')
+}
+
+export async function siteBlacklistSetSettings(enabled: boolean, blockSubresources: boolean): Promise<void> {
+  if (!isTauri()) return
+  await invoke('site_blacklist_set_settings', { enabled, blockSubresources })
+}
+
+export async function siteBlacklistCheck(url: string): Promise<SiteBlacklistMatch | null> {
+  if (!isTauri()) return null
+  return invoke<SiteBlacklistMatch | null>('site_blacklist_check', { url })
+}
+
+export async function siteBlacklistEvents(limit = 20): Promise<SiteBlacklistEvent[]> {
+  if (!isTauri()) return []
+  return invoke<SiteBlacklistEvent[]>('site_blacklist_events', { limit })
+}
+
+export async function siteBlacklistSummary(): Promise<SiteBlacklistSummary> {
+  if (!isTauri()) return { total: 0, enabled: 0, hitTotal: 0, lastBlockedAt: null }
+  return invoke<SiteBlacklistSummary>('site_blacklist_summary')
+}
+
+// ---------------------------------------------------------------------------
 // Agent API surface.
 // ---------------------------------------------------------------------------
 
