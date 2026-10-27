@@ -197,12 +197,23 @@
   .ant-menu-inline-collapsed { width: 100%; }
 }
 
+// Scroll ownership: the window itself never scrolls. Only the active route
+// (`.route-view`) scrolls, so the sidebar and the window chrome stay pinned
+// while page content moves. Everything above the route is a fixed frame.
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 .app-layout {
   height: 100vh;
   min-height: 0;
   overflow: hidden;
 }
 
+// Bounded viewport frame for the active route. It must not scroll: letting it
+// scroll would move the sidebar chrome and clip the route's bottom edge.
 .app-content {
   height: 100vh;
   min-width: 0;

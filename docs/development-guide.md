@@ -1,8 +1,8 @@
 # Arcadia 开发技术文档
 
 > 文档状态：基于 `main` 分支当前实现整理  
-> 对应版本：`0.1.0`  
-> 最后校验：2026-09-22
+> 应用版本：`0.1.0`（`tauri.conf.json`；`desktop/package.json` 为 `0.3.0`，两者尚未统一）  
+> 最后校验：2026-10-27
 
 ## 1. 文档目的
 
@@ -13,20 +13,26 @@ Arcadia 是一个基于 Tauri 2 的本地优先桌面知识浏览器。当前已
 1. 在独立原生 WebView 中浏览网页。
 2. 使用 Mozilla Readability 提取正文。
 3. 将正文转换成 Markdown。
-4. 保存到桌面应用的本地 SQLite。
+4. 保存到桌面应用的本地 SQLite，并同步 FTS5 索引。
 5. 在知识库和搜索页面读取、查看和删除文档。
+6. 基于本地语料做混合检索与带引用的 RAG 问答。
 
-AI Provider、跨文档问答、隐私拦截、同步和完整插件运行时仍处于接口或 UI 占位阶段。
+AI Provider、RAG、隐私拦截、WASM 插件运行时和受控 Agent 均已实现；跨设备同步与插件市场尚未开始。各迭代状态见 [开发路线图](roadmap.md)。
 
 ## 2. 技术栈
 
 | 层 | 技术 | 当前职责 |
 | --- | --- | --- |
-| 桌面 UI | React 19、TypeScript、Vite 6、Ant Design 6、SCSS | 页面、标签状态、阅读器、知识库和设置界面 |
+| 桌面 UI | React 19、TypeScript、Vite 6、SCSS | 页面、标签状态、阅读器、知识库和设置界面 |
+| UI 组件层 | `components/ui/`（`@base-ui/react` + `lucide-react`） | 对外暴露对齐 Ant Design 用法的组件；**不依赖 `antd` 包** |
 | 桌面壳 | Tauri 2、Rust | 子 WebView、受控导航、页面快照、本地 SQLite、应用打包 |
-| 内容处理 | Mozilla Readability、Turndown、React Markdown | 正文识别、HTML 清理、Markdown 转换和展示 |
-| 持久化 | `rusqlite` + SQLite **FTS5**（`local_documents_fts` 虚表 + 触发器同步） | 桌面本地文档、标签、集合、任务队列、AI Provider、下载、历史、书签、工作区、阅读活动、凭证 |
-| 测试 | Vitest、Cargo test | 前端测试框架、Rust 单元测试 + 集成测试 |
+| 内容处理 | Mozilla Readability、Turndown、React Markdown + remark-gfm | 正文识别、HTML 清理、Markdown 转换和展示 |
+| 持久化 | `rusqlite`（bundled） + SQLite **FTS5** | 25 个顺序迁移；文档、标签、集合、任务、Provider、下载、历史、书签、工作区、阅读活动、凭证、RAG、Agent、插件、隐私统计 |
+| 检索 | 自实现 BM25 / 向量索引 / RRF / Reranker / 引用校验 | 混合召回与带引用的问答 |
+| Provider | `reqwest` + `rustls-tls`（流式） | OpenAI Compatible、Ollama、Embedding |
+| 插件 | `wasmtime`（component-model + cranelift） | WASI Preview 2 组件运行时，Fuel / 内存 / 超时隔离 |
+| 密钥 | `keyring` | Credential Manager / Keychain / Secret Service |
+| 测试 | Vitest、Cargo test | 前端 59 文件 / 454 用例；Rust 229 个测试函数（当前 Windows 上无法执行，见 §12） |
 
 ## 3. 仓库结构
 
@@ -35,21 +41,30 @@ AI Provider、跨文档问答、隐私拦截、同步和完整插件运行时仍
 ├── desktop/
 │   ├── src/                         # React/TypeScript UI
 │   │   ├── app/                     # 视图路由
-│   │   ├── features/                # Reader、文档组件与服务
+│   │   ├── components/ui/           # 自建 UI 组件层
+│   │   ├── features/                # browser / ai / rag / reader / downloads / history /
+│   │   │                            # bookmarks / notes / privacy / plugins / tasks ...
 │   │   ├── layouts/                 # 应用外壳和可调整侧栏
-│   │   ├── pages/                   # Browser、Library、Search、AI、Settings
-│   │   ├── services/                # Tauri 原生浏览器适配器
-│   │   ├── shared/                  # 通用 UI
+│   │   ├── pages/                   # Browser、Library、Search、Assistant、Settings
+│   │   ├── services/                # Tauri 原生浏览器、会话与下载适配器
+│   │   ├── shared/                  # 通用 UI 与 hooks
+│   │   ├── styles/                  # 全局与紧凑布局样式
 │   │   ├── api.ts                   # 桌面本地数据访问入口
 │   │   └── types.ts                 # 前端共享类型
 │   └── src-tauri/
 │       ├── capabilities/            # 主窗口最小权限
 │       ├── src/browser/             # URL 规范化
-│       ├── src/plugins/             # 插件模型和占位运行时
+│       ├── src/local_store.rs       # 桌面 SQLite 迁移 + FTS5 + 备份
+│       ├── src/rag/                 # 分块、索引、召回、融合、引用、评测
+│       ├── src/providers/           # openai / ollama / embedding
+│       ├── src/privacy/             # 规则编译与请求拦截
+│       ├── src/plugins/             # Manifest、安装器、WASM 运行时
+│       ├── src/agent/               # 受控 Agent
 │       ├── src/lib.rs               # Tauri commands 与启动入口
-│       └── src/local_store.rs       # 桌面 SQLite + FTS5
+│       └── src/downloads.rs         # 下载中心
 ├── docs/                            # 产品、架构、路线图和本文档
-└── specs/                           # 需求规格、计划和任务拆分
+├── specs/                           # 历史需求规格（见 specs/readme）
+└── website/                         # Astro 官网（Netlify 发布）
 ```
 
 ## 4. 当前运行架构
@@ -75,7 +90,7 @@ flowchart LR
 - 远程网页运行在独立子 WebView 中，不直接获得 Tauri privileged command 权限。
 - React UI 只通过受控 command 获取网页状态、快照和本地数据。
 - Rust 层拒绝非 `http`/`https` 导航。
-- AI、插件和同步相关接口目前不能被视为已上线能力。
+- AI、隐私拦截、插件运行时与 Agent 均已上线，但能力边界仍受平台限制：证书与请求拦截在 Windows 为真实实现，macOS/Linux 为 no-op。平台差异见 [WebView 原生能力矩阵](browser-native-capability-matrix.md)。
 
 ## 5. 前端应用
 
@@ -91,11 +106,13 @@ main.tsx → App.tsx → AppRouter.tsx → AppLayout.tsx → 页面组件
 
 | View | 页面 | 状态 |
 | --- | --- | --- |
-| `browser` | `BrowserPage` | 可用 |
-| `library` | `LibraryPage` | 可用 |
-| `search` | `SearchPage` | 可用，桌面端为 SQLite **FTS5** + BM25 排序 + 前缀匹配 |
-| `ai` | `AssistantPage` | 数据源展示可用，问答未接通 |
-| `settings` | `SettingsPage` | 大部分为占位，Provider 表单未持久化 |
+| `browser` | `BrowserPage` | 可用：多标签、下载中心、右键菜单、权限提示、证书提示、Reader、保存 |
+| `library` | `LibraryPage` | 可用：文档列表、集合、星标、详情抽屉、导出与备份 |
+| `search` | `SearchPage` | 可用：SQLite **FTS5** + BM25 排序 + 前缀匹配 |
+| `ai` | `AssistantPage` | 可用：流式摘要/问答/翻译、跨文档 RAG 问答、Agent 运行历史 |
+| `settings` | `SettingsPage` | 可用：Provider 配置（Key 入密钥环）、隐私、下载、插件、数据与外观 |
+
+`AppRouter` 用 `mountedViews` 保活已访问过的视图，并通过 `.route-view` / `.is-hidden` 控制显示，避免切换时重复挂载与丢失状态。
 
 所有路由级页面通过 `React.lazy` 加载。`AppLayout` 的左侧导航宽度可在 72–320 px 之间拖动，并通过 CSS 变量 `--sider-width` 通知布局。
 
@@ -191,13 +208,31 @@ sequenceDiagram
 | `getSession(key)` / `setSession(key, value)` | `local_get_session` / `local_set_session` | 通用 K/V；非 Tauri 模式 get 返回 null、set no-op |
 | `exportBackup()` / `importBackup(backup)` | `local_export_backup` / `local_import_backup` | 导出 / 导入本地文档 + 会话状态为备份；版本号必须为 1；非 Tauri 模式导出空、导入返回零计数 |
 
-本地文档 ID 为 `local-{crypto.randomUUID()}`，保存时直接标记为 `READY`。当前保存逻辑仍保留状态轮询，但本地路径第一次读取通常即可得到 `READY`。
+`api.ts` 同时是 RAG、隐私、插件、Agent、MCP、下载、历史、书签、集合、任务与阅读活动的统一入口，总计约 167 个 command。按组归纳：
+
+| 组 | 代表函数 | command 前缀 |
+| --- | --- | --- |
+| 文档与集合 | `listDocuments` `saveDocument` `updateDocument` `archiveDocument` `toggleStarred` `createCollection` `addToCollection` | `local_*` |
+| 检索 | `searchDocuments` `searchSimilarEmbeddings` | `local_*` / `ai_*` |
+| 备份与迁移 | `exportBackup` `importBackup` `getMigrationStatus` | `local_*` |
+| Reader / 阅读活动 | `saveReadingSnapshot` `listReadingActivity` `purgeReadingSnapshots` | `local_*` |
+| 会话与浏览 | `getSession` `listBrowserHistory` `listClosedTabs` `listSitePermissions` | `local_*` / `browser_*` |
+| AI Provider | `listAIProviders` `saveAIProvider` `aiTestProvider` `aiChatStream` `aiChatCancel` `aiEmbed` | `ai_*` |
+| RAG | `ragEnqueueDocument` `ragEnqueueAll` `ragIndexStatus` `ragRetrieve` `ragAnswer` `ragRetryJob` `ragRebuildIndex` | `rag_*` |
+| 任务队列 | `claimPendingTask` `enqueueTask` `completeTask` `failTask` `retryTask` `recoverStaleTasks` | `task_*` / `local_*` |
+| 隐私 | `privacyGetStats` `privacyListBlockEvents` `privacySetSiteSetting` `privacyCapabilityReport` | `privacy_*` |
+| 插件 | `installPlugin` `listPlugins` `setPluginEnabled` `setPluginPermission` `dispatchPluginEvent` `uninstallPlugin` | `plugin_*` |
+| Agent 与 MCP | `agentStart` `agentApprove` `agentPause` `agentListRuns` `callMcpTool` `listMcpServers` | `agent_*` / `mcp_*` |
+
+本地文档 ID 为 `local-{crypto.randomUUID()}`，保存时直接标记为 `READY`；分块与向量索引由后台任务异步推进，不影响保存结果。
 
 `BrowserPage.save()` 已在 Reader 抽取失败或正文为空时抛错并以 `error` 提示取消保存，不再写入占位文本。
 
 ## 6. Tauri/Rust 层
 
 ### 6.1 Commands
+
+在 `lib.rs` 的 `generate_handler!` 中注册的 command 约 167 个，按组归纳见 §5.5；下表列出最基础的 WebView 与本地文档一组。所有 command 统一返回 `Result<T, String>`，错误以字符串回传前端。
 
 | Command | 参数 | 返回 | 说明 |
 | --- | --- | --- | --- |
@@ -226,15 +261,22 @@ WebView 脚本通过 `eval_with_callback` 执行，等待上限为 5 秒。comma
 
 主窗口 capability 只开放默认核心权限和子 WebView 的创建、定位、调整大小、显示、隐藏、关闭权限。
 
-应用 CSP：
+应用 CSP（`tauri.conf.json` → `app.security.csp`）：
 
 ```text
 default-src 'self';
-connect-src 'self';
+script-src 'self';
+connect-src 'self' http://127.0.0.1:8787;
 img-src 'self' asset: https: data:;
-style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-font-src https://fonts.gstatic.com
+style-src 'self' 'unsafe-inline';
+font-src 'self';
+object-src 'none';
+frame-src 'none';
+base-uri 'self';
+form-action 'self'
 ```
+
+> ⚠️ **待清理**：`connect-src` 仍放行 `http://127.0.0.1:8787`，这是已删除的 Go 后端遗留端口。桌面端现在不使用任何 loopback 服务，该条目应当移除。`devCsp` 额外放行 `ws://localhost:1420` 供 Vite HMR 使用，属正常配置。
 
 子 WebView 加载的远程网页与可信应用 UI 是不同的安全上下文。新增 command 时必须同时评估：调用方是否为可信窗口、参数是否需要白名单、是否需要 capability，以及返回内容是否可能包含敏感信息。
 
@@ -260,8 +302,11 @@ font-src https://fonts.gstatic.com
 | `tags` | TEXT | JSON 数组字符串 |
 | `created_at` | TEXT | ISO 时间字符串 |
 | `starred` | INTEGER | 收藏标记，0/1，索引 `idx_local_documents_starred (starred DESC, created_at DESC)`（v2 迁移加入） |
+| `auto_tags` | TEXT | AI 自动标签的 JSON 数组（v7 迁移加入） |
 
-查询使用 `LIKE '%query%'` 匹配 title、markdown、summary 和序列化后的 tags，按 `starred DESC, created_at DESC` 排序，收藏文档优先。Schema 版本与迁移由 `schema_version` 表 + `MIGRATIONS` 常量管理，每次 `connection()` 调用 `run_migrations` 自动推进；`local_migration_status` command 暴露当前版本与 pending 数量。
+检索走 FTS5（见 §7.2），只有在空查询或检索词全部被清洗掉时才降级为按 `starred DESC, created_at DESC` 全量列表。
+
+Schema 版本与迁移由 `schema_version` 表 + `MIGRATIONS` 常量管理，每次 `connection()` 调用 `run_migrations` 自动推进；当前共 25 个迁移（v1–v25）。`local_migration_status` command 暴露当前版本与 pending 数量。迁移是追加式的，只能新增版本号，不能修改已发布的条目。
 
 通用 K/V 表 `local_session (key, value, updated_at)`（v3 迁移加入）支持 `local_get_session` / `local_set_session` commands，用于 BrowserPage 在挂载时恢复 tabs 与 activeTabId，变更后 500ms debounce 落盘。
 
@@ -279,11 +324,23 @@ font-src https://fonts.gstatic.com
 
 `local_documents` 主键是 TEXT，没有显式 INTEGER 主键，因此 FTS5 通过隐式 `rowid` 关联，`content_rowid='rowid'` 在 schema 中显式标注。
 
-## 8. （已合并到 §7）
+### 7.3 RAG 与向量存储（迁移 #21–#24）
+
+| 表 | 作用 |
+| --- | --- |
+| `document_chunks` | 分块结果，带 `CHUNKER_VERSION`，重建时可整体刷新 |
+| `document_chunks_fts` | 分块级 FTS5 虚表，用于词法召回 |
+| `document_embeddings` | 向量及其 Provider / 模型标识，换模型后旧向量可识别 |
+| `embedding_index_state` | 当前向量索引的 Provider / 模型 / 维度状态 |
+| `rag_index_jobs` | 索引任务队列（`PENDING / CHUNKING / EMBEDDING / INDEXING / STALE / FAILED` 等） |
+
+索引由 Rust 端 supervisor 驱动：认领 `available_at` 已到期的 `PENDING` 任务，按 30s → 2min → 10min → 30min 退避重试；启动时把卡在中间状态的任务重置为 `PENDING`，使崩溃可自愈；Provider 或模型变化时把任务标记为 `STALE` 而非删除，保留痕迹供用户重建。
+
+## 8. 历史：Go 后端已移除
 
 历史版本曾规划独立的 Go 后端提供文档 API、FTS5 和处理队列，但桌面应用从未真正调用该服务；Rust 端 `local_store.rs` 已经承担所有文档持久化与全文检索职责，Go 后端代码（`backend/`）已删除。如需远程同步或多端协作，应在 Rust 端构建独立服务，避免再次出现双存储。
 
-## 9. （无独立 HTTP API）
+## 9. HTTP API（当前不提供）
 
 桌面应用不暴露 HTTP API。所有读写均通过 Tauri commands（`local_*` / `browser_*` / `downloads_*` 等）由前端 `invoke` 调用。Rust 端不做入站网络服务。
 
@@ -388,38 +445,43 @@ cargo test
 
 当前测试现状：
 
-- Rust：覆盖域名补全、搜索词转换、高权限协议拒绝、`local_store` 17 个迁移（含 FTS5 触发器与回填）、下载/书签/会话锁/Provider base URL 校验等。共 49 用例，`cargo test --lib` 通过。
-- 前端：Vitest + happy-dom 已配置；共 384 个用例，`npm run test` 通过。
-- TypeScript 检查和 Vite 生产构建当前通过。
+- **前端**：Vitest + happy-dom，59 个测试文件 / **454 个用例全部通过**；`npm run build`（`tsc --noEmit` + Vite 生产构建）通过。
+- **Rust**：源码中有 **229 个 `#[test]` / `#[tokio::test]` 函数**，分布在 45 个模块文件（RAG、隐私、插件、Agent、下载、会话锁等）。`cargo check --all-targets` 通过。
+- **Rust 测试在 Windows 上无法执行**：见下方阻塞说明。
 
-优先补充的前端测试：
+> ### 阻塞：Windows 上 `cargo test` 启动即失败
+>
+> 测试二进制在进入 `main` 之前以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出，无任何输出。
+>
+> 因果链：`tauri 2.11.5` 的默认特性 `common-controls-v6` → `muda 0.19.3` 同名特性 → 静态导入 `comctl32!TaskDialogIndirect`。该导出仅存在于 comctl32 v6，需应用清单声明 `Microsoft.Windows.Common-Controls` 才会加载到 v6。应用主程序由 `tauri-build` 注入清单，运行正常；测试 harness 二进制没有清单，加载到 v5 comctl32 后缺入口点而失败。
+>
+> 修复方向：在 `build.rs` 中追加 `cargo::rustc-link-arg-tests=/MANIFESTINPUT:<manifest.xml>`，只作用于测试目标。在此之前请以 `cargo check --all-targets` 作为 Rust 侧门禁，并优先修复该问题以恢复测试覆盖。
 
-1. `extractArticle` 的清理、相对 URL 和危险协议行为。
-2. 浏览器标签创建、切换、关闭和快捷键。
-3. `api.ts` 在 Tauri/非 Tauri 环境下的行为。
-4. 搜索 250 ms debounce 和异常状态。
-5. 保存失败、空正文和占位正文行为。
+前端测试已覆盖的方向包括：URL 安全、外部协议、证书提示、权限提示、标签分组/重排/搜索、会话恢复、LRU、日志脱敏、下载危险判定与队列、RAG 检索与引用、Agent 循环与预算、插件跟踪清理、设置项等。
 
 ## 13. 安全设计与风险
 
 ### 13.1 已实现控制
 
-- Rust 导航白名单只允许 HTTP/HTTPS。
-- 网页新窗口转换为应用内标签。
+- Rust 导航白名单只允许 HTTP/HTTPS；`file:`、`javascript:` 等高权限协议被拒绝。
+- 网页新窗口转换为应用内标签；外部协议需用户确认。
 - 页面快照限制为 8 MiB，脚本回调等待上限 5 秒。
 - Reader 删除主动内容、嵌入内容、表单和 DOM 事件属性。
-- Tauri capability 仅授予主窗口必需的 WebView 操作。
-- HTTP JSON 限制为 1 MiB，并拒绝未知字段。
-- SQLite 使用参数绑定，避免直接拼接用户值。
-- 应用 CSP 仅允许 `'self'` 作为 `connect-src`，不再放行任何 loopback 服务地址。
+- Tauri capability 仅授予主窗口必需的 WebView 操作（`capabilities/default.json`）。
+- Provider API Key 存放于系统密钥环（`keyring`），不落库、不进前端包、不写日志。
+- 隐私过滤在 Windows 上通过 WebView2 请求拦截真实生效，并写入站点级统计。
+- 插件在空 `WasiCtx` 中运行，受 Fuel、内存上限与 epoch 超时约束；宿主能力按权限逐项校验并记审计。
+- Agent 工具按风险分级，高风险动作需审批；审计日志脱敏。
+- SQLite 使用参数绑定，避免拼接用户值。
+- 日志脱敏：`logRedaction`（前端）与 Rust 侧审计写入均剔除密钥与敏感正文。
 
-### 13.2 尚未完成的安全能力
+### 13.2 尚未完成 / 待收紧
 
-- Provider API Key 尚未接入系统密钥环；设置页声明不等于已实现。
-- 隐私面板中的"已拦截请求"是静态展示，不是真实网络层统计。
-- 没有网站级权限、下载处理、证书错误策略和外部协议确认。
-- 页面 HTML 会被读取到可信 UI 进程；需持续审查 Reader 清理和渲染链。
-- 日志没有统一的敏感信息清理中间件。
+- **CSP 仍放行 `http://127.0.0.1:8787`**，这是已删除的 Go 后端遗留条目，应移除（见 §6.2）。
+- `desktop/package.json`（0.3.0）与 `tauri.conf.json`（0.1.0）版本号不一致，发布前需统一。
+- 页面 HTML 会被读取到可信 UI 进程；需持续审查 Reader 清理与渲染链。
+- macOS / Linux 缺少隐私拦截与证书拦截的等价实现。
+- 插件尚无签名校验与市场信任链。
 
 ## 14. 已知限制与技术债
 
@@ -429,33 +491,42 @@ cargo test
 
 1. ✅ 桌面保存失败时的占位 Markdown 可能造成伪正文（已在 `BrowserPage.save()` 改为 Reader 失败/空正文时直接报错并取消保存）。
 2. ✅ 桌面数据库没有正式迁移版本（已引入 `schema_version` 表 + `MIGRATIONS` 常量 + `run_migrations` 启动钩子，附 `local_migration_status` command；老库自动打 v1 基线）。
-3. ✅ 前端没有自动化测试（Vitest + happy-dom 已配置；共 384 用例，`npm run test` 通过）。
-4. ✅ 桌面搜索停留在 `LIKE`（已升级：迁移 #17 引入 `local_documents_fts` FTS5 虚表 + 触发器同步 + BM25 排序 + 前缀匹配；`build_fts5_query` 清洗用户输入中的 FTS5 元字符）。
+3. ✅ 前端没有自动化测试（Vitest + happy-dom，454 用例通过）。
+4. ✅ 桌面搜索停留在 `LIKE`（已升级为 FTS5 + BM25 + 前缀匹配）。
+5. ⛔ **Rust 测试在 Windows 上无法执行**，229 个用例长期缺少回归保护 —— 当前最高优先级。
 
 ### P1：阻碍架构演进
 
-1. ✅ 桌面和 Go 双存储没有统一数据所有权（已解决：保留 Rust 本地存储，Go sidecar 代码 `backend/` 目录删除；前端不再放行 `127.0.0.1:8787` 到 CSP `connect-src`）。
-2. ✅ `migrations/001_init.sql` 与运行时内嵌 schema 不一致（已解决：随 backend/ 一并删除；所有迁移集中在 `local_store.rs::MIGRATIONS`）。
-3. ✅ 桌面搜索 UI 文案"FTS5 SEARCH" → "LOCAL SEARCH"（已升级：现在真正跑 FTS5 + BM25）。
-4. 桌面应用未自动暴露远程服务：当前不暴露 HTTP API，多端同步需另行设计。
-5. 搜索没有分页，文档增长后 list 端会产生性能问题。
+1. ✅ 桌面和 Go 双存储没有统一数据所有权（已解决：保留 Rust 本地存储，`backend/` 目录删除）。
+2. ✅ `migrations/001_init.sql` 与运行时内嵌 schema 不一致（已随 `backend/` 一并删除，迁移集中在 `local_store.rs::MIGRATIONS`）。
+3. ✅ 桌面搜索 UI 文案"FTS5 SEARCH" → "LOCAL SEARCH"（现已真正跑 FTS5 + BM25）。
+4. 搜索没有分页，文档增长后 list 端会产生性能问题。
+5. 桌面应用不暴露 HTTP API：多端同步需另行设计。
+6. `tauri.conf.json` 的 CSP 残留已删除后端的 loopback 地址。
+7. 两处版本号不一致（`package.json` 0.3.0 / `tauri.conf.json` 0.1.0）。
 
-### P2：功能占位
+### P2：待补齐能力
 
-1. AI 摘要、问答、翻译、自动标签。
-2. Embedding、混合检索、Reranker 和带引用 RAG。
-3. 隐私拦截与真实网络层统计。
-4. ✅ 历史、书签、下载、会话恢复和标签拖拽 — 全部完成：`local_documents.starred` + 卡片星标；`local_session` 承载 `browser.tabs` / `browser.history`；HTML5 native drag 实现 tab 重排（`reorderTabs` 纯函数 + 状态机）；导出 Markdown 通过 `DocumentDetailDrawer.onExported` 回调进入 in-memory `downloads` 列表（`trackDownload` 纯函数 + `parseDownloads` 防御性解析），LibraryPage 顶部展示最近 8 条。
-5. 插件 Runtime、集合管理和归档入口。
+1. ✅ AI 摘要、问答、翻译、自动标签。
+2. ✅ Embedding、混合检索、Reranker 和带引用 RAG。
+3. ✅ 隐私拦截与真实网络层统计（Windows）。
+4. ✅ 历史、书签、下载、会话恢复和标签拖拽。
+5. ✅ 插件 Runtime（Wasmtime 组件模型）。
+6. 插件市场、签名校验与宿主能力全集。
+7. macOS / Linux 的隐私与证书能力。
+8. PDF 保存、Markdown 导入、截图。
 
 ## 15. 推荐演进顺序
 
 1. ✅ 修复空正文保存：提取失败时明确失败，不写占位数据。
-2. ✅ 桌面 SQLite 版本化迁移 + 备份/恢复已完成。
-3. ✅ 决定唯一数据所有权：保留 Rust 本地优先，Go sidecar 整条删除；新增检索能力（Embedding / Reranker / 引用 RAG）继续在 Rust 端推进。
-4. ✅ 补齐前端关键路径测试 — 384 用例通过。
-5. 接入系统密钥环后再实现 OpenAI-compatible/Ollama Provider。
-6. 在稳定全文检索和引用模型后实现 RAG，最后扩展 Agent/Plugin。
+2. ✅ 桌面 SQLite 版本化迁移 + 备份/恢复。
+3. ✅ 收敛数据所有权：保留 Rust 本地优先，Go sidecar 整条删除。
+4. ✅ 补齐前端关键路径测试 —— 454 用例通过。
+5. ✅ 接入系统密钥环后实现 OpenAI-compatible / Ollama Provider。
+6. ✅ 在稳定全文检索和引用模型后实现 RAG，再扩展 Agent / Plugin。
+7. ⛔ 修复 Windows 上 `cargo test` 的清单问题，恢复 Rust 回归门禁。
+8. 清理 CSP 与版本号残留，完成布局收尾。
+9. 补搜索分页，然后评估跨平台隐私能力与插件市场。
 
 ## 16. 开发约定
 
@@ -487,10 +558,28 @@ cargo test
 - 用户输入含 FTS5 元字符（`"`、`*`、`(` 等）会被剥离，留空时降级为全列表。
 - BM25 排序对常见词项有效；输入全新术语可能返回 0 行，这是预期行为（不是 bug）。
 
+### `cargo test` 立刻退出，没有任何测试输出
+
+退出码 `0xC0000139`（`-1073741511`）表示 loader 在 `main` 之前失败，不是测试断言失败。原因与修复见 §12 的阻塞说明。可用以下方式确认：
+
+```powershell
+# 直接运行测试二进制，同样会得到 -1073741511
+& desktop\src-tauri\target\debug\deps\ai_knowledge_browser_lib-*.exe --list
+
+# 确认两个二进制都导入了 comctl32!TaskDialogIndirect，且测试二进制没有清单
+dumpbin /imports <exe>
+```
+
+### 插件安装后无法调用能力
+
+按顺序检查：Manifest 是否声明了该权限、用户是否已单独授权（`plugin_grants` 而非仅信任 Manifest）、插件是否处于 `ENABLED`、调用是否触发 Fuel / 内存 / 超时上限。审计记录见 `plugin_audit_log`。
+
 ## 18. 相关文档
 
 - [产品需求](PRD.md)
 - [系统架构](architecture.md)
 - [开发路线图](roadmap.md)
+- [WebView 原生能力矩阵](browser-native-capability-matrix.md)
+- [WASM 插件运行时方案](wasm-plugin-runtime-plan.md)
 - [项目说明](../README.md)
 
