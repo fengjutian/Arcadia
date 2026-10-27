@@ -107,19 +107,22 @@ pub fn decide(
 /// since the enum lives behind `webview2_com`; on other targets we expose
 /// the converter through the literal byte values.
 pub fn classify_resource_type(context_byte: u32) -> ResourceType {
-    // Stable values from the WebView2 header:
-    //   0 Document, 1 Stylesheet, 2 Image, 4 Script, 8 XHR, 16 SubDocument,
-    //   32 Fetch, 64 Font, 256 Media, 512 WebSocket, ...
-    // We don't use the bitmask origin (3 bits) — they're a parallel field.
-    let kind = context_byte & 0x3FC; // mask the low flags we don't care about
-    match kind & 0x3FC {
-        x if x == 1 => ResourceType::Stylesheet,
-        x if x == 2 => ResourceType::Image,
-        x if x == 4 => ResourceType::Script,
-        x if x == 8 || x == 32 => ResourceType::XmlHttpRequest,
-        x if x == 16 => ResourceType::SubDocument,
-        x if x == 64 => ResourceType::Font,
-        x if x == 256 => ResourceType::Media,
+    // Values come straight from `COREWEBVIEW2_WEB_RESOURCE_CONTEXT` and are
+    // small sequential ordinals, not a bitmask:
+    //   1 DOCUMENT, 2 STYLESHEET, 3 IMAGE, 4 MEDIA, 5 FONT, 6 SCRIPT,
+    //   7 XML_HTTP_REQUEST, 8 FETCH, 9 TEXT_TRACK, 10 EVENT_SOURCE,
+    //   11 WEBSOCKET, 12 MANIFEST, 13 SIGNED_EXCHANGE, 14 PING, 16 OTHER.
+    // The previous implementation masked with 0x3FC, which zeroed ordinals
+    // 1–3 and classified every real request as `Other`.
+    match context_byte {
+        1 => ResourceType::Document,
+        2 => ResourceType::Stylesheet,
+        3 => ResourceType::Image,
+        4 => ResourceType::Media,
+        5 => ResourceType::Font,
+        6 => ResourceType::Script,
+        7 | 8 => ResourceType::XmlHttpRequest,
+        11 => ResourceType::WebSocket,
         _ => ResourceType::Other,
     }
 }
@@ -245,10 +248,18 @@ mod tests {
 
     #[test]
     fn classify_resource_type_maps_known_contexts() {
-        assert_eq!(classify_resource_type(2), ResourceType::Image);
-        assert_eq!(classify_resource_type(4), ResourceType::Script);
+        // Real `COREWEBVIEW2_WEB_RESOURCE_CONTEXT` ordinals.
+        assert_eq!(classify_resource_type(1), ResourceType::Document);
+        assert_eq!(classify_resource_type(2), ResourceType::Stylesheet);
+        assert_eq!(classify_resource_type(3), ResourceType::Image);
+        assert_eq!(classify_resource_type(4), ResourceType::Media);
+        assert_eq!(classify_resource_type(5), ResourceType::Font);
+        assert_eq!(classify_resource_type(6), ResourceType::Script);
+        assert_eq!(classify_resource_type(7), ResourceType::XmlHttpRequest);
         assert_eq!(classify_resource_type(8), ResourceType::XmlHttpRequest);
-        assert_eq!(classify_resource_type(16), ResourceType::SubDocument);
+        assert_eq!(classify_resource_type(11), ResourceType::WebSocket);
+        assert_eq!(classify_resource_type(16), ResourceType::Other);
+        assert_eq!(classify_resource_type(9999), ResourceType::Other);
     }
 
     #[test]
