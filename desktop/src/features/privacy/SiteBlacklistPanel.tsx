@@ -32,6 +32,7 @@ const EMPTY_SUMMARY: SiteBlacklistSummary = { total: 0, enabled: 0, hitTotal: 0,
 
 export function SiteBlacklistPanel() {
   const [messageApi, contextHolder] = message.useMessage()
+  const desktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
   const [entries, setEntries] = useState<SiteBlacklistEntry[]>([])
   const [events, setEvents] = useState<SiteBlacklistEvent[]>([])
   const [summary, setSummary] = useState<SiteBlacklistSummary>(EMPTY_SUMMARY)
@@ -63,7 +64,10 @@ export function SiteBlacklistPanel() {
     let active = true
     void reload()
     let stop: () => void = () => undefined
-    void subscribeSiteBlacklist(() => { if (active) void reload() }).then(unsubscribe => { stop = unsubscribe })
+    void subscribeSiteBlacklist(() => { if (active) void reload() }).then(unsubscribe => {
+      if (active) stop = unsubscribe
+      else unsubscribe()
+    })
     return () => {
       active = false
       stop()
@@ -176,6 +180,12 @@ export function SiteBlacklistPanel() {
 
   return <div className="privacy-section site-blacklist">
     {contextHolder}
+    {!desktop && <Alert
+      type="warning"
+      showIcon
+      message="网页预览模式无法修改封杀名单"
+      description="网站封杀依赖 Tauri 原生层的请求拦截；请使用桌面应用（npm run tauri:dev）管理名单。"
+    />}
     <Alert
       type="info"
       showIcon
@@ -185,11 +195,11 @@ export function SiteBlacklistPanel() {
 
     <div className="site-blacklist__switches">
       <label>
-        <Switch checked={globalEnabled} onChange={value => void toggleGlobal(value)} />
+        <Switch checked={globalEnabled} disabled={!desktop} onChange={value => void toggleGlobal(value)} />
         <span>启用网站封杀</span>
       </label>
       <label>
-        <Switch checked={blockSubresources} disabled={!globalEnabled} onChange={value => void toggleSubresources(value)} />
+        <Switch checked={blockSubresources} disabled={!desktop || !globalEnabled} onChange={value => void toggleSubresources(value)} />
         <span>阻断被封杀站点的嵌入资源</span>
       </label>
     </div>
@@ -209,11 +219,11 @@ export function SiteBlacklistPanel() {
         aria-label="封杀备注"
         maxLength={80}
       />
-      <Button type="primary" disabled={busy || !input.trim()} onClick={() => void handleAdd()}>添加</Button>
+      <Button type="primary" disabled={!desktop || busy || !input.trim()} onClick={() => void handleAdd()}>添加</Button>
     </div>
 
     <Space wrap className="site-blacklist__toolbar">
-      <Button onClick={() => { setLastImport(null); setImportOpen(true) }}>批量导入</Button>
+      <Button disabled={!desktop} onClick={() => { setLastImport(null); setImportOpen(true) }}>批量导入</Button>
       <Button disabled={entries.length === 0} onClick={exportList}>导出名单</Button>
       <Popconfirm
         title={`清空全部 ${entries.length} 条封杀记录？`}
@@ -221,9 +231,10 @@ export function SiteBlacklistPanel() {
         okText="清空"
         cancelText="取消"
         okButtonProps={{ danger: true }}
+        disabled={!desktop}
         onConfirm={() => void clearAll()}
       >
-        <Button danger disabled={entries.length === 0}>清空全部</Button>
+        <Button danger disabled={!desktop || entries.length === 0}>清空全部</Button>
       </Popconfirm>
     </Space>
 
@@ -256,7 +267,7 @@ export function SiteBlacklistPanel() {
             </span>
             <span>{entry.hitCount}</span>
             <span>{entry.lastBlockedAt ? new Date(entry.lastBlockedAt * 1000).toLocaleString() : '—'}</span>
-            <span><Switch checked={entry.enabled} onChange={value => void toggleEntry(entry, value)} /></span>
+            <span><Switch checked={entry.enabled} disabled={!desktop} onChange={value => void toggleEntry(entry, value)} /></span>
             <span>
               <Popconfirm
                 title={`解除封杀 ${entry.host}？`}
@@ -288,7 +299,7 @@ export function SiteBlacklistPanel() {
       title="批量导入封杀名单"
       okText="开始导入"
       cancelText="关闭"
-      okButtonProps={{ disabled: busy || !importText.trim() }}
+      okButtonProps={{ disabled: !desktop || busy || !importText.trim() }}
       onOk={() => void handleImport()}
       onCancel={() => setImportOpen(false)}
     >

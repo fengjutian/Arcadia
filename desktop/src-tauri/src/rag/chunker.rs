@@ -551,13 +551,13 @@ fn finalize_block(
     }
 }
 
-/// Splits prose that exceeds [`HARD_MAX_TOKENS`] on its own into block-sized
-/// pieces.
+/// Splits prose blocks that are larger than [`TARGET_TOKENS`] on their own into
+/// chunk-sized pieces.
 ///
-/// `group_into_chunks` only closes a chunk *between* blocks, so a single
-/// paragraph holding thousands of tokens would otherwise be emitted whole and
-/// blow past the hard cap. Code fences, tables, headings and quotes are left
-/// untouched: splitting them would change their meaning (or break citations).
+/// `group_into_chunks` only closes a chunk *between* blocks, so a single long
+/// paragraph would otherwise be emitted whole and blow past the budget. Code
+/// fences, tables, headings and quotes are left untouched: splitting them would
+/// change their meaning (or break citations).
 fn expand_oversized_blocks(
     blocks: &[MarkdownBlock],
     counter: &dyn TokenCounter,
@@ -565,7 +565,7 @@ fn expand_oversized_blocks(
     let mut out: Vec<MarkdownBlock> = Vec::with_capacity(blocks.len());
     for block in blocks {
         let splittable = matches!(block.kind, BlockKind::Paragraph | BlockKind::Unknown);
-        if !splittable || counter.count(block.raw.trim()) <= HARD_MAX_TOKENS {
+        if !splittable || counter.count(block.raw.trim()) <= TARGET_TOKENS {
             out.push(block.clone());
             continue;
         }
@@ -610,12 +610,14 @@ fn split_prose(text: &str, counter: &dyn TokenCounter) -> Vec<String> {
     let mut current_tokens = 0usize;
     for atom in atoms {
         let atom_tokens = counter.count(&atom);
-        if current_tokens + atom_tokens > TARGET_TOKENS && !current.is_empty() {
+        current.push_str(&atom);
+        current_tokens += atom_tokens;
+        // Close the piece as soon as it reaches the target, so each piece is
+        // large enough that `group_into_chunks` also closes a chunk after it.
+        if current_tokens >= TARGET_TOKENS {
             chunks.push(std::mem::take(&mut current));
             current_tokens = 0;
         }
-        current.push_str(&atom);
-        current_tokens += atom_tokens;
     }
     if !current.trim().is_empty() {
         chunks.push(current);

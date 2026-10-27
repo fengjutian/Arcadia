@@ -113,6 +113,10 @@ pub fn search(
         let raw = row.map_err(|e| e.to_string())?;
         let vector = blob_to_vector(&raw.vector_bytes);
         let similarity = cosine_similarity(query_vector, &vector);
+        // Cosine similarity is a relevance gate: orthogonal (0.0) and
+        // anti-correlated vectors carry no signal for the query, so they are
+        // dropped rather than ranked last. Callers therefore receive *up to*
+        // `candidate_k` hits, not exactly that many.
         if similarity <= 0.0 {
             continue;
         }
@@ -227,7 +231,10 @@ mod tests {
         .unwrap();
         let v1 = vec![1.0_f32, 0.0, 0.0, 0.0];
         let v2 = vec![0.6_f32, 0.6, 0.4, 0.0];
-        let v3 = vec![0.0_f32, 1.0, 0.0, 0.0];
+        // Positive but clearly lower similarity than v2 — cosine search drops
+        // orthogonal/negative candidates, so a zero-similarity fixture would be
+        // filtered out instead of ranked last.
+        let v3 = vec![0.2_f32, 0.9, 0.0, 0.0];
         for (idx, v) in [v1, v2, v3].iter().enumerate() {
             conn.execute(
                 "INSERT INTO document_embeddings(document_id,chunk_index,model,dims,vector,excerpt,created_at) VALUES('d1',?,'m',4,?,'e',1)",

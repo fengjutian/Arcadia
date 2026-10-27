@@ -912,26 +912,27 @@ export async function siteBlacklistList(): Promise<SiteBlacklistEntry[]> {
 }
 
 export async function siteBlacklistAdd(input: string, note?: string | null, source?: string): Promise<SiteBlacklistEntry> {
+  if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
   return invoke<SiteBlacklistEntry>('site_blacklist_add', { input, note: note ?? null, source: source ?? null })
 }
 
 export async function siteBlacklistAddMany(input: string): Promise<SiteBlacklistImportResult> {
-  if (!isTauri()) return { added: [], duplicates: [], invalid: [] }
+  if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
   return invoke<SiteBlacklistImportResult>('site_blacklist_add_many', { input })
 }
 
 export async function siteBlacklistRemove(id: string): Promise<void> {
-  if (!isTauri()) return
+  if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
   await invoke('site_blacklist_remove', { id })
 }
 
 export async function siteBlacklistSetEnabled(id: string, enabled: boolean): Promise<void> {
-  if (!isTauri()) return
+  if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
   await invoke('site_blacklist_set_enabled', { id, enabled })
 }
 
 export async function siteBlacklistClear(): Promise<number> {
-  if (!isTauri()) return 0
+  if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
   return invoke<number>('site_blacklist_clear')
 }
 
@@ -941,7 +942,7 @@ export async function siteBlacklistGetSettings(): Promise<SiteBlacklistSettings>
 }
 
 export async function siteBlacklistSetSettings(enabled: boolean, blockSubresources: boolean): Promise<void> {
-  if (!isTauri()) return
+  if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
   await invoke('site_blacklist_set_settings', { enabled, blockSubresources })
 }
 

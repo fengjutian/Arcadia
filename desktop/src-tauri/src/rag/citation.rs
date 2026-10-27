@@ -55,27 +55,26 @@ const SOURCE_END: &str = "[/SOURCE]";
 /// markers when an answer uses an abbreviated form (legacy frontends).
 pub fn extract_source_ids(answer: &str) -> Vec<(String, String)> {
     let mut hits = Vec::new();
-    let bytes = answer.as_bytes();
-    let mut i = 0usize;
-    while i < bytes.len() {
-        if let Some(rel_start) = answer[i..].find(SOURCE_OPEN) {
-            let abs_open = i + rel_start + SOURCE_OPEN.len();
-            if let Some(rel_close) = answer[abs_open..].find('"') {
-                let id_end = abs_open + rel_close;
-                let id = answer[abs_open..id_end].to_string();
-                if let Some(rel_end) = answer[id_end..].find(SOURCE_END) {
-                    let block_end = id_end + rel_end + SOURCE_END.len();
-                    let body = answer[id_end..block_end - SOURCE_END.len()].to_string();
-                    hits.push((id, body));
-                    i = block_end;
-                    continue;
-                }
-                // No closing tag — treat as malformed.
-                hits.push((id, "<unclosed source>".into()));
-                break;
-            }
-        }
-        i += 1;
+    // Advance only between matches, so every slice starts on a UTF-8 boundary.
+    // The previous implementation stepped through `i += 1` byte offsets and
+    // panicked on any multi-byte character before a SOURCE block.
+    let mut search_from = 0usize;
+    while let Some(rel_start) = answer[search_from..].find(SOURCE_OPEN) {
+        let abs_open = search_from + rel_start + SOURCE_OPEN.len();
+        let Some(rel_close) = answer[abs_open..].find('"') else {
+            break;
+        };
+        let id_end = abs_open + rel_close;
+        let id = answer[abs_open..id_end].to_string();
+        let Some(rel_end) = answer[id_end..].find(SOURCE_END) else {
+            // No closing tag — treat as malformed.
+            hits.push((id, "<unclosed source>".into()));
+            break;
+        };
+        let block_end = id_end + rel_end + SOURCE_END.len();
+        let body = answer[id_end..block_end - SOURCE_END.len()].to_string();
+        hits.push((id, body));
+        search_from = block_end;
     }
     hits
 }
