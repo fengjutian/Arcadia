@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Manifest merged into Rust *test* binaries by build.rs.
+
+  `tauri` enables `muda/common-controls-v6`, which makes the dependency graph
+  statically import `comctl32!TaskDialogIndirect`. That export only exists in
+  the side-by-side comctl32 v6 assembly, so it is only reachable when the
+  executable's manifest declares the dependency below. The application binary
+  receives such a manifest from `tauri_build::build()`; Cargo's test harness
+  binaries do not, so they would bind the legacy comctl32 v5, fail to resolve
+  the import, and terminate with STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139)
+  before the test runner starts.
+
+  This file is applied to test targets only (see build.rs) so the application
+  manifest stays exactly what Tauri generates.
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+</assembly>
