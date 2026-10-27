@@ -1,41 +1,60 @@
-# AI Knowledge Browser
+# Arcadia 需求规格索引
 
 以浏览器为入口、知识库为核心、AI 为智能层的桌面知识浏览器。
 
 ## 当前进度
 
-- React + TypeScript + Ant Design + SCSS 桌面端交互原型
-- Go REST API（健康检查、文档 CRUD、搜索、知识库统计、AI 占位接口、插件占位接口）
-- SQLite 持久化、WAL、标签关系与 FTS5 全文搜索
-- Mozilla Readability 正文提取 + Turndown Markdown 转换模块
-- SQLite 数据结构迁移
-- Tauri 2 / Rust 工程与插件权限模型占位
-- 产品、架构、API 与迭代文档
+项目状态以 [docs/roadmap.md](../../docs/roadmap.md) 为准。简述：
+
+- 浏览器：多标签 WebView、下载中心、站点权限、证书拦截（Windows）、私密标签、工作区、会话与崩溃恢复。
+- 知识库：Readability + Turndown 提取、SQLite（25 个迁移）+ FTS5、集合、星标、笔记、备份恢复。
+- 检索与 AI：OpenAI Compatible / Ollama Provider（Key 走系统密钥环）、流式摘要/问答/翻译/自动标签、混合检索（BM25 + 向量 + RRF + Reranker）与带引用 RAG、跨文档问答。
+- 隐私：规则编译、WebView2 请求拦截、站点级开关与统计（Windows；macOS/Linux 受限）。
+- 插件：`.arcadia-plugin` 安装器、权限授权、Wasmtime 组件运行时与审计。
+- Agent：受控运行时、工具审批、预算与检查点，支持 MCP。
+- 官网：`website/`（Astro），通过 Netlify 发布。
+
+Go 后端已整体移除，仓库中不存在 `backend/` 目录。
 
 ## 本地运行
 
-后端：
-
-```bash
-cd backend
-go run ./cmd/server
-```
-
-桌面端开发服务器：
+桌面端（推荐，含原生 WebView 与本地 SQLite）：
 
 ```bash
 cd desktop
 npm install
+npm run tauri:dev
+```
+
+仅前端 UI：
+
+```bash
+cd desktop
 npm run dev
 ```
 
-默认 API 地址为 `http://127.0.0.1:8787`。当前 UI 在后端不可用时会回退到内置演示数据，便于独立预览。
+纯 Web 模式没有原生层，子 WebView 与 SQLite 不可用。
 
 ## 验证
 
 ```bash
-cd backend && go test ./...
-cd desktop && npm run test && npm run build
+cd desktop
+npm run test      # Vitest，454 用例
+npm run build     # tsc + vite build
+
+cd src-tauri
+cargo check --all-targets
+# cargo test 在 Windows 上存在已知阻塞，见 docs/roadmap.md
 ```
 
-详细范围与技术决策见 [docs/PRD.md](docs/PRD.md) 和 [docs/architecture.md](docs/architecture.md)。
+详细范围与技术决策见 [docs/PRD.md](../../docs/PRD.md) 与 [docs/architecture.md](../../docs/architecture.md)。
+
+## 关于本目录下的历史规格
+
+`specs/feature-*` 是 2026-09-14 ~ 09-15 期间生成的规划稿，描述的是**已废弃的 Go 后端 + Ant Design** 形态，其中的任务清单从未回填为完成状态。它们仅作历史记录保留，**不代表当前实现**，也不应作为开发依据。
+
+当前真实状态的唯一来源：
+
+- [docs/roadmap.md](../../docs/roadmap.md) — 迭代状态与阻塞项
+- [docs/architecture.md](../../docs/architecture.md) — 系统结构
+- [docs/development-guide.md](../../docs/development-guide.md) — 实现细节

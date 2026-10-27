@@ -1,7 +1,7 @@
 # Browser Native Capability Matrix
 
-> Status: 第 11 轮迭代（10 批任务 + 3 follow-up），2026-09-23
-> 对应版本：Tauri 2.x stable + wry (locked by `desktop/src-tauri/Cargo.toml`) + Microsoft Edge WebView2 Runtime
+> Status: 第 11 轮迭代（10 批任务 + 3 follow-up），2026-09-23；2026-10-27 校验版本号与进程内存条目
+> 对应版本：Tauri 2.11.x + wry (locked by `desktop/src-tauri/Cargo.toml`) + Microsoft Edge WebView2 Runtime
 
 This document is the source of truth for what the embedded webview does and does
 not expose to Rust and the React shell. The values mirrored in `browser_capabilities`
@@ -11,11 +11,11 @@ assert that the Rust side matches.
 
 ## Versions Locked
 
-- `tauri` 2.x stable, `features = ["unstable", "image-png"]`
+- `tauri` 2.11.x，`features = ["unstable", "image-png", "devtools"]`
 - `wry` (re-exported through `tauri::webview`) — version pinned to whatever Tauri 2 ships with
 - WebView2 Runtime (Windows): Microsoft Edge ≥ 109
 - `reqwest` 0.12 with `rustls-tls` already in `Cargo.toml` for streaming downloads
-- `webview2-com` 0.39 (Windows only, target `x86_64-pc-windows-msvc`) — see Known Limitations
+- `webview2-com` **0.38.2** (Windows only, target `x86_64-pc-windows-msvc`) — see Known Limitations
 
 ## Delivered Batches
 
@@ -47,7 +47,8 @@ assert that the Rust side matches.
 | Clear site data (per-origin) | ✅ Supported (Windows) / ❌ Not supported (macOS, Linux) | `webview2-com` 0.39 + `ICoreWebView2Profile2::ClearBrowsingData` | Windows: `lib.rs` 通过 `ClearBrowsingDataCompletedHandler` 绑定 `ICoreWebView2Profile2::ClearBrowsingData`，支持按 Kind 集合清理。macOS / Linux：WKWebView / WebKitGTK 平台尚未实现等价调用，no-op 降级到 localStorage / SQLite 清理。 |
 | Certificate error interceptor | ✅ Supported (Windows) / ❌ Not supported (macOS, Linux) | `webview2-com` 0.39 + `ICoreWebView2_14::add_ServerCertificateErrorDetected` | Windows: 真实 COM 订阅 + Deferral/Complete 全链路；识别 5 类 `COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_*` 并发出本地化 message。macOS / Linux：WKWebView 与 WebKitGTK 不暴露等价事件，目前 no-op（`attach_certificate_guard` 在非 Windows target 直接返回）。WebView2 默认仍会拦截无效证书；用户可选择临时放行一次（3 秒后 `ClearServerCertificateErrorActions` 自动清空 allow-list）。 |
 | Audible detection (automatic) | ❌ Not supported | — | WebView2 does not expose audio playback events to JS in stable. `tab.audible` is a hint the user toggles via the right-click menu → "静音此标签页". Auto-detection would require `ICoreWebView2.WebView2Process` extended inspection or a media-element polling shim — not pursued. |
-| Process-level WebView memory | ❌ Not supported in stable | needs `webview2-com` | `ICoreWebView2Process` (`WorkingSetSize`, `PrivateMemoryUsage`) requires `webview2-com` plus the same manual COM cast as certificates. The resource panel currently reports tab counts and LRU state, not process bytes. |
+| App process memory | ✅ Supported (Windows) / ❌ Not supported (macOS, Linux) | `psapi.dll` `K32GetProcessMemoryInfo` on the current process | `process_memory.rs` 报告宿主进程的 working set / peak / commit / page faults，非 Windows 返回 `None`，前端降级为「—」。资源面板展示的是**整个应用进程**，不是单个标签页。 |
+| Process-level WebView memory (per tab) | ❌ Not supported in stable | needs `webview2-com` | 单标签页的内存占用需要 `ICoreWebView2Process`（`WorkingSetSize`、`PrivateMemoryUsage`），依赖与证书拦截相同的手工 COM cast，尚未接线。因此资源面板报告标签数与 LRU 状态，而不是每个 WebView 的字节数。 |
 | WebView2 navigation error status | ⚠️ Partial | `wry::WebviewBuilder.on_page_load` | `NavigationCompleted` event with `WebErrorStatus` is reachable via `wry`'s `on_page_load` callback in newer versions. Currently not wired — relies on WebView2's automatic error page. Future: parse `WEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_*` and emit `browser://certificate-error`. |
 | Webview backend label | ✅ Direct | `cfg(target_os)` | `"webview2"` on Windows, `"wkwebview"` on macOS, `"webkitgtk"` on Linux. |
 | Tauri runtime version | ✅ Direct | `env!("CARGO_PKG_VERSION")` | Useful for diagnostics only; do not gate features on it. |

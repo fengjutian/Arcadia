@@ -308,6 +308,36 @@ form-action 'self'
 
 Schema 版本与迁移由 `schema_version` 表 + `MIGRATIONS` 常量管理，每次 `connection()` 调用 `run_migrations` 自动推进；当前共 25 个迁移（v1–v25）。`local_migration_status` command 暴露当前版本与 pending 数量。迁移是追加式的，只能新增版本号，不能修改已发布的条目。
 
+各版本内容：
+
+| 版本 | 内容 |
+| --- | --- |
+| v1 | `local_documents` |
+| v2 | `local_documents.starred` + 索引 |
+| v3 | `local_session` |
+| v4 | `collections`、`collection_documents` |
+| v5 | `tasks` |
+| v6 | `ai_providers` |
+| v7 | `local_documents.auto_tags` |
+| v8 | `downloads` |
+| v9 | `session_locks` |
+| v10 | `browser_history` |
+| v11 | `browser_sessions`、`browser_tabs`、`closed_tabs`、`site_permissions` |
+| v12 | `bookmarks` |
+| v13 | `workspaces` |
+| v14 | `reading_activity` |
+| v15 | `reading_activity.excerpt / markdown / captured_at` |
+| v16 | `saved_credentials` |
+| v17 | `local_documents_fts` + 三个同步触发器 |
+| v18 | `document_embeddings` |
+| v19 | `mcp_servers`、`agent_runs` |
+| v20 | `mcp_audit_log` |
+| v21 | `plugins`、`plugin_grants`、`plugin_audit_log` |
+| v22 | `embedding_index_state` |
+| v23 | `document_chunks`、`document_chunks_fts`、`rag_index_jobs` |
+| v24 | Agent 步骤表：`agent_steps`、`agent_tool_calls`、`agent_approvals`、`agent_checkpoints`、`agent_artifacts`（重建 `agent_runs`） |
+| v25 | 隐私四表：`privacy_filter_lists`、`privacy_site_settings`、`privacy_block_events`、`privacy_daily_stats` |
+
 通用 K/V 表 `local_session (key, value, updated_at)`（v3 迁移加入）支持 `local_get_session` / `local_set_session` commands，用于 BrowserPage 在挂载时恢复 tabs 与 activeTabId，变更后 500ms debounce 落盘。
 
 `local_documents` + `local_session` 全量导出为 JSON（`local_export_backup`），按文档 id 做 upsert 导入（`local_import_backup`），设置页"知识库"标签内提供"导出备份" / "从文件恢复"按钮（基于 Blob 下载 + HTML input file，无需 fs 插件）。备份结构 `version=1`、保留时间戳与两类数据。
@@ -324,7 +354,7 @@ Schema 版本与迁移由 `schema_version` 表 + `MIGRATIONS` 常量管理，每
 
 `local_documents` 主键是 TEXT，没有显式 INTEGER 主键，因此 FTS5 通过隐式 `rowid` 关联，`content_rowid='rowid'` 在 schema 中显式标注。
 
-### 7.3 RAG 与向量存储（迁移 #21–#24）
+### 7.3 RAG 与向量存储（迁移 #18、#22、#23）
 
 | 表 | 作用 |
 | --- | --- |
