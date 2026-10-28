@@ -1397,6 +1397,52 @@ fn browser_toolbar_panel(
     webview.eval(script).map_err(|error| error.to_string())
 }
 
+/// Shows or updates one notification inside the page document.
+///
+/// The host cannot paint a toast over a page: every tab is a native child
+/// WebView stacked above the React surface. Pushing the toast into the page
+/// keeps it above the content without moving the WebView, and stays inside a
+/// closed shadow root so the page cannot restyle or read it.
+///
+/// Returns `false`-ish via `Err` when the document cannot be scripted (the
+/// built-in PDF viewer, a crashed renderer), which makes the caller fall back to
+/// the host layer instead of dropping the message.
+#[tauri::command]
+async fn browser_page_toast(
+    app: tauri::AppHandle,
+    label: String,
+    id: String,
+    kind: String,
+    text: String,
+    duration_ms: u64,
+    theme: String,
+) -> Result<bool, String> {
+    validate_browser_label(&label)?;
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    let script = browser::page_toast_script(&browser::PageToast {
+        id: &id,
+        kind: &kind,
+        text: &text,
+        duration_ms,
+        theme: &theme,
+    })?;
+    eval_json::<bool>(webview, &script).await
+}
+
+/// Removes one in-page notification; a no-op after a navigation.
+#[tauri::command]
+fn browser_page_toast_close(app: tauri::AppHandle, label: String, id: String) -> Result<(), String> {
+    validate_browser_label(&label)?;
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    webview
+        .eval(browser::page_toast_close_script(&id)?)
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 async fn browser_snapshot(app: tauri::AppHandle, label: String) -> Result<PageSnapshot, String> {
     validate_browser_label(&label)?;
@@ -2128,6 +2174,8 @@ pub fn run() {
             browser_restore_scroll,
             browser_toolbar_menu,
             browser_toolbar_panel,
+            browser_page_toast,
+            browser_page_toast_close,
             browser_snapshot,
             capabilities::browser_capabilities,
             browser_permission_request,

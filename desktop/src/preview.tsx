@@ -15,6 +15,9 @@ import './styles/compact.scss'
 import './styles/library.scss'
 import './styles/search.scss'
 import './styles/settings.scss'
+import { applyTypographySettings, readTypographySettings } from './features/settings/typography'
+
+applyTypographySettings(readTypographySettings())
 
 const previewParams = new URLSearchParams(window.location.search)
 const previewQuery = previewParams.get('q') ?? ''

@@ -188,6 +188,16 @@ export async function diagnoseNativeNavigation(url:string): Promise<NetworkDiagn
 export async function restoreNativeScroll(tabId: string, x: number, y: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_restore_scroll',{label,x,y}) }
 export async function setNativeToolbarMenu(tabId: string, open: boolean, zoomPercent = 100): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_toolbar_menu',{label,open,zoomPercent}) }
 export async function setNativeToolbarPanel(tabId: string, open: boolean, kind: 'downloads' | 'bookmarks' | 'resources', payload: unknown): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_toolbar_panel',{label,open,kind,payload:JSON.stringify(payload)}) }
+/**
+ * Paints a toast inside the page instead of the host DOM. Resolves `false`
+ * without a live, scriptable page so the caller can fall back to the host layer.
+ */
+export async function showNativePageToast(tabId: string, toast: { id: string; kind: string; text: string; durationMs: number; theme: 'light' | 'dark' }): Promise<boolean> {
+  const label = labels.get(tabId)
+  if (!label) return false
+  return invoke<boolean>('browser_page_toast', { label, id: toast.id, kind: toast.kind, text: toast.text, durationMs: toast.durationMs, theme: toast.theme })
+}
+export async function closeNativePageToast(tabId: string, id: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_page_toast_close',{label,id}) }
 export async function isNativeTabAlive(tabId: string): Promise<boolean> { const label=labels.get(tabId) ?? labelFor(tabId);return !!(await Webview.getByLabel(label)) }
 export async function setNativeAdBlocking(enabled: boolean): Promise<void> {
   await Promise.all(Array.from(labels.values(), label => invoke('browser_set_ad_blocking', { label, enabled })))

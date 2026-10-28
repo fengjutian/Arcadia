@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, List, message, Popconfirm, Segmented, Select, Space, Spin, Statistic, Switch, Tabs, Tag, Typography } from '../../components/ui'
-import { BgColorsOutlined, DeleteOutlined, KeyOutlined, MoonOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '../../components/ui/icons'
+import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, MoonOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInDb, clearReadingSnapshots, deleteAIProvider, deleteMcpServer, discoverMcpServer, dispatchPluginEvent, exportBackup, getAIProvider, getBrowserShortcutsEnabled, getReadingSnapshotStats, importBackup, installPlugin, listAIProviders, listBrowserHistory, listMcpResources, listMcpServers, listMcpTools, listPluginAudit, listPlugins, privacyCapabilityReport, privacyGetStats, privacyListBlocklists, privacyListBlockEvents, privacySetBlocklistEnabled, purgeReadingSnapshots, ragCancelJob, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragRetryJob, replaceSitePermissions, saveAIProvider, saveMcpServer, aiTestProvider, setBrowserShortcutsEnabled, setPluginEnabled, setPluginPermission, uninstallPlugin, type AIProviderInput, type InstalledPlugin, type McpServer, type McpTransport, type PluginAuditEntry, type PluginPermission, type ReadingSnapshotStats } from '../../api'
@@ -13,6 +13,7 @@ import { isSearchTemplateValid } from '../../features/browser/navigation'
 import { HISTORY_CHANGE_EVENT, type HistoryEntry } from '../../features/history/dedupeHistory'
 import { buildVisitStats, buildVisitTrend, filterVisitsByRange, type VisitTimeRange } from '../../features/history/visitStats'
 import { DEFAULT_ADVANCED_SETTINGS, readAdvancedSettings, writeAdvancedSettings, type AdvancedSettings } from '../../features/settings/advanced'
+import { DEFAULT_TYPOGRAPHY_SETTINGS, FONT_SIZE_MAX, FONT_SIZE_MIN, TYPOGRAPHY_FONTS, readTypographySettings, typographyFont, writeTypographySettings, type TypographySettings } from '../../features/settings/typography'
 import { isTrackingCleanerEnabled, setTrackingCleanerEnabled } from '../../features/plugins/trackingCleaner'
 import { isAdBlockerEnabled, setAdBlockerEnabled } from '../../features/plugins/adBlocker'
 import { deleteBrowserPassword, listBrowserPasswords, setNativeAdBlocking, type SavedCredential } from '../../services/nativeBrowser'
@@ -1123,6 +1124,58 @@ function AdvancedSettingsPanel() {
   </Card>
 }
 
+function TypographySettingsPanel() {
+  const [settings, setSettings] = useState<TypographySettings>(readTypographySettings)
+  const activeFont = typographyFont(settings.fontFamily)
+
+  function update(patch: Partial<TypographySettings>) {
+    const next = { ...settings, ...patch }
+    setSettings(next)
+    writeTypographySettings(next)
+  }
+
+  function reset() {
+    setSettings(DEFAULT_TYPOGRAPHY_SETTINGS)
+    writeTypographySettings(DEFAULT_TYPOGRAPHY_SETTINGS)
+  }
+
+  return <Card title="字体" className="settings-card typography-settings">
+    <Typography.Paragraph type="secondary">为界面和阅读正文选择字体。优先使用开源字体；本机未安装时会回退到同一风格的系统字体，不会影响排版与阅读。</Typography.Paragraph>
+    <div className="font-option-grid" role="radiogroup" aria-label="字体">
+      {TYPOGRAPHY_FONTS.map(font => {
+        const selected = font.id === settings.fontFamily
+        return <button
+          key={font.id}
+          type="button"
+          role="radio"
+          aria-checked={selected}
+          className={`font-option${selected ? ' is-active' : ''}`}
+          style={{ fontFamily: font.stack }}
+          onClick={() => update({ fontFamily: font.id })}
+        >
+          {selected && <CheckCircleOutlined className="font-option__check"/>}
+          <span className="font-option__sample">永 Aa</span>
+          <span className="font-option__name">{font.label}</span>
+          <span className="font-option__meta">{font.latin} · {font.license}</span>
+        </button>
+      })}
+    </div>
+    <div className="advanced-setting-row">
+      <div><Typography.Text strong>正文字号</Typography.Text><Typography.Paragraph type="secondary">影响阅读模式与知识库正文的字号，长文阅读时更容易找到舒适的字号。</Typography.Paragraph></div>
+      <InputNumber min={FONT_SIZE_MIN} max={FONT_SIZE_MAX} value={settings.fontSize} addonAfter="px" onChange={value => update({ fontSize: value ?? DEFAULT_TYPOGRAPHY_SETTINGS.fontSize })}/>
+    </div>
+    <div className="typography-preview" style={{ fontFamily: activeFont.stack }}>
+      <span className="typography-preview__label">预览 · {activeFont.label} · {settings.fontSize}px</span>
+      <p style={{ fontSize: settings.fontSize }}>读书是在别人思想的帮助下，建立起自己的思想。山川异域，风月同天。</p>
+      <p className="typography-preview__latin" style={{ fontSize: settings.fontSize }}>The quick brown fox jumps over the lazy dog. 0123456789</p>
+    </div>
+    <div className="typography-settings__actions">
+      <Button onClick={reset}>恢复默认字体设置</Button>
+      <Typography.Text type="secondary">默认思源宋体 · 18px</Typography.Text>
+    </div>
+  </Card>
+}
+
 function PasswordManagerSettings() {
   const [messageApi, contextHolder] = message.useMessage()
   const [credentials, setCredentials] = useState<SavedCredential[]>([])
@@ -1185,13 +1238,13 @@ function PasswordManagerSettings() {
 }
 
 export function SettingsPage() {
-  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','高级'].map((label, index) => ({
+  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','高级','字体'].map((label, index) => ({
     key: label,
     label,
-    children: index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : <AdvancedSettingsPanel/>,
+    children: index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <AdvancedSettingsPanel/> : <TypographySettingsPanel/>,
   }))
   return <section className="page settings-page">
-    <PageHeader eyebrow="PREFERENCES" title="设置" description="调整浏览器、隐私、AI Provider 与知识库工作流。"/>
+    <PageHeader eyebrow="PREFERENCES" title="设置" description="调整浏览器、隐私、AI Provider、字体与知识库工作流。"/>
     <Tabs className="settings-tabs" tabPosition="left" items={items} defaultActiveKey="通用"/>
   </section>
 }

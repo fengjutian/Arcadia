@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AutoComplete, Badge, Button, Dropdown, Input, message, Modal, Popover, Space, Tabs, Tag, Tooltip, Typography, UI_MODAL_OVERLAY_EVENT, type InputRef, type MenuProps } from '../../components/ui'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, AudioMutedOutlined, BookOutlined, CheckCircleOutlined, CloseCircleOutlined, CloseOutlined, CopyOutlined, DownloadOutlined, FullscreenOutlined, LoadingOutlined, MoreOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SoundOutlined, StarFilled, StarOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined, WarningOutlined } from '../../components/ui/icons'
+import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativeTab, editNativePage, ensureNativeTab, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -572,6 +573,24 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }, [active.id, aiOpen, findOpen, modalOverlayCount, toolbarOverlay, visible])
 
   useEffect(() => () => { tabsRef.current.forEach(tab => { void closeNativeTab(tab.id) }) }, [])
+
+  // While a page is actually on screen, messages are painted inside that page
+  // (closed shadow root, `position: fixed` top-right) instead of the host layer:
+  // the WebView is stacked above the React surface, so a host toast over the
+  // page would be invisible, and a host bar above it would have to shrink the
+  // view. Every host-rendered surface (new tab, error, reader, an open modal
+  // that hides the tab, the tab context menu) keeps the host layer.
+  const pageOwnsToasts = visible && nativeMode && !!active.url && !active.error && !active.crashed && !readerArticle && modalOverlayCount === 0 && toolbarOverlay !== 'tab-menu'
+  useEffect(() => {
+    if (!pageOwnsToasts) return undefined
+    const tabId = active.id
+    return registerToastSink({
+      // A closed tab or a navigation mid-call resolves to `false` and the
+      // message layer retries in the host layer, so nothing is lost.
+      show: toast => showNativePageToast(tabId, toast).catch(() => false),
+      hide: id => { void closeNativePageToast(tabId, id).catch(() => undefined) },
+    })
+  }, [active.id, pageOwnsToasts])
 
   useEffect(() => {
     let disposed = false
