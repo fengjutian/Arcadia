@@ -410,7 +410,17 @@ fn materialize(
         lex.get(candidate.chunk_id.as_str()).copied(),
         vec.get(candidate.chunk_id.as_str()).copied(),
     );
-    let (document_id, chunk_index, title, url, heading_path, text) = match (lex_opt, vec_opt) {
+    let (
+        document_id,
+        chunk_index,
+        title,
+        url,
+        heading_path,
+        text,
+        token_count,
+        start_offset,
+        end_offset,
+    ) = match (lex_opt, vec_opt) {
         (Some(l), _) => (
             l.document_id.clone(),
             l.chunk_index,
@@ -418,6 +428,9 @@ fn materialize(
             l.url.clone(),
             l.heading_path.clone(),
             l.text.clone(),
+            l.token_count,
+            l.start_offset,
+            l.end_offset,
         ),
         (None, Some(v)) => (
             v.document_id.clone(),
@@ -426,12 +439,19 @@ fn materialize(
             v.url.clone(),
             v.heading_path.clone(),
             v.text.clone(),
+            v.token_count,
+            v.start_offset,
+            v.end_offset,
         ),
         (None, None) => resolve_chunk_meta(database, &candidate.chunk_id)
             .unwrap_or_else(|_| default_meta(&candidate.chunk_id)),
     };
 
-    let token_count = text.split_whitespace().count();
+    let token_count = if token_count == 0 {
+        text.split_whitespace().count()
+    } else {
+        token_count
+    };
     let mut reasons = Vec::new();
     if candidate.lexical_rank.is_some() {
         reasons.push("matched BM25".into());
@@ -456,8 +476,8 @@ fn materialize(
         text_hash: String::new(),
         text,
         token_count,
-        start_offset: 0,
-        end_offset: 0,
+        start_offset,
+        end_offset,
     };
     let score = RetrievalScore {
         lexical_rank: candidate.lexical_rank,
@@ -473,17 +493,34 @@ fn materialize(
 fn resolve_chunk_meta(
     database: &Connection,
     chunk_id: &str,
-) -> Result<(String, i64, String, String, Vec<String>, String), String> {
-    let (document_id, chunk_index, heading_json, content, title, url): (
+) -> Result<
+    (
         String,
         i64,
         String,
         String,
+        Vec<String>,
         String,
-        String,
-    ) = database
+        usize,
+        usize,
+        usize,
+    ),
+    String,
+> {
+    let (
+        document_id,
+        chunk_index,
+        heading_json,
+        content,
+        title,
+        url,
+        token_count,
+        start_offset,
+        end_offset,
+    ): (String, i64, String, String, String, String, i64, i64, i64) = database
         .query_row(
-            "SELECT c.document_id, c.chunk_index, c.heading_path, c.content, d.title, d.url
+            "SELECT c.document_id, c.chunk_index, c.heading_path, c.content, d.title, d.url,
+                    c.token_count, c.start_offset, c.end_offset
              FROM document_chunks c
              JOIN local_documents d ON d.id = c.document_id
              WHERE c.id = ?1",
@@ -496,15 +533,40 @@ fn resolve_chunk_meta(
                     row.get(3)?,
                     row.get(4)?,
                     row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
                 ))
             },
         )
         .map_err(|e| e.to_string())?;
     let heading_path: Vec<String> = serde_json::from_str(&heading_json).unwrap_or_default();
-    Ok((document_id, chunk_index, title, url, heading_path, content))
+    Ok((
+        document_id,
+        chunk_index,
+        title,
+        url,
+        heading_path,
+        content,
+        token_count.max(0) as usize,
+        start_offset.max(0) as usize,
+        end_offset.max(0) as usize,
+    ))
 }
 
-fn default_meta(_chunk_id: &str) -> (String, i64, String, String, Vec<String>, String) {
+fn default_meta(
+    _chunk_id: &str,
+) -> (
+    String,
+    i64,
+    String,
+    String,
+    Vec<String>,
+    String,
+    usize,
+    usize,
+    usize,
+) {
     (
         String::new(),
         0,
@@ -512,6 +574,9 @@ fn default_meta(_chunk_id: &str) -> (String, i64, String, String, Vec<String>, S
         String::new(),
         Vec::new(),
         String::new(),
+        0,
+        0,
+        0,
     )
 }
 

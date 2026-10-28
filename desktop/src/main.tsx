@@ -6,4 +6,5 @@ import './styles/ui.scss'
 import './styles/compact.scss'
 import './styles/library.scss'
 import './styles/search.scss'
+import './styles/settings.scss'
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>)

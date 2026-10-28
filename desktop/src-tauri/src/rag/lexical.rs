@@ -30,6 +30,9 @@ pub struct LexicalHit {
     pub heading_path: Vec<String>,
     pub excerpt: String,
     pub text: String,
+    pub token_count: usize,
+    pub start_offset: usize,
+    pub end_offset: usize,
     pub bm25_score: f64,
 }
 
@@ -146,7 +149,8 @@ pub fn retrieve(
     filters.bind(&mut where_parts, &mut bind);
 
     let mut sql = String::from(
-        "SELECT c.id, c.document_id, c.chunk_index, c.heading_path, c.content, d.title, d.url
+        "SELECT c.id, c.document_id, c.chunk_index, c.heading_path, c.content, d.title, d.url,
+                c.token_count, c.start_offset, c.end_offset
          FROM document_chunks_fts
          JOIN document_chunks c ON c.rowid = document_chunks_fts.rowid
          JOIN local_documents d ON d.id = c.document_id
@@ -181,6 +185,9 @@ pub fn retrieve(
                 heading_path,
                 excerpt: String::new(),
                 text: row.get(4)?,
+                token_count: row.get::<_, i64>(7)?.max(0) as usize,
+                start_offset: row.get::<_, i64>(8)?.max(0) as usize,
+                end_offset: row.get::<_, i64>(9)?.max(0) as usize,
                 bm25_score: 0.0,
             })
         })
@@ -201,7 +208,8 @@ pub fn retrieve_for_document(
 ) -> Result<Option<LexicalHit>, String> {
     database
         .query_row(
-            "SELECT c.id, c.document_id, c.chunk_index, c.heading_path, c.content, d.title, d.url
+            "SELECT c.id, c.document_id, c.chunk_index, c.heading_path, c.content, d.title, d.url,
+                    c.token_count, c.start_offset, c.end_offset
              FROM document_chunks c
              JOIN local_documents d ON d.id = c.document_id
              WHERE c.id = ?1",
@@ -219,6 +227,9 @@ pub fn retrieve_for_document(
                     heading_path,
                     excerpt: String::new(),
                     text: row.get(4)?,
+                    token_count: row.get::<_, i64>(7)?.max(0) as usize,
+                    start_offset: row.get::<_, i64>(8)?.max(0) as usize,
+                    end_offset: row.get::<_, i64>(9)?.max(0) as usize,
                     bm25_score: 0.0,
                 })
             },
@@ -252,6 +263,9 @@ mod tests {
                 content TEXT NOT NULL,
                 tags TEXT NOT NULL DEFAULT '[]',
                 content_hash TEXT NOT NULL,
+                token_count INTEGER NOT NULL DEFAULT 0,
+                start_offset INTEGER NOT NULL DEFAULT 0,
+                end_offset INTEGER NOT NULL DEFAULT 0,
                 chunker_version TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
@@ -282,8 +296,8 @@ mod tests {
         .unwrap();
         let tags_json = serde_json::to_string(tags).unwrap();
         conn.execute(
-            "INSERT INTO document_chunks(id, document_id, chunk_index, heading_path, content, tags, content_hash, chunker_version, created_at, updated_at)
-             VALUES(?1,?2,0,'[]',?3,?4,'h','markdown-structure-v1',1,1)",
+            "INSERT INTO document_chunks(id, document_id, chunk_index, heading_path, content, tags, content_hash, token_count, start_offset, end_offset, chunker_version, created_at, updated_at)
+             VALUES(?1,?2,0,'[]',?3,?4,'h',3,7,12,'markdown-structure-v1',1,1)",
             params![format!("chunk-{id}"), id, body, tags_json],
         )
         .unwrap();

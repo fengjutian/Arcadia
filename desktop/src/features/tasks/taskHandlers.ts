@@ -1,10 +1,6 @@
 import {
   aiChat,
-  aiEmbed,
   getDocument,
-  markDocumentIndexed,
-  planDocumentChunks,
-  storeDocumentEmbedding,
   updateAutoTags,
 } from '../../api'
 import type { AIProvider, Task } from '../../types'
@@ -33,51 +29,16 @@ function requireDocumentId(task: Task): string {
 }
 
 /**
- * Embed one document, one vector per chunk, and record the index state.
+ * Drain `embedding.index` rows left by older builds.
  *
- * The plan is produced by the backend so chunking matches the Rust tests, and
- * `alreadyIndexed` makes re-runs cheap. Failure is recorded against the document
- * so a partially indexed corpus stays diagnosable.
+ * Indexing now has a single owner: the Rust RAG supervisor (`rag_index_jobs`),
+ * which chunks through `document_chunks` and writes chunk-aligned vectors.
+ * The old worker re-chunked the document with a different algorithm and wrote
+ * `document_embeddings` directly, overwriting the supervisor's rows on every
+ * launch. New saves no longer enqueue this task; existing queue rows are
+ * acknowledged as no-ops so they stop retrying.
  */
-export function createEmbeddingHandler(provider: AIProvider): TaskHandler {
-  const model = provider.embeddingModel
-  // Callers only register this handler when an embedding model exists; fail
-  // loudly rather than silently indexing nothing.
-  if (!model) throw new Error('provider has no embedding model configured')
-  return async (task: Task) => {
-    const documentId = requireDocumentId(task)
-
-    const plan = await planDocumentChunks(documentId, model)
-    if (plan.chunks.length === 0) {
-      await markDocumentIndexed({
-        documentId,
-        model,
-        contentHash: plan.contentHash,
-        chunkCount: 0,
-        status: 'READY',
-      })
-      return
-    }
-    if (plan.alreadyIndexed) return
-
-    const vectors = await aiEmbed(provider.id, plan.chunks.map(chunk => chunk.text))
-    if (vectors.length !== plan.chunks.length) {
-      throw new Error(`embedding count mismatch: expected ${plan.chunks.length}, got ${vectors.length}`)
-    }
-    await Promise.all(
-      plan.chunks.map((chunk, index) =>
-        storeDocumentEmbedding(documentId, chunk.chunkIndex, model, chunk.excerpt, vectors[index]),
-      ),
-    )
-    await markDocumentIndexed({
-      documentId,
-      model,
-      contentHash: plan.contentHash,
-      chunkCount: plan.chunks.length,
-      status: 'READY',
-    })
-  }
-}
+const drainLegacyEmbeddingTask: TaskHandler = async () => {}
 
 /**
  * Derive tags from the document body and merge them with the user's own tags.
@@ -110,11 +71,8 @@ export function createAutoTagHandler(provider: AIProvider): TaskHandler {
 
 /** Build the handler map for the configured provider. */
 export function createTaskHandlers(provider: AIProvider): Record<string, TaskHandler> {
-  const handlers: Record<string, TaskHandler> = {
+  return {
     [TASK_KIND_AUTO_TAG]: createAutoTagHandler(provider),
+    [TASK_KIND_EMBED]: drainLegacyEmbeddingTask,
   }
-  if (provider.embeddingModel) {
-    handlers[TASK_KIND_EMBED] = createEmbeddingHandler(provider)
-  }
-  return handlers
 }

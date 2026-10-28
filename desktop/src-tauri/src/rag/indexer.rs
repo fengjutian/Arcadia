@@ -279,6 +279,26 @@ pub fn run_chunking_phase(
     let transaction = database
         .unchecked_transaction()
         .map_err(|e| e.to_string())?;
+    // Drop the previous vectors for this model together with the chunks they
+    // were built from. Re-chunking can shorten a document or shift boundaries;
+    // keeping the old rows would leave vector hits pointing at chunk indexes
+    // that no longer exist (the upsert only rewrites indexes in the new plan).
+    let model: Option<String> = transaction
+        .query_row(
+            "SELECT model FROM rag_index_jobs WHERE id=?1",
+            params![job_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    if let Some(model) = model {
+        transaction
+            .execute(
+                "DELETE FROM document_embeddings WHERE document_id=?1 AND model=?2",
+                params![document_id, model],
+            )
+            .map_err(|e| e.to_string())?;
+    }
     // Replace any prior chunk rows for this document (a re-index that
     // changes chunker_version, or that simply altered the document, must
     // not leave orphan chunk ids.

@@ -495,48 +495,40 @@ select {
   font-family: inherit;
 }
 
-// The settings shell owns the vertical navigation. Nested section tabs must
-// remain horizontal regardless of the surrounding left-positioned tabs.
-.privacy-section-tabs.ui-tabs--top {
-  display: flex;
-  flex-direction: column;
-
+// Privacy sections use a vertical submenu inside the card so the section
+// labels stay on the left instead of overflowing as a long tab strip.
+.privacy-section-tabs.ui-tabs--left {
   > .ui-tabs__nav {
-    width: 100%;
+    flex: 0 0 172px;
+    width: 172px;
     min-width: 0;
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 18px !important;
-    border-right: 0;
-    border-bottom: 1px solid var(--accent-border);
-  }
-
-  > .ui-tabs__nav .ant-tabs-nav-wrap {
-    width: 100%;
-    overflow-x: auto;
+    margin-bottom: 0 !important;
+    padding-right: 8px;
+    border-right: 1px solid var(--accent-border);
   }
 
   > .ui-tabs__nav .ant-tabs-nav-list {
     width: 100%;
-    min-width: max-content;
-    flex-direction: row !important;
-    align-items: center;
-    gap: 4px;
+  }
+
+  > .ui-tabs__nav .ant-tabs-nav-wrap {
+    overflow-x: hidden;
   }
 
   > .ui-tabs__nav .ant-tabs-tab {
-    flex: 0 0 auto;
-    padding: 9px 14px 11px !important;
-    border-bottom: 2px solid transparent;
+    width: 100%;
+    padding: 8px 10px !important;
+    border-radius: 7px;
+    text-align: left;
   }
 
   > .ui-tabs__nav .ant-tabs-tab-active {
-    border-bottom-color: var(--accent);
+    background: var(--accent-soft);
   }
 
   > .ui-tabs__content {
-    width: 100%;
-    padding: 0 10px 4px;
+    min-width: 0;
+    padding: 0 4px 4px 20px;
   }
 }
 
@@ -572,7 +564,6 @@ body[data-theme='github'] {
 
 @media (max-width: 900px) {
   .settings-card > .ui-card__body { padding: 18px; }
-  .privacy-section-tabs.ui-tabs--top > .ui-tabs__content { padding-inline: 0; }
 }
 
 .route-view:not(.is-hidden) {
@@ -2449,23 +2440,6 @@ select {
 .settings-card {
   width: 100%;
   max-width: 1200px;
-}
-
-.privacy-section-tabs.ui-tabs--top {
-  flex-direction: column;
-
-  > .ui-tabs__nav {
-    width: 100%;
-    flex-direction: row;
-    border-right: 0;
-    border-bottom: 1px solid var(--accent-border);
-  }
-
-  > .ui-tabs__nav .ant-tabs-nav-list {
-    width: 100%;
-    flex-direction: row !important;
-    align-items: center;
-  }
 }
 
 body[data-theme='github'] {

@@ -66,9 +66,10 @@ async function queueBackgroundWork(document: Document): Promise<void> {
   const provider = providers[0]
   if (!provider) return
   await enqueueTask({ kind: 'autotag.generate', documentId: document.id })
-  if (provider.embeddingModel) {
-    await enqueueTask({ kind: 'embedding.index', documentId: document.id })
-  }
+  // Vector indexing is owned by the Rust RAG supervisor: `local_save_document`
+  // already enqueues a `rag_index_jobs` row. Do not enqueue `embedding.index`
+  // here — the old frontend handler used a different chunker and overwrote the
+  // supervisor's chunk-aligned embeddings on the next launch.
 }
 
 export async function getDocument(id: string): Promise<Document> {
@@ -1032,11 +1033,6 @@ export async function agentCancel(runId: string): Promise<void> {
 export async function agentGetRun(runId: string): Promise<AgentRunMeta | null> {
   if (!isTauri()) return null
   return invoke<AgentRunMeta | null>('agent_get_run', { runId })
-}
-
-export async function agentListRuns(): Promise<AgentRunMeta[]> {
-  if (!isTauri()) return []
-  return invoke<AgentRunMeta[]>('agent_list_runs')
 }
 
 export async function agentApprove(approvalId: string): Promise<void> {

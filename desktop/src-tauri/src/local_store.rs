@@ -843,6 +843,22 @@ pub fn connection<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Connec
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let mut database =
         Connection::open(directory.join("knowledge.db")).map_err(|error| error.to_string())?;
+    // Every command opens its own connection, so concurrent commands (save +
+    // index + session autosave) must wait instead of failing with SQLITE_BUSY.
+    database
+        .busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|error| error.to_string())?;
+    // WAL lets readers run while a writer holds the lock. `foreign_keys` is off
+    // by default in SQLite; without it the ON DELETE CASCADE clauses in the
+    // schema never fire and deleting a document would orphan its chunks,
+    // embeddings, index jobs and collection rows.
+    database
+        .execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=NORMAL;
+             PRAGMA foreign_keys=ON;",
+        )
+        .map_err(|error| error.to_string())?;
     run_migrations(&mut database)?;
     Ok(database)
 }
@@ -1790,7 +1806,20 @@ pub(crate) fn write_document(
 ) -> Result<(), String> {
     let tags = serde_json::to_string(&document.tags).map_err(|error| error.to_string())?;
     let auto_tags = serde_json::to_string(&document.auto_tags).unwrap_or_else(|_| "[]".to_string());
-    database.execute("INSERT OR REPLACE INTO local_documents(id,title,url,source,author,summary,markdown,word_count,status,tags,auto_tags,created_at,starred) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", params![document.id, document.title, document.url, document.source, document.author, document.summary, document.markdown, document.word_count, document.status, tags, auto_tags, document.created_at, document.starred as i64])
+    // UPSERT instead of INSERT OR REPLACE: REPLACE deletes the old row first,
+    // which (with foreign_keys=ON) would cascade-delete chunks/embeddings and
+    // then leave a re-saved document without an index.
+    database.execute(
+        "INSERT INTO local_documents(id,title,url,source,author,summary,markdown,word_count,status,tags,auto_tags,created_at,starred)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET
+            title=excluded.title, url=excluded.url, source=excluded.source,
+            author=excluded.author, summary=excluded.summary,
+            markdown=excluded.markdown, word_count=excluded.word_count,
+            status=excluded.status, tags=excluded.tags, auto_tags=excluded.auto_tags,
+            created_at=excluded.created_at, starred=excluded.starred",
+        params![document.id, document.title, document.url, document.source, document.author, document.summary, document.markdown, document.word_count, document.status, tags, auto_tags, document.created_at, document.starred as i64],
+    )
         .map_err(|error| error.to_string())?;
     Ok(())
 }

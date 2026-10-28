@@ -1,0 +1,44 @@
+/* Settings workspace -------------------------------------------------------
+   The page title is part of the fixed shell. The tab rail stays visible while
+   only the active settings pane owns the scrollbar. */
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+
+  > .page-header {
+    flex: none;
+    margin-bottom: 20px;
+    padding: 20px 20px 0;
+  }
+}
+
+.settings-page > .settings-tabs {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 20px 20px;
+
+  > .ui-tabs__nav {
+    flex: none;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  > .ui-tabs__content {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+}
+
+.route-view[data-view='settings']:not(.is-hidden) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}

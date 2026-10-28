@@ -8,9 +8,49 @@
   --search-muted: #6f6a61;
   --search-strong: #232c27;
   --search-line: color-mix(in srgb, var(--accent-border) 58%, transparent);
-  padding-bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
 
-  > .page-header { margin-bottom: 18px; }
+  > .page-header {
+    flex: none;
+    align-items: flex-end;
+    margin-bottom: 12px;
+    padding: 20px 20px 0;
+  }
+
+  // The search title stays pinned while results scroll, so it has to earn its
+  // vertical space: keep the three-line header compact and scan-first.
+  .page-header h1.ant-typography {
+    margin: 3px 0 2px;
+    font-size: 28px;
+    line-height: 1.2;
+  }
+
+  .page-header p {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+}
+
+// The title and result count stay pinned to the top of the route; only the
+// console and results inside the page body own a scrollbar.
+.search-page__body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px 20px;
+  scrollbar-gutter: stable;
+}
+
+.route-view[data-view='search']:not(.is-hidden) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
 }
 
 .search-page .page-header__aside {

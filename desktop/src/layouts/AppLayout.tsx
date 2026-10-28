@@ -55,9 +55,20 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   return <TopBarPortalProvider target={topBarSlot}>
     <Layout className="app-layout">
       <WindowChrome/>
-      <header className={`app-topbar${collapsed ? ' app-topbar--collapsed' : ''}${view === 'browser' ? ' app-topbar--browser' : ''}`} data-tauri-drag-region onDoubleClick={() => void getCurrentWindow().toggleMaximize().catch(() => undefined)}>
-        <div className="brand" data-tauri-drag-region><span className="brand__mark"><ThunderboltOutlined /></span><b>Arcadia</b></div>
-        <div className="app-topbar__slot" ref={setTopBarSlot} data-tauri-drag-region/>
+      {/* `deep` makes the whole bar draggable, not just the pixels of this
+          element itself: Tauri's drag script walks the composed path and, for a
+          bare attribute, only accepts a click whose target is that exact
+          element. The browser tab strip fills the slot with its own divs (the
+          empty area right of the tabs is .ant-tabs-nav), so a bare attribute on
+          the header never matched there and the window could not be moved.
+          Interactive descendants stay clickable because the script stops at the
+          first button/link/input. Do not put a bare attribute on descendants:
+          it would end the walk with "not the target" before reaching this one.
+          Double-click-to-maximize is handled by that same script, so it must not
+          also be handled in React or the window would be toggled twice. */}
+      <header className={`app-topbar${collapsed ? ' app-topbar--collapsed' : ''}${view === 'browser' ? ' app-topbar--browser' : ''}`} data-tauri-drag-region="deep">
+        <div className="brand"><span className="brand__mark"><ThunderboltOutlined /></span><b>Arcadia</b></div>
+        <div className="app-topbar__slot" ref={setTopBarSlot}/>
       </header>
       <Layout className="app-body">
         <Layout.Sider width={siderWidth} collapsedWidth={MIN_SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><nav className="rail-nav rail-nav--primary" aria-label="主导航">{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>保护已开启</b></Space><Typography.Text>已拦截 43 个请求</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label="辅助导航">{navButton({ key: 'settings', icon: <Settings/>, label: '设置' })}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>本地工作区</small></span></div><div className="sider-resizer" role="separator" aria-label="调整左侧栏宽度" aria-orientation="vertical" aria-valuemin={MIN_SIDER_WIDTH} aria-valuemax={MAX_SIDER_WIDTH} aria-valuenow={siderWidth} onPointerDown={startResize}/></Layout.Sider>
@@ -70,7 +81,7 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
 function WindowChrome() {
   const window = getCurrentWindow()
   return <>
-    <div className="window-drag-strip" data-tauri-drag-region onDoubleClick={() => void window.toggleMaximize().catch(() => undefined)}/>
+    <div className="window-drag-strip" data-tauri-drag-region/>
     <div className="window-controls" aria-label="窗口控制">
       <button type="button" aria-label="最小化" title="最小化" onClick={() => void window.minimize().catch(() => undefined)}><Minus size={16} strokeWidth={1.5}/></button>
       <button type="button" aria-label="最大化或还原" title="最大化或还原" onClick={() => void window.toggleMaximize().catch(() => undefined)}><Square size={12} strokeWidth={1.5}/></button>

@@ -730,23 +730,35 @@ pub fn download_pause(app: AppHandle, id: String) -> Result<(), String> {
         .ok_or_else(|| "no active download".to_string())?;
     cancel.store(true, Ordering::SeqCst);
     let database = local_store::connection(&app)?;
+    let record = get_download(&database, &id)?;
+    // Keep the real byte count so the paused row still shows meaningful
+    // progress and a later resume can report it before the first chunk lands.
+    let received = record
+        .as_ref()
+        .map(|item| {
+            item.target_path
+                .as_ref()
+                .map(|path| {
+                    let part = part_path_for(Path::new(path));
+                    std::fs::metadata(&part)
+                        .map(|meta| meta.len() as i64)
+                        .unwrap_or(item.received_bytes.max(0))
+                })
+                .unwrap_or(item.received_bytes.max(0))
+        })
+        .unwrap_or(0);
+    let total = record.as_ref().and_then(|item| item.total_bytes);
     update_progress(
         &database,
         DownloadProgressInput {
             id: id.clone(),
-            received_bytes: -1,
-            total_bytes: None,
+            received_bytes: received,
+            total_bytes: total,
             status: DownloadStatus::Paused,
             error_message: None,
         },
     )?;
     manager.forget(&id);
-    let database = local_store::connection(&app).ok();
-    let received = database
-        .as_ref()
-        .and_then(|db| get_download(db, &id).ok().flatten())
-        .map(|record| record.received_bytes)
-        .unwrap_or(0);
     emit_progress(
         &app,
         DownloadProgressPayload {
@@ -759,8 +771,8 @@ pub fn download_pause(app: AppHandle, id: String) -> Result<(), String> {
             target_path: None,
             mime_type: None,
             received_bytes: received,
-            total_bytes: None,
-            progress_known: false,
+            total_bytes: total,
+            progress_known: total.is_some(),
             status: "paused".into(),
             danger_type: "none".into(),
             error_message: None,
@@ -863,6 +875,62 @@ pub async fn download_retry(app: AppHandle, id: String) -> Result<String, String
     )?;
     drop(database);
     download_start_reqwest(app, input).await
+}
+
+/// Continue a paused download from the bytes already written to the `.part`
+/// file. Unlike `download_retry` this keeps the partial file and sends a Range
+/// request; the transfer restarts from zero only when the server ignores the
+/// range (or when there is nothing left to resume).
+#[tauri::command]
+pub async fn download_resume(app: AppHandle, id: String) -> Result<(), String> {
+    let database = local_store::connection(&app)?;
+    let record =
+        get_download(&database, &id)?.ok_or_else(|| "download record not found".to_string())?;
+    if record.status != DownloadStatus::Paused {
+        return Err("only paused downloads can be resumed".into());
+    }
+    let target_path = record
+        .target_path
+        .clone()
+        .ok_or_else(|| "download has no target path".to_string())?;
+    let final_path = PathBuf::from(target_path);
+    let part_path = part_path_for(&final_path);
+    if !part_path.exists() {
+        // The partial file vanished (cleaned up externally) — fall back to a
+        // clean retry instead of pretending to resume.
+        drop(database);
+        return download_retry(app, id).await.map(|_| ());
+    }
+    let received = std::fs::metadata(&part_path)
+        .map(|meta| meta.len() as i64)
+        .unwrap_or(record.received_bytes.max(0));
+    update_progress(
+        &database,
+        DownloadProgressInput {
+            id: id.clone(),
+            received_bytes: received,
+            total_bytes: record.total_bytes,
+            status: DownloadStatus::Downloading,
+            error_message: None,
+        },
+    )?;
+    drop(database);
+
+    let input = StartDownloadInput {
+        id: id.clone(),
+        url: record.url.clone(),
+        file_name: record.file_name.clone(),
+        mime_type: record.mime_type.clone(),
+        source_origin: record.source_origin.clone(),
+        source_tab_label: record.source_tab_label.clone(),
+        danger_type: Some(record.danger_type),
+    };
+    let cancel = std::sync::Arc::new(AtomicBool::new(false));
+    app.state::<DownloadManager>().remember(&id, cancel.clone());
+    tauri::async_runtime::spawn(async move {
+        run_download(app.clone(), input, final_path, part_path, cancel).await;
+    });
+    Ok(())
 }
 
 async fn run_download(
@@ -974,6 +1042,9 @@ async fn run_download(
         )
         .await
         {
+            if cancel.load(Ordering::SeqCst) {
+                return;
+            }
             finish_failure(
                 &app,
                 &id,
@@ -984,6 +1055,9 @@ async fn run_download(
                 danger,
                 error,
             );
+            return;
+        }
+        if cancel.load(Ordering::SeqCst) {
             return;
         }
         finalize_success(
@@ -1028,8 +1102,6 @@ async fn run_download(
 
     let mut received = if accept_range && status == reqwest::StatusCode::PARTIAL_CONTENT {
         existing
-    } else if accept_range {
-        0
     } else {
         0
     };
@@ -1051,6 +1123,12 @@ async fn run_download(
     )
     .await
     {
+        // `pause` / `cancel` flip this flag and write the terminal row
+        // themselves. Reporting a failure here would race that write and turn
+        // a user-requested pause into "failed" (or a cancel into "failed").
+        if cancel.load(Ordering::SeqCst) {
+            return;
+        }
         finish_failure(
             &app,
             &id,
@@ -1061,6 +1139,12 @@ async fn run_download(
             danger,
             error,
         );
+        return;
+    }
+
+    // A pause that landed after the last chunk must not mark the row completed;
+    // the paused row (and its `.part` file) stays in place for `download_resume`.
+    if cancel.load(Ordering::SeqCst) {
         return;
     }
 

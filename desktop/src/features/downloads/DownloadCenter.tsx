@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button, Empty, List, Popconfirm, Progress, Space, Table, Tag, Tooltip, Typography, type TableColumn } from '../../components/ui'
-import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, ExclamationCircleOutlined, FileOutlined, FolderOpenOutlined, LoadingOutlined, MinusCircleOutlined, PauseOutlined, ReloadOutlined, StopOutlined } from '../../components/ui/icons'
+import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, DownloadOutlined, ExclamationCircleOutlined, FileOutlined, FolderOpenOutlined, LoadingOutlined, MinusCircleOutlined, PauseOutlined, ReloadOutlined, StopOutlined } from '../../components/ui/icons'
 import type { DownloadRecord } from '../../services/downloads'
 import { fileNameOf } from '../../services/downloads'
 import type { UseDownloadCenterResult } from './useDownloadCenter'
@@ -77,7 +77,7 @@ function isTerminal(status: DownloadRecord['status']): boolean {
  * toolbar popover renders its own narrower view via {@link DownloadSummary}.
  */
 export function DownloadCenter({ center, limit = 200 }: DownloadCenterProps) {
-  const { records, hydrated, remove, open, reveal, pause, cancel, retry } = center
+  const { records, hydrated, remove, open, reveal, pause, resume, cancel, retry } = center
   const filtered = useMemo(() => records.slice(0, limit), [records, limit])
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -207,13 +207,13 @@ export function DownloadCenter({ center, limit = 200 }: DownloadCenterProps) {
             </Tooltip>
           )}
           {record.status === 'paused' && (
-            <Tooltip title="重试（从头开始）">
+            <Tooltip title="继续下载（保留已下载的部分）">
               <Button
                 size="small"
                 type="text"
-                icon={<ReloadOutlined />}
+                icon={<DownloadOutlined />}
                 loading={busyId === record.id}
-                onClick={async () => { setBusyId(record.id); try { await retry(record.id) } finally { setBusyId(null) } }}
+                onClick={async () => { setBusyId(record.id); try { await resume(record.id) } finally { setBusyId(null) } }}
               />
             </Tooltip>
           )}

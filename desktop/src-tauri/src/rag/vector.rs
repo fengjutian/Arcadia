@@ -61,11 +61,18 @@ pub fn search(
 
     // Pull candidates from SQLite first. Filter by model + dimensions so we
     // never silently mix embeddings produced under different configurations.
+    // Join through the canonical `document_chunks` row (by the chunk id the
+    // indexer stored) instead of reconstructing an id from the embedding row.
+    // This keeps vector hits aligned with the lexical channel and supplies the
+    // real chunk text/offsets. Embeddings that predate the chunk id column (or
+    // whose chunk has been re-chunked away) are deliberately excluded: they
+    // can no longer be mapped back to a live chunk.
     let mut sql = String::from(
-        "SELECT e.document_id, e.chunk_index, e.vector, e.excerpt, d.title, d.url, c.heading_path
+        "SELECT e.document_id, e.chunk_index, e.vector, e.excerpt, d.title, d.url,
+                c.id, c.heading_path, c.content, c.token_count, c.start_offset, c.end_offset
          FROM document_embeddings e
          JOIN local_documents d ON d.id = e.document_id
-         LEFT JOIN document_chunks c ON c.document_id = e.document_id AND c.chunk_index = e.chunk_index
+         JOIN document_chunks c ON c.id = e.chunk_id
          WHERE e.model = ?1 AND e.dims = ?2",
     );
     let mut bind: Vec<rusqlite::types::Value> = vec![
@@ -91,7 +98,7 @@ pub fn search(
     let rows = stmt
         .query_map(params_from_iter(bind.iter()), |row| {
             let vector_bytes: Vec<u8> = row.get(2)?;
-            let heading_json: Option<String> = row.get(6)?;
+            let heading_json: Option<String> = row.get(7)?;
             let heading_path: Vec<String> = heading_json
                 .as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
@@ -103,7 +110,12 @@ pub fn search(
                 excerpt: row.get(3)?,
                 title: row.get(4)?,
                 url: row.get(5)?,
+                chunk_id: row.get(6)?,
                 heading_path,
+                text: row.get(8)?,
+                token_count: row.get::<_, i64>(9)?.max(0) as usize,
+                start_offset: row.get::<_, i64>(10)?.max(0) as usize,
+                end_offset: row.get::<_, i64>(11)?.max(0) as usize,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -120,21 +132,18 @@ pub fn search(
         if similarity <= 0.0 {
             continue;
         }
-        let chunk_id = super::chunker::chunk_id(
-            &raw.document_id,
-            super::chunker::CHUNKER_VERSION,
-            raw.chunk_index as usize,
-            "vector",
-        );
         scored.push(VectorCandidate {
-            chunk_id,
+            chunk_id: raw.chunk_id,
             document_id: raw.document_id,
             chunk_index: raw.chunk_index,
             title: raw.title,
             url: raw.url,
             heading_path: raw.heading_path,
             excerpt: raw.excerpt,
-            text: String::new(),
+            text: raw.text,
+            token_count: raw.token_count,
+            start_offset: raw.start_offset,
+            end_offset: raw.end_offset,
             similarity,
         });
     }
@@ -158,7 +167,12 @@ struct RawRow {
     excerpt: String,
     title: String,
     url: String,
+    chunk_id: String,
     heading_path: Vec<String>,
+    text: String,
+    token_count: usize,
+    start_offset: usize,
+    end_offset: usize,
 }
 
 fn blob_to_vector(bytes: &[u8]) -> Vec<f32> {
@@ -220,8 +234,8 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE local_documents(id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'READY', created_at INTEGER NOT NULL, tags TEXT NOT NULL DEFAULT '[]');
-             CREATE TABLE document_embeddings(document_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, model TEXT NOT NULL, dims INTEGER NOT NULL, vector BLOB NOT NULL, excerpt TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, PRIMARY KEY(document_id, chunk_index, model));
-             CREATE TABLE document_chunks(id TEXT PRIMARY KEY, document_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, heading_path TEXT NOT NULL DEFAULT '[]', content TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', content_hash TEXT NOT NULL, chunker_version TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);",
+             CREATE TABLE document_embeddings(document_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, model TEXT NOT NULL, dims INTEGER NOT NULL, vector BLOB NOT NULL, excerpt TEXT NOT NULL DEFAULT '', chunk_id TEXT, created_at INTEGER NOT NULL, PRIMARY KEY(document_id, chunk_index, model));
+             CREATE TABLE document_chunks(id TEXT PRIMARY KEY, document_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, heading_path TEXT NOT NULL DEFAULT '[]', content TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', content_hash TEXT NOT NULL, token_count INTEGER NOT NULL DEFAULT 0, start_offset INTEGER NOT NULL DEFAULT 0, end_offset INTEGER NOT NULL DEFAULT 0, chunker_version TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);",
         )
         .unwrap();
         conn.execute(
@@ -236,9 +250,16 @@ mod tests {
         // filtered out instead of ranked last.
         let v3 = vec![0.2_f32, 0.9, 0.0, 0.0];
         for (idx, v) in [v1, v2, v3].iter().enumerate() {
+            let chunk_id = format!("chunk-{idx}");
             conn.execute(
-                "INSERT INTO document_embeddings(document_id,chunk_index,model,dims,vector,excerpt,created_at) VALUES('d1',?,'m',4,?,'e',1)",
-                params![idx as i64, blob_of(v)],
+                "INSERT INTO document_chunks(id,document_id,chunk_index,content,token_count,start_offset,end_offset,content_hash,created_at,updated_at)
+                 VALUES(?1,'d1',?2,?3,7,?4,?5,'h',1,1)",
+                params![chunk_id, idx as i64, format!("body {idx}"), (idx * 10) as i64, (idx * 10 + 4) as i64],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO document_embeddings(document_id,chunk_index,model,dims,vector,excerpt,chunk_id,created_at) VALUES('d1',?,'m',4,?,'e',?,1)",
+                params![idx as i64, blob_of(v), chunk_id],
             )
             .unwrap();
         }
@@ -246,5 +267,34 @@ mod tests {
         assert_eq!(result.hits.len(), 3);
         // First hit must be the [1,0,0,0] embedding → similarity 1.0.
         assert!((result.hits[0].similarity - 1.0).abs() < 1e-5);
+        // The canonical chunk id, body and offsets must survive the join.
+        assert_eq!(result.hits[0].chunk_id, "chunk-0");
+        assert_eq!(result.hits[0].text, "body 0");
+        assert_eq!(result.hits[0].token_count, 7);
+        assert_eq!(result.hits[0].start_offset, 0);
+        assert_eq!(result.hits[0].end_offset, 4);
+    }
+
+    #[test]
+    fn vector_search_skips_embeddings_without_a_live_chunk() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE local_documents(id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'READY', created_at INTEGER NOT NULL, tags TEXT NOT NULL DEFAULT '[]');
+             CREATE TABLE document_embeddings(document_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, model TEXT NOT NULL, dims INTEGER NOT NULL, vector BLOB NOT NULL, excerpt TEXT NOT NULL DEFAULT '', chunk_id TEXT, created_at INTEGER NOT NULL, PRIMARY KEY(document_id, chunk_index, model));
+             CREATE TABLE document_chunks(id TEXT PRIMARY KEY, document_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, heading_path TEXT NOT NULL DEFAULT '[]', content TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', content_hash TEXT NOT NULL, token_count INTEGER NOT NULL DEFAULT 0, start_offset INTEGER NOT NULL DEFAULT 0, end_offset INTEGER NOT NULL DEFAULT 0, chunker_version TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO local_documents(id,title,url,status,created_at,tags) VALUES('d1','T','U','READY',1,'[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO document_embeddings(document_id,chunk_index,model,dims,vector,excerpt,chunk_id,created_at) VALUES('d1',0,'m',2,?, 'e', NULL, 1)",
+            params![blob_of(&[1.0_f32, 0.0])],
+        )
+        .unwrap();
+        let result = search(&conn, &[1.0, 0.0], "m", 3, None).unwrap();
+        assert!(result.hits.is_empty());
     }
 }

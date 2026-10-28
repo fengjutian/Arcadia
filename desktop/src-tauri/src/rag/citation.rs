@@ -66,15 +66,22 @@ pub fn extract_source_ids(answer: &str) -> Vec<(String, String)> {
         };
         let id_end = abs_open + rel_close;
         let id = answer[abs_open..id_end].to_string();
-        let Some(rel_end) = answer[id_end..].find(SOURCE_END) else {
+        // `id_end` points at the closing quote; skip it and the following `]`
+        // so the body starts at the actual quoted passage.
+        let Some(rel_bracket) = answer[id_end..].find(']') else {
+            hits.push((id, "<unclosed source>".into()));
+            break;
+        };
+        let body_start = id_end + rel_bracket + 1;
+        let Some(rel_end) = answer[body_start..].find(SOURCE_END) else {
             // No closing tag — treat as malformed.
             hits.push((id, "<unclosed source>".into()));
             break;
         };
-        let block_end = id_end + rel_end + SOURCE_END.len();
-        let body = answer[id_end..block_end - SOURCE_END.len()].to_string();
+        let block_end = body_start + rel_end;
+        let body = answer[body_start..block_end].to_string();
         hits.push((id, body));
-        search_from = block_end;
+        search_from = block_end + SOURCE_END.len();
     }
     hits
 }
@@ -121,6 +128,11 @@ pub fn validate_answer(
         .filter(|p| !p.is_empty())
         .collect();
 
+    // Drop lone headings and dividers before counting uncovered paragraphs —
+    // they are formatting, not claims. Filtering after the loop (as the old
+    // code did) marked every heading as uncited and forced a repair call.
+    paragraphs.retain(|p| !is_decorative_paragraph(p));
+
     let mut uncovered: Vec<usize> = Vec::new();
     for (idx, paragraph) in paragraphs.iter().enumerate() {
         if paragraph_has_citation(paragraph) {
@@ -131,9 +143,6 @@ pub fn validate_answer(
         }
         uncovered.push(idx);
     }
-
-    // Ignore lone headings or section dividers — they're not "claims".
-    paragraphs.retain(|p| !is_decorative_paragraph(p));
 
     // Build citations from the candidates that the answer actually used.
     for (source_id, body) in sources.iter() {
@@ -294,6 +303,18 @@ mod tests {
         let result = validate_answer(answer, &r, &["doc:abc:chunk:0".into()]);
         assert_eq!(result.citation_status, CitationStatus::Valid);
         assert_eq!(result.citations.len(), 1);
+        // The excerpt must be the quoted passage, not the chunk prologue.
+        assert_eq!(result.citations[0].excerpt, "fundamental quantum fact");
+    }
+
+    #[test]
+    fn heading_only_paragraph_is_not_uncited() {
+        let r = retrieval_fixture();
+        let answer =
+            "## Summary\n\n[SOURCE id=\"doc:abc:chunk:0\"]\nfundamental quantum fact\n[/SOURCE]";
+        let result = validate_answer(answer, &r, &["doc:abc:chunk:0".into()]);
+        assert_eq!(result.citation_status, CitationStatus::Valid);
+        assert!(result.uncovered_paragraphs.is_empty());
     }
 
     #[test]

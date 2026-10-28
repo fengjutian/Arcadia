@@ -869,7 +869,7 @@ function PrivacySettings() {
         </ul>}
   </div>
 
-  return <>{contextHolder}<Card title="隐私与站点数据" className="settings-card privacy-settings-card"><Tabs className="privacy-section-tabs" defaultActiveKey="history" destroyOnHidden={false} items={[
+  return <>{contextHolder}<Card title="隐私与站点数据" className="settings-card privacy-settings-card"><Tabs className="privacy-section-tabs" tabPosition="left" defaultActiveKey="history" destroyOnHidden={false} items={[
     { key: 'private', label: '私密浏览', children: privateContent },
     { key: 'history', label: `浏览历史 ${historyEntries.length}`, children: historyContent },
     { key: 'adblock', label: `广告拦截 ${adStats.totalBlocked}`, children: adBlockContent },
@@ -1158,5 +1158,8 @@ export function SettingsPage() {
     label,
     children: index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : <AdvancedSettingsPanel/>,
   }))
-  return <section className="page"><PageHeader eyebrow="PREFERENCES" title="设置" description="调整浏览器、隐私、AI Provider 与知识库工作流。"/><Tabs tabPosition="left" items={items} defaultActiveKey="通用"/></section>
+  return <section className="page settings-page">
+    <PageHeader eyebrow="PREFERENCES" title="设置" description="调整浏览器、隐私、AI Provider 与知识库工作流。"/>
+    <Tabs className="settings-tabs" tabPosition="left" items={items} defaultActiveKey="通用"/>
+  </section>
 }

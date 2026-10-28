@@ -179,6 +179,7 @@ impl AiProvider for OpenAICompatibleProvider {
             });
         }
         let mut byte_stream = response.bytes_stream();
+        let mut pending: Vec<u8> = Vec::new();
         let mut buffer = String::new();
         let mut last_usage: Option<OpenAIUsage> = None;
 
@@ -194,7 +195,7 @@ impl AiProvider for OpenAICompatibleProvider {
                         Ok(bytes) => bytes,
                         Err(error) => return Err(ProviderError::Http(error.to_string())),
                     };
-                    buffer.push_str(&String::from_utf8_lossy(&chunk));
+                    super::decode_complete_lines(&mut pending, &chunk, &mut buffer);
                     for chunk in parse_sse_chunk(&mut buffer, &mut last_usage) {
                         if chunk.is_terminal {
                             let _ = sink.send(ChatChunk {

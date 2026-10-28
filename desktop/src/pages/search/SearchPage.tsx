@@ -165,126 +165,128 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
       </div>}
     />
 
-    <div className="search-console">
-      <Input
-        ref={searchRef}
-        size="large"
-        className="search-console__input"
-        prefix={<SearchOutlined/>}
-        value={query}
-        onChange={event => setQuery(event.target.value)}
-        onPressEnter={() => rememberQuery(query)}
-        placeholder="搜索标题、正文或标签"
-        allowClear
-        autoFocus
-        aria-label="搜索标题、正文或标签"
-      />
+    <div className="search-page__body">
+      <div className="search-console">
+        <Input
+          ref={searchRef}
+          size="large"
+          className="search-console__input"
+          prefix={<SearchOutlined/>}
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+          onPressEnter={() => rememberQuery(query)}
+          placeholder="搜索标题、正文或标签"
+          allowClear
+          autoFocus
+          aria-label="搜索标题、正文或标签"
+        />
 
-      {recentQueries.length > 0 && !query && (
-        <div className="search-recent">
-          <span className="search-recent__label"><ClockCircleOutlined/> 最近搜索</span>
-          {recentQueries.slice(0, 6).map(item => (
-            <button key={item} type="button" className="search-recent__item" onClick={() => { setQuery(item); searchRef.current?.focus({ cursor: 'end' }) }}>{item}</button>
-          ))}
-        </div>
-      )}
+        {recentQueries.length > 0 && !query && (
+          <div className="search-recent">
+            <span className="search-recent__label"><ClockCircleOutlined/> 最近搜索</span>
+            {recentQueries.slice(0, 6).map(item => (
+              <button key={item} type="button" className="search-recent__item" onClick={() => { setQuery(item); searchRef.current?.focus({ cursor: 'end' }) }}>{item}</button>
+            ))}
+          </div>
+        )}
 
-      <div className="search-console__footer">
-        <div className="search-filters" role="group" aria-label="筛选搜索结果">
-          {allTags.length > 0 && <Select<string>
-            mode="multiple"
-            className="search-tag-filter"
-            ariaLabel="按标签筛选"
-            options={allTags.map(tag => ({ label: tag, value: tag }))}
-            placeholder="全部标签"
-            value={tagFilter}
-            onChange={value => setTagFilter(Array.isArray(value) ? value : [])}
-          />}
-          <button type="button" className={`search-filter${starredOnly ? ' is-active' : ''}`} aria-pressed={starredOnly} onClick={() => setStarredOnly(value => !value)} title="只显示已收藏的内容">
-            <StarOutlined/> 仅收藏
-          </button>
-          <button type="button" className={`search-filter${readOnly ? ' is-active' : ''}`} aria-pressed={readOnly} onClick={() => setReadOnly(value => !value)} title="只显示达到阅读时长或滚动深度的内容">
-            <BookOutlined/> 确实读过
-          </button>
-          <button type="button" className={`search-filter${includeArchived ? ' is-active' : ''}`} aria-pressed={includeArchived} onClick={() => setIncludeArchived(value => !value)} title="同时显示已归档的内容">
-            <InboxOutlined/> 含归档
-          </button>
-          {hasFilters && <button type="button" className="search-filters__reset" onClick={resetFilters}><X size={12}/> 清除筛选</button>}
-        </div>
-        <div className="search-sort">
-          <span className="search-sort__label">排序</span>
-          <Select<SortKey> className="search-sort__select" ariaLabel="排序方式" options={sortOptions} value={sort} onChange={value => setSort(value)}/>
+        <div className="search-console__footer">
+          <div className="search-filters" role="group" aria-label="筛选搜索结果">
+            {allTags.length > 0 && <Select<string>
+              mode="multiple"
+              className="search-tag-filter"
+              ariaLabel="按标签筛选"
+              options={allTags.map(tag => ({ label: tag, value: tag }))}
+              placeholder="全部标签"
+              value={tagFilter}
+              onChange={value => setTagFilter(Array.isArray(value) ? value : [])}
+            />}
+            <button type="button" className={`search-filter${starredOnly ? ' is-active' : ''}`} aria-pressed={starredOnly} onClick={() => setStarredOnly(value => !value)} title="只显示已收藏的内容">
+              <StarOutlined/> 仅收藏
+            </button>
+            <button type="button" className={`search-filter${readOnly ? ' is-active' : ''}`} aria-pressed={readOnly} onClick={() => setReadOnly(value => !value)} title="只显示达到阅读时长或滚动深度的内容">
+              <BookOutlined/> 确实读过
+            </button>
+            <button type="button" className={`search-filter${includeArchived ? ' is-active' : ''}`} aria-pressed={includeArchived} onClick={() => setIncludeArchived(value => !value)} title="同时显示已归档的内容">
+              <InboxOutlined/> 含归档
+            </button>
+            {hasFilters && <button type="button" className="search-filters__reset" onClick={resetFilters}><X size={12}/> 清除筛选</button>}
+          </div>
+          <div className="search-sort">
+            <span className="search-sort__label">排序</span>
+            <Select<SortKey> className="search-sort__select" ariaLabel="排序方式" options={sortOptions} value={sort} onChange={value => setSort(value)}/>
+          </div>
         </div>
       </div>
+
+      {loading && total === 0 && <div className="search-loading" aria-live="polite"><Spin size="small"/><span>正在检索本地索引…</span></div>}
+
+      {showEmpty && (unavailable
+        ? <SearchEmpty
+            title="本地数据服务未连接"
+            description="请确认桌面端的数据服务已经启动，然后重新连接。"
+            action={<Button onClick={() => setReloadToken(value => value + 1)}>重新连接</Button>}
+          />
+        : <SearchEmpty
+            title={hasQuery || hasFilters ? '没有找到匹配的内容' : '还没有可搜索的内容'}
+            description={hasQuery || hasFilters ? '试试更短的关键词，或减少筛选条件。' : '浏览网页后，保存的文章和阅读记录会出现在这里。'}
+            action={hasQuery || hasFilters ? <>
+              {hasQuery && <Button onClick={() => { setQuery(''); searchRef.current?.focus() }}>清空搜索</Button>}
+              {hasFilters && <Button type="primary" onClick={resetFilters}>清除筛选</Button>}
+            </> : undefined}
+          />)}
+
+      {!showEmpty && (
+        <>
+          {filtered.length > 0 && <section className="search-section">
+            <SectionHeading title="已保存" count={filtered.length} hint="已写入本地知识库"/>
+            <div className="result-grid result-grid--saved">
+              {filtered.map(item => {
+                const activity = readingByUrl.get(item.url)
+                const titleSnippet = item.titleSnippet && terms.length > 0 ? renderHighlightedSnippet(item.titleSnippet) : null
+                const snippetSnippet = item.markdownSnippet || item.summarySnippet
+                const snippetNode = snippetSnippet ? renderHighlightedSnippet(snippetSnippet) : null
+                return <ResultCard
+                  key={item.id}
+                  title={titleSnippet ?? <Highlight text={item.title || item.url} terms={terms}/>}
+                  titleText={item.title || item.url}
+                  url={item.url}
+                  snippet={snippetNode ?? <Highlight text={extractSummary(item.summary, item.markdown)} terms={terms}/>}
+                  tags={item.tags}
+                  activeTags={tagFilter}
+                  starred={item.starred}
+                  activity={activity}
+                  savedAt={item.createdAt}
+                  wordCount={item.wordCount}
+                  onOpen={() => openDocument(item)}
+                />
+              })}
+            </div>
+          </section>}
+
+          {unsavedReading.length > 0 && <section className="search-section search-section--reading">
+            <SectionHeading title="读过但未保存" count={unsavedReading.length} hint="保留了阅读轨迹，尚未写入知识库"/>
+            <div className="result-grid">
+              {unsavedReading.map(item => {
+                const summary = extractSummary(item.excerpt, item.markdown, 240)
+                return <ResultCard
+                  key={item.url}
+                  title={<Highlight text={item.title || item.url} terms={terms}/>}
+                  titleText={item.title || item.url}
+                  url={item.url}
+                  snippet={summary ? <Highlight text={summary} terms={terms}/> : <span className="result-card__url">{item.url}</span>}
+                  snippetIsUrl={!summary}
+                  activity={item}
+                  availability={item.markdown ? 'snapshot' : 'visit'}
+                  onOpen={() => openReading(item)}
+                  actionLabel={item.markdown ? `查看阅读快照：${item.title || item.url}` : `重新打开：${item.title || item.url}`}
+                />
+              })}
+            </div>
+          </section>}
+        </>
+      )}
     </div>
-
-    {loading && total === 0 && <div className="search-loading" aria-live="polite"><Spin size="small"/><span>正在检索本地索引…</span></div>}
-
-    {showEmpty && (unavailable
-      ? <SearchEmpty
-          title="本地数据服务未连接"
-          description="请确认桌面端的数据服务已经启动，然后重新连接。"
-          action={<Button onClick={() => setReloadToken(value => value + 1)}>重新连接</Button>}
-        />
-      : <SearchEmpty
-          title={hasQuery || hasFilters ? '没有找到匹配的内容' : '还没有可搜索的内容'}
-          description={hasQuery || hasFilters ? '试试更短的关键词，或减少筛选条件。' : '浏览网页后，保存的文章和阅读记录会出现在这里。'}
-          action={hasQuery || hasFilters ? <>
-            {hasQuery && <Button onClick={() => { setQuery(''); searchRef.current?.focus() }}>清空搜索</Button>}
-            {hasFilters && <Button type="primary" onClick={resetFilters}>清除筛选</Button>}
-          </> : undefined}
-        />)}
-
-    {!showEmpty && (
-      <>
-        {filtered.length > 0 && <section className="search-section">
-          <SectionHeading title="已保存" count={filtered.length} hint="已写入本地知识库"/>
-          <div className="result-grid result-grid--saved">
-            {filtered.map(item => {
-              const activity = readingByUrl.get(item.url)
-              const titleSnippet = item.titleSnippet && terms.length > 0 ? renderHighlightedSnippet(item.titleSnippet) : null
-              const snippetSnippet = item.markdownSnippet || item.summarySnippet
-              const snippetNode = snippetSnippet ? renderHighlightedSnippet(snippetSnippet) : null
-              return <ResultCard
-                key={item.id}
-                title={titleSnippet ?? <Highlight text={item.title || item.url} terms={terms}/>}
-                titleText={item.title || item.url}
-                url={item.url}
-                snippet={snippetNode ?? <Highlight text={extractSummary(item.summary, item.markdown)} terms={terms}/>}
-                tags={item.tags}
-                activeTags={tagFilter}
-                starred={item.starred}
-                activity={activity}
-                savedAt={item.createdAt}
-                wordCount={item.wordCount}
-                onOpen={() => openDocument(item)}
-              />
-            })}
-          </div>
-        </section>}
-
-        {unsavedReading.length > 0 && <section className="search-section search-section--reading">
-          <SectionHeading title="读过但未保存" count={unsavedReading.length} hint="保留了阅读轨迹，尚未写入知识库"/>
-          <div className="result-grid">
-            {unsavedReading.map(item => {
-              const summary = extractSummary(item.excerpt, item.markdown, 240)
-              return <ResultCard
-                key={item.url}
-                title={<Highlight text={item.title || item.url} terms={terms}/>}
-                titleText={item.title || item.url}
-                url={item.url}
-                snippet={summary ? <Highlight text={summary} terms={terms}/> : <span className="result-card__url">{item.url}</span>}
-                snippetIsUrl={!summary}
-                activity={item}
-                availability={item.markdown ? 'snapshot' : 'visit'}
-                onOpen={() => openReading(item)}
-                actionLabel={item.markdown ? `查看阅读快照：${item.title || item.url}` : `重新打开：${item.title || item.url}`}
-              />
-            })}
-          </div>
-        </section>}
-      </>
-    )}
 
     <Modal
       open={selectedReading !== null}

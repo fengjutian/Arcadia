@@ -14,6 +14,7 @@ import './styles/ui.scss'
 import './styles/compact.scss'
 import './styles/library.scss'
 import './styles/search.scss'
+import './styles/settings.scss'
 
 const previewParams = new URLSearchParams(window.location.search)
 const previewQuery = previewParams.get('q') ?? ''

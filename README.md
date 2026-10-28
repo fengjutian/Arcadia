@@ -227,7 +227,7 @@ npm run build
 ```bash
 # 前端
 cd desktop
-npm run test          # Vitest，61 个文件 / 466 用例
+npm run test          # Vitest，61 个文件 / 481 用例
 npm run build         # tsc --noEmit + vite build
 
 # Rust
@@ -236,7 +236,7 @@ cargo fmt -- --check
 cargo check --all-targets
 
 cd ..
-npm run test:rust     # 239 个用例，见下方说明
+npm run test:rust     # 247 个用例，见下方说明
 ```
 
 > **Windows 上请用 `npm run test:rust` 跑 Rust 测试，不要直接执行 `cargo test`。**

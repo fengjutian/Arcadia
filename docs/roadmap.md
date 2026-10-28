@@ -77,7 +77,7 @@
 
 ## 测试现状
 
-`npm run test:rust` 是 Windows 上的 Rust 测试入口，当前 **239 个用例全部通过**（前端为 61 个文件 / 466 用例）。
+`npm run test:rust` 是 Windows 上的 Rust 测试入口，当前 **247 个用例全部通过**（前端为 61 个文件 / 481 用例）。
 
 直接用 `cargo test` 会让测试二进制在加载阶段以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出：`tauri` 默认特性 `common-controls-v6` 与 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6` 都会静态导入 `comctl32!TaskDialogIndirect`，该导出只存在于 comctl32 v6 组件，需要应用清单声明 `Microsoft.Windows.Common-Controls`。应用主程序由 `tauri-build` 注入清单，测试 harness 没有。
 

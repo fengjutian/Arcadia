@@ -6,7 +6,7 @@
 //! - `privacy_get_site_setting` / `privacy_set_site_setting`
 //! - `privacy_block_event_list` — recent blocks for the toolbar panel
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::local_store;
 use crate::privacy::types::RuleAction;
@@ -228,6 +228,50 @@ pub fn privacy_capability_report() -> PrivacyCapability {
 /// Re-export of the matcher API used by the legacy layer.
 pub fn used_action(action: RuleAction) -> RuleAction {
     action
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivacyStats {
+    pub blocked: u64,
+    pub allowed: u64,
+    pub dropped: u64,
+}
+
+/// Live counters maintained by the WebView2 request handler / event worker.
+///
+/// The UI polls this once on mount for the toolbar and privacy panel. Without
+/// it the frontend falls back to zeroes forever (the invocation used to fail
+/// with "command not found" and was swallowed by `.catch`).
+#[tauri::command]
+pub fn privacy_get_stats(app: AppHandle) -> Result<PrivacyStats, String> {
+    use std::sync::atomic::Ordering;
+
+    let runtime = app
+        .try_state::<crate::privacy::runtime::PrivacyRuntimeState>()
+        .ok_or_else(|| "privacy runtime is not initialized".to_string())?;
+    let stats = runtime.events.stats();
+    Ok(PrivacyStats {
+        blocked: stats.total_blocked.load(Ordering::Relaxed),
+        allowed: stats.total_allowed.load(Ordering::Relaxed),
+        dropped: stats.total_dropped.load(Ordering::Relaxed),
+    })
+}
+
+/// Reset the live counters. Session-scoped by design: the persisted per-day
+/// rollups in `privacy_daily_stats` are unaffected.
+#[tauri::command]
+pub fn privacy_clear_stats(app: AppHandle) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+
+    let runtime = app
+        .try_state::<crate::privacy::runtime::PrivacyRuntimeState>()
+        .ok_or_else(|| "privacy runtime is not initialized".to_string())?;
+    let stats = runtime.events.stats();
+    stats.total_blocked.store(0, Ordering::Relaxed);
+    stats.total_allowed.store(0, Ordering::Relaxed);
+    stats.total_dropped.store(0, Ordering::Relaxed);
+    Ok(())
 }
 
 fn now_seconds() -> i64 {

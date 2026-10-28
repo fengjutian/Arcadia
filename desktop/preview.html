@@ -83,6 +83,9 @@
         // rejected invokes would spam the console and stall async effects.
         invoke: async (cmd, args) => {
           if (cmd === 'local_save_document') return args?.document ?? null
+          if (cmd === 'local_reading_snapshot_stats') return { count: 3, bytes: 8400000 }
+          if (cmd === 'privacy_get_stats') return { blocked: 0, allowed: 0, dropped: 0 }
+          if (cmd === 'privacy_capability_report') return { networkSubresourceBlocking: true }
           if ((demoSearch || demoLibrary) && cmd === 'local_list_documents') return savedDocuments
           if (demoSearch && cmd === 'local_list_reading_activity') return readingActivity
           if (demoLibrary && cmd === 'local_list_history') return libraryHistory

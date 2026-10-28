@@ -37,6 +37,9 @@ pub struct VectorCandidate {
     pub heading_path: Vec<String>,
     pub excerpt: String,
     pub text: String,
+    pub token_count: usize,
+    pub start_offset: usize,
+    pub end_offset: usize,
     pub similarity: f32,
 }
 
@@ -119,6 +122,9 @@ mod tests {
             heading_path: vec![],
             excerpt: "".into(),
             text: "".into(),
+            token_count: 0,
+            start_offset: 0,
+            end_offset: 0,
             bm25_score: 0.0,
         }
     }
@@ -133,6 +139,9 @@ mod tests {
             heading_path: vec![],
             excerpt: "".into(),
             text: "".into(),
+            token_count: 0,
+            start_offset: 0,
+            end_offset: 0,
             similarity: 0.5,
         }
     }

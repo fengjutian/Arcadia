@@ -120,6 +120,7 @@ impl AiProvider for OllamaProvider {
             });
         }
         let mut byte_stream = response.bytes_stream();
+        let mut pending: Vec<u8> = Vec::new();
         let mut buffer = String::new();
         let mut prompt_tokens: Option<u64> = None;
         let mut completion_tokens: Option<u64> = None;
@@ -136,7 +137,7 @@ impl AiProvider for OllamaProvider {
                         Ok(bytes) => bytes,
                         Err(error) => return Err(ProviderError::Http(error.to_string())),
                     };
-                    buffer.push_str(&String::from_utf8_lossy(&chunk));
+                    super::decode_complete_lines(&mut pending, &chunk, &mut buffer);
                     for chunk in parse_ndjson_chunk(&mut buffer, &mut prompt_tokens, &mut completion_tokens) {
                         if sink.send(ChatChunk {
                             delta: chunk.delta,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { listDownloads, removeDownloadRecord, showDownloadInFolder, openDownloadFile, cancelDownload, pauseDownload, retryDownload, type DownloadRecord } from '../../services/downloads'
+import { listDownloads, removeDownloadRecord, showDownloadInFolder, openDownloadFile, cancelDownload, pauseDownload, resumeDownload, retryDownload, type DownloadRecord } from '../../services/downloads'
 import { applyDownloadUpdate, DOWNLOAD_FEED_LIMIT, normalizeDownloadPayload, type DownloadFeedEntry } from './downloadFeed'
 import { onNativeDownload } from '../../services/nativeBrowser'
 
@@ -22,6 +22,7 @@ export interface UseDownloadCenterResult {
   open: (id: string) => Promise<void>
   reveal: (id: string) => Promise<void>
   pause: (id: string) => Promise<void>
+  resume: (id: string) => Promise<void>
   cancel: (id: string) => Promise<void>
   retry: (id: string) => Promise<string>
 }
@@ -114,6 +115,14 @@ export function useDownloadCenter(options: UseDownloadCenterOptions = {}): UseDo
     }
   }, [refresh])
 
+  const resume = useCallback(async (id: string) => {
+    try {
+      await resumeDownload(id)
+    } finally {
+      await refresh()
+    }
+  }, [refresh])
+
   const cancel = useCallback(async (id: string) => {
     try {
       await cancelDownload(id)
@@ -130,5 +139,5 @@ export function useDownloadCenter(options: UseDownloadCenterOptions = {}): UseDo
     }
   }, [refresh])
 
-  return { records, hydrated, feed, remove, open, reveal, pause, cancel, refresh, retry }
+  return { records, hydrated, feed, remove, open, reveal, pause, resume, cancel, refresh, retry }
 }

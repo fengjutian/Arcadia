@@ -109,6 +109,15 @@ export async function retryDownload(id: string): Promise<string> {
 }
 
 /**
+ * Continue a paused download from its `.part` file (Range request).
+ * `download_retry` is the from-scratch path and deletes the partial file.
+ */
+export async function resumeDownload(id: string): Promise<void> {
+  if (!isTauri()) throw new Error('resumeDownload requires Tauri runtime')
+  await invoke('download_resume', { id })
+}
+
+/**
  * Display-friendly file name. Prefers the database's `fileName` column
  * (which we set from WebView's destination basename) but falls back to the
  * URL pathname so a missing DB field still shows something sensible.
