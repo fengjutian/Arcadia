@@ -38,6 +38,16 @@
   }
 }
 
+.settings-page > .settings-tabs > .ui-tabs__content > .ant-tabs-content {
+  max-width: none;
+}
+
+// Privacy uses a two-column layout inside the card, so let the card use the
+// full pane width instead of leaving a large empty band on the right.
+.privacy-settings-card {
+  max-width: none;
+}
+
 .route-view[data-view='settings']:not(.is-hidden) {
   overflow: hidden;
   scrollbar-gutter: auto;

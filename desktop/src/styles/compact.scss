@@ -2126,11 +2126,21 @@ body[data-theme='dark'] .assistant-page {
 // to reserve the strip. Keep one source of truth instead of repeating 46*3.
 :root {
   --app-topbar-height: 44px;
+  --browser-toolbar-height: 46px;
+  --browser-chrome-extra: 0px;
   --window-control-width: 46px;
   --window-control-height: var(--app-topbar-height);
   --window-control-strip: calc(var(--window-control-width) * 3);
   --chrome-bg: #e7ebe7;
   --chrome-border: #d8ded9;
+}
+
+// The browser route stacks its toolbar under the title row; every other route
+// starts its content directly below the top bar. Overlays that are portalled to
+// `body` cannot see the route from their DOM position, so the route is
+// published on `body[data-view]` (see `layouts/AppLayout.tsx`).
+body[data-view='browser'] {
+  --browser-chrome-extra: var(--browser-toolbar-height);
 }
 
 .window-drag-strip {
@@ -2181,6 +2191,31 @@ body[data-theme='dark'] .window-controls > .window-controls__close:hover { backg
 // the drawer's own actions and close button sit underneath them.
 .ui-drawer--right .ui-drawer__header {
   padding-right: calc(var(--window-control-strip) + 18px);
+}
+
+// Toasts are portalled to `body` by `components/ui/message.tsx`, so they can no
+// longer inherit the route's stacking context — a fixed layer nested inside the
+// route used to be repainted under the tab strip by `.route-view`'s entry
+// animation. Docking the stack below the chrome also keeps it off the tab strip
+// and the omnibox.
+//
+// On the browser route the page lives in a native child WebView that paints
+// above the React surface, so nothing can float over the page: the route
+// reserves a shelf of exactly the stack height (`--toast-stack-height`, measured
+// and published by the message layer) and the surface slides down until the
+// stack empties. Never overlap the chrome instead — the toolbar row hosts the
+// address bar and the tab strip hosts the tabs.
+//
+// The shelf moves without a transition on purpose: every step of a margin
+// animation resizes the native WebView through the surface's ResizeObserver,
+// which would reflow the page a dozen times for one toast.
+.ui-message-layer {
+  top: calc(var(--app-topbar-height, 44px) + var(--browser-chrome-extra, 0px));
+  padding-top: 10px;
+}
+
+body[data-view='browser'] .browser-content > .web-surface {
+  margin-top: var(--toast-stack-height, 0px);
 }
 
 .address-suggestion {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Avatar, Badge, Layout, Space, Tooltip, Typography } from '../components/ui'
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui/icons'
 import { Bot, BookOpen, Globe2, Minus, Search, Settings, Square, X } from 'lucide-react'
@@ -22,6 +22,15 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
     document.documentElement.style.setProperty('--sider-width', `${siderWidth}px`)
     return () => { document.documentElement.style.removeProperty('--sider-width') }
   }, [siderWidth])
+
+  // Toasts are portalled to `body`, so they can no longer read the active
+  // route from their DOM position: the browser route owns an extra chrome row
+  // (the toolbar) that the toast stack has to clear. Publish the route on the
+  // body element, in a layout effect so the first paint already has it.
+  useLayoutEffect(() => {
+    document.body.dataset.view = view
+    return () => { delete document.body.dataset.view }
+  }, [view])
 
   function startResize(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault()
