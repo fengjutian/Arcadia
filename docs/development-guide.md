@@ -32,7 +32,7 @@ AI Provider、RAG、隐私拦截、WASM 插件运行时和受控 Agent 均已实
 | Provider | `reqwest` + `rustls-tls`（流式） | OpenAI Compatible、Ollama、Embedding |
 | 插件 | `wasmtime`（component-model + cranelift） | WASI Preview 2 组件运行时，Fuel / 内存 / 超时隔离 |
 | 密钥 | `keyring` | Credential Manager / Keychain / Secret Service |
-| 测试 | Vitest、Cargo test | 前端 59 文件 / 454 用例；Rust 229 个测试函数（当前 Windows 上无法执行，见 §12） |
+| 测试 | Vitest、Cargo test | 前端 61 文件 / 466 用例；Rust 239 用例（Windows 经 `npm run test:rust`，见 §12） |
 
 ## 3. 仓库结构
 
@@ -470,25 +470,39 @@ npm run build
 # Rust
 cd desktop/src-tauri
 cargo fmt -- --check
-cargo check
-cargo test
+cargo check --all-targets
+
+cd ..
+npm run test:rust
 ```
 
 当前测试现状：
 
-- **前端**：Vitest + happy-dom，59 个测试文件 / **454 个用例全部通过**；`npm run build`（`tsc --noEmit` + Vite 生产构建）通过。
-- **Rust**：源码中有 **229 个 `#[test]` / `#[tokio::test]` 函数**，分布在 45 个模块文件（RAG、隐私、插件、Agent、下载、会话锁等）。`cargo check --all-targets` 通过。
-- **Rust 测试在 Windows 上无法执行**：见下方阻塞说明。
+- **前端**：Vitest + happy-dom，61 个测试文件 / **466 个用例全部通过**；`npm run build`（`tsc --noEmit` + Vite 生产构建）通过。
+- **Rust**：**239 个用例全部通过**，分布在 45 个模块文件（RAG、隐私、插件、Agent、下载、会话锁等）。`cargo check --all-targets` 通过。
 
-> ### 阻塞：Windows 上 `cargo test` 启动即失败
+> ### Windows 上的 Rust 测试入口是 `npm run test:rust`
 >
-> 测试二进制在进入 `main` 之前以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出，无任何输出。
+> 直接 `cargo test` 会让测试二进制在进入 `main` 之前以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出，无任何输出。
 >
-> 因果链：`tauri 2.11.5` 的默认特性 `common-controls-v6` → `muda 0.19.3` 同名特性 → 静态导入 `comctl32!TaskDialogIndirect`。该导出仅存在于 comctl32 v6，需应用清单声明 `Microsoft.Windows.Common-Controls` 才会加载到 v6。应用主程序由 `tauri-build` 注入清单，运行正常；测试 harness 二进制没有清单，加载到 v5 comctl32 后缺入口点而失败。
+> 因果链：`tauri` 默认特性 `common-controls-v6` 与 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6` 都会让依赖图静态导入 `comctl32!TaskDialogIndirect`。该导出仅存在于 comctl32 v6 组件，需应用清单声明 `Microsoft.Windows.Common-Controls` 才会解析。应用主程序由 `tauri-build` 注入清单，测试 harness 二进制没有，因此加载到 v5 comctl32 后缺入口点。
 >
-> 修复方向：在 `build.rs` 中追加 `cargo::rustc-link-arg-tests=/MANIFESTINPUT:<manifest.xml>`，只作用于测试目标。在此之前请以 `cargo check --all-targets` 作为 Rust 侧门禁，并优先修复该问题以恢复测试覆盖。
+> `desktop/scripts/run-rust-tests.mjs` 先执行 `cargo test --lib --no-run`，再用 Windows SDK 的 `mt.exe` 把 `desktop/src-tauri/test-manifest.xml` 写入每个测试可执行文件，最后逐个运行并汇总退出码。非 Windows 平台直接透传 `cargo test`。
+>
+> 为什么不在 build.rs 里解决：`cargo::rustc-link-arg-tests` 只作用于 `[[test]]` 集成测试目标，不覆盖 `--lib` 单元测试；而对所有目标加 `/MANIFEST:EMBED` 会与 `tauri-build` 已嵌入的 MANIFEST 资源冲突，链接报 `CVT1100 duplicate resource (MANIFEST,1)`。
 
 前端测试已覆盖的方向包括：URL 安全、外部协议、证书提示、权限提示、标签分组/重排/搜索、会话恢复、LRU、日志脱敏、下载危险判定与队列、RAG 检索与引用、Agent 循环与预算、插件跟踪清理、设置项等。
+
+### 12.1 恢复测试门禁时修掉的问题
+
+测试长期不可执行期间积累了 26 个失败用例，其中多数是真实缺陷：
+
+1. **`rag/lexical.rs`**：`retrieve()` 用字符串替换给占位符编号（`?N` → `?` → `?2`），把 `MATCH ?1` 连带改成了 `MATCH ?21`，参数数量不匹配 → **词法召回在运行时必然失败**。改为 `?1` 固定匹配项、其余用顺序占位符，并补齐过滤条件参数。
+2. **`rag/chunker.rs`**：三处问题——token 计数把英文按 1.3 字符/token 计（应约 5 字符/token）；超过预算的段落从不切分，整段被塞进一个 chunk；标题后的正文被并入标题块，导致 `heading_path` 丢失且标题永不结束。修复后长中英文正文按目标预算切分，标题路径正确。
+3. **`privacy/listener.rs`**：`classify_resource_type` 用 `& 0x3FC` 掩码，而 `COREWEBVIEW2_WEB_RESOURCE_CONTEXT` 是 1–16 的顺序枚举，掩码把 1/2/3 抹成 0 → **所有请求被归类为 `Other`**，隐私统计的分类维度失真。
+4. **`privacy/compiler.rs` / `matcher.rs`**：纯通配 block 规则（如 `*/ads/*`）被放进 suffix 桶而永不匹配；`||domain^` 的子域遍历写成 `windows(1)`，只检查单段标签，子域规则全部失效；generic 规则被硬编码返回 `Allow`。已修正分桶、子域遍历与动作透传。
+5. **`rag/citation.rs`**：`extract_source_ids` 按字节下标递增切片，遇到中文等多字节字符即 panic；改为只在匹配之间推进。
+6. **夹具与实现漂移**：`rag/indexer.rs` 的 `fresh_db()` 缺 `rag_index_jobs` 表；`agent/supervisor.rs` 的 `agent_runs` 缺 `title` 列；`agent/tools.rs`、`mcp_security.rs` 的断言停留在旧契约；`rag/vector.rs` 的夹具用了会被相似度阈值过滤掉的零向量。
 
 ## 13. 安全设计与风险
 
@@ -522,9 +536,9 @@ cargo test
 
 1. ✅ 桌面保存失败时的占位 Markdown 可能造成伪正文（已在 `BrowserPage.save()` 改为 Reader 失败/空正文时直接报错并取消保存）。
 2. ✅ 桌面数据库没有正式迁移版本（已引入 `schema_version` 表 + `MIGRATIONS` 常量 + `run_migrations` 启动钩子，附 `local_migration_status` command；老库自动打 v1 基线）。
-3. ✅ 前端没有自动化测试（Vitest + happy-dom，454 用例通过）。
+3. ✅ 前端没有自动化测试（Vitest + happy-dom，466 用例通过）。
 4. ✅ 桌面搜索停留在 `LIKE`（已升级为 FTS5 + BM25 + 前缀匹配）。
-5. ⛔ **Rust 测试在 Windows 上无法执行**，229 个用例长期缺少回归保护 —— 当前最高优先级。
+5. ✅ Rust 测试在 Windows 上无法执行（已用 `npm run test:rust` 恢复；恢复后发现并修复 26 个失败用例，见下）。
 
 ### P1：阻碍架构演进
 
@@ -552,10 +566,10 @@ cargo test
 1. ✅ 修复空正文保存：提取失败时明确失败，不写占位数据。
 2. ✅ 桌面 SQLite 版本化迁移 + 备份/恢复。
 3. ✅ 收敛数据所有权：保留 Rust 本地优先，Go sidecar 整条删除。
-4. ✅ 补齐前端关键路径测试 —— 454 用例通过。
+4. ✅ 补齐前端关键路径测试 —— 466 用例通过。
 5. ✅ 接入系统密钥环后实现 OpenAI-compatible / Ollama Provider。
 6. ✅ 在稳定全文检索和引用模型后实现 RAG，再扩展 Agent / Plugin。
-7. ⛔ 修复 Windows 上 `cargo test` 的清单问题，恢复 Rust 回归门禁。
+7. ✅ 恢复 Rust 回归门禁（`npm run test:rust`），并修掉恢复后暴露的 26 个失败用例。
 8. 清理 CSP 与版本号残留，完成布局收尾。
 9. 补搜索分页，然后评估跨平台隐私能力与插件市场。
 
@@ -591,15 +605,22 @@ cargo test
 
 ### `cargo test` 立刻退出，没有任何测试输出
 
-退出码 `0xC0000139`（`-1073741511`）表示 loader 在 `main` 之前失败，不是测试断言失败。原因与修复见 §12 的阻塞说明。可用以下方式确认：
+退出码 `0xC0000139`（`-1073741511`）表示 loader 在 `main` 之前失败，不是测试断言失败 —— 说明测试二进制没有 comctl32 v6 清单。请改用 `npm run test:rust`（见 §12）。
+
+若脚本本身失败，按顺序排查：
 
 ```powershell
-# 直接运行测试二进制，同样会得到 -1073741511
+# 1) 是否找到 mt.exe（需要 Windows SDK）
+$env:MT_EXE   # 可显式指定路径
+
+# 2) 直接运行测试二进制应得到 -1073741511（未注入清单时）
 & desktop\src-tauri\target\debug\deps\ai_knowledge_browser_lib-*.exe --list
 
-# 确认两个二进制都导入了 comctl32!TaskDialogIndirect，且测试二进制没有清单
-dumpbin /imports <exe>
+# 3) 确认导入与清单
+dumpbin /imports <exe>     # 应包含 comctl32.dll!TaskDialogIndirect
 ```
+
+`mt.exe` 报「拒绝访问」通常是上一个测试进程尚未退出，或杀毒软件短暂占用文件；脚本已带重试。
 
 ### 插件安装后无法调用能力
 

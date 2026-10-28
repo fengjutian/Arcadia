@@ -176,4 +176,4 @@ AI Knowledge Browser 是一款以浏览器为入口、以个人知识库为核�
 - 前端 Browser、Library、Search、Assistant、Settings 五个入口可用，核心交互已实现。
 - 桌面 SQLite + FTS5 迁移链可重复运行；核心检索命令单测覆盖。
 - 插件运行时可用：Manifest 校验、安装/启停/卸载、权限授权与审计均有测试。
-- Rust 侧当前以 `cargo check --all-targets` 作为编译门禁；Windows 上 `cargo test` 存在已知阻塞，见 [开发路线图](roadmap.md) §已知阻塞。
+- Rust 侧以 `cargo check --all-targets` 作为编译门禁，测试经 `npm run test:rust` 执行（Windows 需向测试二进制注入 comctl32 v6 清单，见 [开发路线图](roadmap.md) §测试现状）。

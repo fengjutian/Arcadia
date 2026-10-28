@@ -101,7 +101,14 @@ pub fn url_origin(url: &str) -> String {
 pub fn is_third_party(top_level_origin: &str, request_host: &str) -> bool {
     let top_host = host_of_origin(top_level_origin);
     let top_host = strip_port(&top_host);
-    let req_host = strip_port(request_host.trim());
+    // Tolerate callers passing a full URL instead of a bare host: the runtime
+    // path passes `host_of_url(...)`, but tests and future call sites may not.
+    let req_host = if request_host.contains("://") {
+        host_of_origin(request_host)
+    } else {
+        request_host.trim().to_string()
+    };
+    let req_host = strip_port(&req_host);
     if top_host.is_empty() || req_host.is_empty() {
         return false;
     }

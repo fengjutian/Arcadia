@@ -10,7 +10,7 @@
 - [x] Rust 端 SQLite + FTS5（迁移 #17：虚表 + 触发器同步 + BM25 排序 + 前缀匹配）
 - [x] Tauri 工程及插件权限（`capabilities/default.json`）
 - [x] 版本化迁移器：`schema_version` 表 + `MIGRATIONS` 常量 + 启动钩子，当前 26 个迁移
-- [x] 前端 Vitest + Rust cargo test（详见「已知阻塞」）
+- [x] 前端 Vitest + Rust cargo test（Windows 上经 `npm run test:rust`，见「测试现状」）
 
 ## Iteration 1：可浏览
 
@@ -75,22 +75,23 @@
 
 界面布局与滚动所有权收口。最近若干次提交围绕 preview 布局诊断与 scroll audit 展开，诊断代码已移除，剩余工作是把滚动统一收敛到 `.route-view`，使侧栏与窗口 chrome 保持固定。当前工作区有一个未提交的 `desktop/src/styles/compact.scss` 改动正是该收尾。
 
-## 已知阻塞
+## 测试现状
 
-**Windows 上 `cargo test` 无法启动测试进程。**
+`npm run test:rust` 是 Windows 上的 Rust 测试入口，当前 **239 个用例全部通过**（前端为 61 个文件 / 466 用例）。
 
-`cargo test` 会在测试二进制加载阶段以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出，229 个 Rust 测试函数全部无法执行。根因是 `tauri 2.11.5` 默认特性 `common-controls-v6` → `muda 0.19.3` 静态导入 `comctl32!TaskDialogIndirect`，而该导出只存在于 comctl32 v6，需要应用清单声明 `Microsoft.Windows.Common-Controls`。应用主程序由 `tauri-build` 注入清单，测试 harness 没有，因此加载到 v5 comctl32 后失败。
+直接用 `cargo test` 会让测试二进制在加载阶段以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出：`tauri` 默认特性 `common-controls-v6` 与 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6` 都会静态导入 `comctl32!TaskDialogIndirect`，该导出只存在于 comctl32 v6 组件，需要应用清单声明 `Microsoft.Windows.Common-Controls`。应用主程序由 `tauri-build` 注入清单，测试 harness 没有。
 
-修复方向：在 `build.rs` 中为测试目标单独追加 `/MANIFESTINPUT`，不影响应用清单。在此之前以 `cargo check --all-targets` 作为编译门禁。
+`desktop/scripts/run-rust-tests.mjs` 先构建测试 harness，再用 Windows SDK 的 `mt.exe` 把 `desktop/src-tauri/test-manifest.xml` 写入测试二进制后运行；不改依赖、不加全局链接参数，也不影响应用清单。非 Windows 平台直接透传 `cargo test`。
+
+> 注：`cargo::rustc-link-arg-tests` 无法解决这个问题 —— 它只作用于 `[[test]]` 集成测试目标，不覆盖 `--lib` 单元测试；而给全目标加 `/MANIFEST:EMBED` 会与 `tauri-build` 已嵌入的 MANIFEST 资源冲突（CVT1100 duplicate resource）。
 
 ## 下一步（按优先级）
 
-1. 修复 Rust 测试门禁，恢复 229 个用例的可执行性。
-2. 提交布局收尾改动，结束当前工作流。
-3. 清理残留：`tauri.conf.json` 的 CSP 仍白名单已删除的 `http://127.0.0.1:8787`；统一 `package.json`（0.3.0）与 `tauri.conf.json`（0.1.0）的版本号。
-4. 补齐搜索分页，缓解文档量增长后的列表端压力。
-5. 扩展插件宿主能力，覆盖知识库写入、AI 调用之外的常用能力。
-6. macOS / Linux 的隐私拦截与证书拦截等价实现（受平台接口限制，需先做可行性验证）。
+1. 提交布局收尾改动，结束当前工作流。
+2. 清理残留：`tauri.conf.json` 的 CSP 仍白名单已删除的 `http://127.0.0.1:8787`；统一 `package.json`（0.3.0）与 `tauri.conf.json`（0.1.0）的版本号。
+3. 补齐搜索分页，缓解文档量增长后的列表端压力。
+4. 扩展插件宿主能力，覆盖知识库写入、AI 调用之外的常用能力。
+5. macOS / Linux 的隐私拦截与证书拦截等价实现（受平台接口限制，需先做可行性验证）。
 
 ## 决策记录
 

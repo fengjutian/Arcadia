@@ -227,23 +227,25 @@ npm run build
 ```bash
 # 前端
 cd desktop
-npm run test          # Vitest，59 个文件 / 454 用例
+npm run test          # Vitest，61 个文件 / 466 用例
 npm run build         # tsc --noEmit + vite build
 
 # Rust
 cd desktop/src-tauri
 cargo fmt -- --check
 cargo check --all-targets
-cargo test            # 见下方已知问题
+
+cd ..
+npm run test:rust     # 239 个用例，见下方说明
 ```
 
-> **已知问题：Windows 上 `cargo test` 无法启动测试进程。**
+> **Windows 上请用 `npm run test:rust` 跑 Rust 测试，不要直接执行 `cargo test`。**
 >
-> 现象是测试二进制在进入 `main` 之前就以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出，没有任何测试输出。
+> 直接 `cargo test` 会让测试二进制在进入 `main` 之前以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出，没有任何测试输出。原因是 `tauri` 默认启用的 `common-controls-v6` 特性、以及 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6`，都会让依赖图静态导入 `comctl32!TaskDialogIndirect`。该导出只存在于 comctl32 v6 组件中，需要通过应用清单声明 `Microsoft.Windows.Common-Controls` 才能解析；应用主程序由 `tauri-build` 注入清单，而 Cargo 的测试 harness 二进制没有。
 >
-> 原因是依赖链 `tauri 2.11 → muda 0.19.3` 的 `common-controls-v6` 特性会静态导入 `comctl32!TaskDialogIndirect`，而该导出只存在于 comctl32 v6，需要应用清单声明 `Microsoft.Windows.Common-Controls` 才会被加载。应用主程序由 `tauri-build` 注入清单，因此运行正常；Rust 测试 harness 二进制没有清单，加载到 v5 comctl32 后直接失败。
+> `npm run test:rust`（`desktop/scripts/run-rust-tests.mjs`）会先构建测试 harness，再用 Windows SDK 的 `mt.exe` 把 `desktop/src-tauri/test-manifest.xml` 写入测试二进制，然后运行。它不修改依赖、不加全局链接参数，也不影响应用自身的清单。非 Windows 平台该脚本直接透传 `cargo test`。
 >
-> 修复方向：在 `build.rs` 中为测试目标追加 `cargo::rustc-link-arg-tests=/MANIFESTINPUT:<manifest.xml>`，不影响应用自身的清单。在此之前，Rust 侧只能依赖 `cargo check --all-targets` 保证编译正确性。
+> 需要 Windows SDK 提供 `mt.exe`；缺失时脚本会提示，并说明 `0xC0000139` 的含义。
 
 ## 安全说明
 
@@ -268,7 +270,6 @@ cargo test            # 见下方已知问题
 
 ## 路线图
 
-- 修复 Windows 上 `cargo test` 无法运行的问题，恢复 Rust 测试门禁。
 - 完成界面布局与滚动所有权的收尾。
 - 补齐插件宿主能力、搜索分页与跨平台隐私/证书能力。
 - 建立桌面数据与可选远程服务之间的同步机制（暂未开始）。
@@ -287,7 +288,7 @@ cargo test            # 见下方已知问题
 
 ## 贡献
 
-提交变更前，请至少运行与修改范围对应的构建和测试。涉及桌面原生功能时，应同时验证 TypeScript 构建与 Rust 检查；注意上文 `cargo test` 的已知问题。
+提交变更前，请至少运行与修改范围对应的构建和测试。涉及桌面原生功能时，应同时验证 TypeScript 构建与 Rust 检查；Rust 测试请用 `npm run test:rust`。
 
 建议提交信息保持清晰，例如：
 
