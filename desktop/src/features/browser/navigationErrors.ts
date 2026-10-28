@@ -4,6 +4,9 @@
  */
 import type { BrowserTabError } from '../../types'
 import { diagnoseNativeNavigation } from '../../services/nativeBrowser'
+import { isMissingWebviewError, MISSING_WEBVIEW_MESSAGE } from './tabViewErrors'
+
+export { isMissingWebviewError, MISSING_WEBVIEW_MESSAGE } from './tabViewErrors'
 
 export function classifyNavigationError(error: unknown): BrowserTabError {
   const message = String(error)
@@ -24,6 +27,11 @@ export function classifyNavigationError(error: unknown): BrowserTabError {
     const scheme = protocolMatch[2]
     return { kind: 'unsupported-protocol', message: `不支持的协议：${scheme}://（应用仅打开 http/https 链接）` }
   }
+  // A missing view is a lifecycle problem, not a network problem — never show
+  // the raw Tauri/Rust string to the user.
+  if (isMissingWebviewError(message)) {
+    return { kind: 'tab-view-missing', message: MISSING_WEBVIEW_MESSAGE }
+  }
   return { kind: 'load-failed', message }
 }
 
@@ -33,7 +41,11 @@ export function safeFileName(value: string): string {
 
 export async function diagnoseNavigationError(url: string, error: unknown): Promise<BrowserTabError> {
   const basic = classifyNavigationError(error)
-  if (basic.kind === 'unsupported-protocol' || basic.kind === 'site-blocked') return basic
+  if (
+    basic.kind === 'unsupported-protocol' ||
+    basic.kind === 'site-blocked' ||
+    basic.kind === 'tab-view-missing'
+  ) return basic
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return { kind:'offline', message:'设备当前处于离线状态，请检查网络连接。' }
   try {
     const result = await diagnoseNativeNavigation(url)

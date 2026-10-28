@@ -75,6 +75,21 @@ export function reciprocalRankFusion(
     .slice(0, limit)
 }
 
+/**
+ * Remove the `[SOURCE ...]...[/SOURCE]` blocks the RAG model interleaves with
+ * its answer. Citations are rendered from structured chunks instead, so the
+ * raw evidence quotes would only duplicate them in the chat transcript.
+ */
+export function stripSourceBlocks(answer: string): string {
+  return answer
+    .replace(/\[SOURCE id="[^"]*"\][\s\S]*?(?:\[\/SOURCE\]|$)/gi, '')
+    .replace(/\[source:\d+\]/gi, '')
+    .replace(/\[doc-\d+\]/gi, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 /** Validate that every factual-looking statement cites a supplied context item. */
 export function validateAnswerCitations(answer: string, availableCitationIds: readonly number[]): CitationValidation {
   const available = new Set(availableCitationIds)

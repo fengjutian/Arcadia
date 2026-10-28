@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { classifyNavigationError } from './navigationErrors'
+import { isMissingWebviewError } from './tabViewErrors'
 
 describe('classifyNavigationError', () => {
   it('parses the site blacklist error contract', () => {
@@ -18,5 +19,21 @@ describe('classifyNavigationError', () => {
 
   it('falls back to load-failed for unknown errors', () => {
     expect(classifyNavigationError('boom').kind).toBe('load-failed')
+  })
+
+  it('maps Tauri core "webview not found" to a dedicated kind with friendly copy', () => {
+    const error = classifyNavigationError('webview not found')
+    expect(error.kind).toBe('tab-view-missing')
+    expect(error.message).not.toContain('webview not found')
+    expect(error.message).toContain('重试')
+  })
+
+  it('maps the Rust-side "browser tab webview not found" variant too', () => {
+    expect(classifyNavigationError('browser tab webview not found').kind).toBe('tab-view-missing')
+  })
+
+  it('does not mistake unrelated errors for a missing view', () => {
+    expect(isMissingWebviewError('net::ERR_CONNECTION_REFUSED')).toBe(false)
+    expect(classifyNavigationError('net::ERR_CONNECTION_REFUSED').kind).toBe('load-failed')
   })
 })

@@ -12,13 +12,19 @@ import type { View } from './types'
 import './styles/main.scss'
 import './styles/ui.scss'
 import './styles/compact.scss'
+import './styles/library.scss'
+import './styles/search.scss'
+
+const previewParams = new URLSearchParams(window.location.search)
+const previewQuery = previewParams.get('q') ?? ''
+document.body.dataset.theme = previewParams.get('theme') || 'beige'
 
 const hash = (window.location.hash || '#library').slice(1) as View
 const view: View = (['library', 'search', 'ai', 'settings'] as string[]).includes(hash) ? hash : 'library'
 
 function page() {
-  if (view === 'library') return <LibraryPage />
-  if (view === 'search') return <SearchPage initialQuery="" onOpenUrl={() => {}} />
+  if (view === 'library') return <LibraryPage onOpenBrowser={() => {}} />
+  if (view === 'search') return <SearchPage initialQuery={previewQuery} onOpenUrl={() => {}} />
   if (view === 'ai') return <AssistantPage onNavigate={() => {}} />
   return <SettingsPage />
 }

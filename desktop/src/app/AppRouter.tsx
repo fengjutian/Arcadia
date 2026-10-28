@@ -23,7 +23,7 @@ export function AppRouter() {
     setView(next)
   }
   const pages = {
-    library: <LibraryPage />,
+    library: <LibraryPage onOpenBrowser={() => changeView('browser')} />,
     search: <SearchPage initialQuery={knowledgeQuery} onOpenUrl={url => {
       window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
       changeView('browser')

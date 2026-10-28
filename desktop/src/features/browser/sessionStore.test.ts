@@ -7,6 +7,7 @@ import {
   SESSION_KEY_V1,
   SESSION_KEY_V2,
   SESSION_SCHEMA_VERSION,
+  stripTransientTabState,
   writeSnapshot,
   type SessionSnapshot,
 } from './sessionStore'
@@ -115,5 +116,53 @@ describe('restoreFromSnapshot', () => {
     const restored = restoreFromSnapshot(onlyPrivate)
     expect(restored.tabs).toEqual([])
     expect(restored.skipped).toBe(1)
+  })
+
+  it('drops stale runtime error/crash state restored from disk', () => {
+    const poisoned: SessionSnapshot = {
+      ...sample,
+      windows: [{
+        ...sample.windows[0],
+        tabs: [
+          { ...sample.windows[0].tabs[0], error: { kind: 'tab-view-missing', message: 'webview not found' }, crashed: true },
+          sample.windows[0].tabs[1],
+        ],
+      }],
+    }
+    const restored = restoreFromSnapshot(poisoned)
+    expect(restored.tabs[0].error).toBeUndefined()
+    expect(restored.tabs[0].crashed).toBe(false)
+  })
+})
+
+describe('stripTransientTabState', () => {
+  it('returns the same object when there is nothing to strip', () => {
+    const tab = { id: 'a', url: '', title: 'A', loading: false, active: true, pinned: false }
+    expect(stripTransientTabState(tab)).toBe(tab)
+  })
+
+  it('removes error and resets crashed without touching other fields', () => {
+    const tab = {
+      id: 'a', url: 'https://a.example', title: 'A', loading: false, active: true, pinned: false,
+      crashed: true, error: { kind: 'load-failed' as const, message: 'boom' },
+    }
+    const cleaned = stripTransientTabState(tab)
+    expect(cleaned.error).toBeUndefined()
+    expect(cleaned.crashed).toBe(false)
+    expect(cleaned.url).toBe('https://a.example')
+  })
+
+  it('does not persist error state through writeSnapshot', () => {
+    localStorage.clear()
+    writeSnapshot({
+      ...sample,
+      windows: [{
+        ...sample.windows[0],
+        tabs: [{ ...sample.windows[0].tabs[0], error: { kind: 'load-failed', message: 'webview not found' } }],
+      }],
+    }, { rotatedAt: 1_000_000 })
+    const raw = localStorage.getItem(SESSION_KEY_V1) ?? ''
+    expect(raw).not.toContain('"error"')
+    localStorage.clear()
   })
 })

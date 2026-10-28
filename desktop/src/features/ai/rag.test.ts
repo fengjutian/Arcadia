@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateRetrieval, reciprocalRankFusion, validateAnswerCitations } from './rag'
+import { evaluateRetrieval, reciprocalRankFusion, stripSourceBlocks, validateAnswerCitations } from './rag'
 
 const hit = (documentId: string, chunkIndex: number, excerpt = documentId) => ({ documentId, chunkIndex, excerpt })
 
@@ -24,6 +24,26 @@ describe('reciprocalRankFusion', () => {
     expect(result.filter(item => item.documentId === 'a')).toHaveLength(2)
     expect(result.filter(item => item.documentId === 'a' && item.chunkIndex === 0)).toHaveLength(1)
     expect(result.some(item => item.documentId === 'b')).toBe(true)
+  })
+})
+
+describe('stripSourceBlocks', () => {
+  it('removes complete and unterminated evidence blocks', () => {
+    const answer = [
+      'SQLite 支持事务。',
+      '[SOURCE id="doc:local-1:chunk:0"]',
+      'SQLite supports transactions.',
+      '[/SOURCE]',
+      '',
+      'FTS5 用于全文检索。 [source:2] [doc-1]',
+      '[SOURCE id="doc:local-2:chunk:1"]',
+      'unterminated',
+    ].join('\n')
+    expect(stripSourceBlocks(answer)).toBe('SQLite 支持事务。\n\nFTS5 用于全文检索。')
+  })
+
+  it('leaves plain answers unchanged', () => {
+    expect(stripSourceBlocks('第一行\n\n第二行')).toBe('第一行\n\n第二行')
   })
 })
 

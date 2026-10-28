@@ -15,26 +15,22 @@ export function BrowserErrorView({ tab, onRetry, onNewTab, onCopy, onUnblock }: 
   const host = error?.host ?? ''
   const ruleHost = error?.ruleHost ?? ''
   const message = error?.message ?? '未知错误'
-  const title = blocked
-    ? '已封杀该网站'
-    : kind === 'web-mode-required'
-      ? '请在 Tauri 桌面应用中打开网页'
-      : kind === 'unsupported-protocol'
-        ? '应用不支持该协议'
-        : kind === 'offline' ? '设备当前离线'
-        : kind === 'dns' ? '找不到网站地址'
-        : kind === 'timeout' ? '连接超时'
-        : kind === 'tls' ? '无法建立安全连接'
-        : kind === 'connection-refused' ? '服务器拒绝连接'
-        : kind === 'http-client' || kind === 'http-server' ? `服务器返回错误${error?.httpStatus ? `（${error.httpStatus}）` : ''}`
-        : '无法加载该网页'
-  const eyebrow = blocked
-    ? '网站封杀'
-    : kind === 'web-mode-required'
-      ? '需要桌面应用'
-      : kind === 'unsupported-protocol'
-        ? '协议被拦截'
-        : '加载失败'
+  const title = blocked ? '已封杀该网站'
+    : kind === 'web-mode-required' ? '请在 Tauri 桌面应用中打开网页'
+    : kind === 'tab-view-missing' ? '标签页视图已失效'
+    : kind === 'unsupported-protocol' ? '应用不支持该协议'
+    : kind === 'offline' ? '设备当前离线'
+    : kind === 'dns' ? '找不到网站地址'
+    : kind === 'timeout' ? '连接超时'
+    : kind === 'tls' ? '无法建立安全连接'
+    : kind === 'connection-refused' ? '服务器拒绝连接'
+    : kind === 'http-client' || kind === 'http-server' ? `服务器返回错误${error?.httpStatus ? `（${error.httpStatus}）` : ''}`
+    : '无法加载该网页'
+  const eyebrow = blocked ? '网站封杀'
+    : kind === 'web-mode-required' ? '需要桌面应用'
+    : kind === 'tab-view-missing' ? '需要重建视图'
+    : kind === 'unsupported-protocol' ? '协议被拦截'
+    : '加载失败'
   return <div className={`browser-error${blocked ? ' browser-error--blocked' : ''}`}>
     <Typography.Text className="eyebrow">{eyebrow}</Typography.Text>
     <Typography.Title level={3}>{title}</Typography.Title>

@@ -52,7 +52,7 @@ import { isPrivateTab, makePrivateTab, stripPrivateTabs, resetPrivateSessionPerm
 import { readSitePermissions, writeSitePermissions } from '../../features/browser/sitePermissions'
 import { forceAllDenyFor } from '../../features/browser/usePermissionPrompt'
 import { LockOutlined } from '../../components/ui/icons'
-import { readRecoverySnapshot, restoreFromSnapshot, writeSnapshot, type SessionSnapshot } from '../../features/browser/sessionStore'
+import { readRecoverySnapshot, restoreFromSnapshot, stripTransientTabStates, writeSnapshot, type SessionSnapshot } from '../../features/browser/sessionStore'
 import { RecoveryPanel, type RecoveryChoice } from '../../features/browser/RecoveryPanel'
 import { TopBarPortal } from '../../app/TopBarPortal'
 import { dropSessionLock, getSessionLockState, type SessionLockState } from '../../services/session'
@@ -353,10 +353,14 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         return
       }
       const parsed = workspace ?? parsePersistedSession(getSessionLegacy(SESSION_KEY))
+      // Errors/crash flags describe the *previous* process' native WebViews.
+      // Restoring them verbatim pins the UI on a dead error page even though a
+      // fresh WebView is about to be created for the same tab.
+      const restoredTabs = parsed ? stripTransientTabStates(parsed.tabs) : []
       if (parsed) {
-        setTabs(parsed.tabs)
+        setTabs(restoredTabs)
         setActiveTabId(parsed.activeTabId)
-        const activeTab = parsed.tabs.find(tab => tab.id === parsed.activeTabId)
+        const activeTab = restoredTabs.find(tab => tab.id === parsed.activeTabId)
         setAddress(activeTab?.url ?? '')
         if (activeTab?.url) lastHistoryUrl.current = activeTab.url
       }
@@ -369,7 +373,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           if (cancelled) return
           const nextBounds = bounds()
           if (!nextBounds) return
-          await Promise.all(parsed.tabs.filter(tab => tab.url && (!tab.suspended || tab.id === parsed.activeTabId)).map(async tab => {
+          await Promise.all(restoredTabs.filter(tab => tab.url && (!tab.suspended || tab.id === parsed.activeTabId)).map(async tab => {
             try {
               const opened = await ensureNativeTab(tab.id, tab.url, nextBounds, { private: tab.private })
               if (!opened) {
@@ -378,6 +382,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
               }
               if (tab.id === parsed.activeTabId && visibleRef.current) await showNativeTab(tab.id)
               else await hideNativeTab(tab.id)
+              // The view is live again → any error carried in from the saved
+              // session is stale by definition.
+              setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: undefined, crashed: false } : item))
             } catch (error) {
               setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: classifyNavigationError(error) } : item))
             }
@@ -389,17 +396,20 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     return () => { cancelled = true }
   }, [])
 
-  const sessionJson = useDebouncedValue(JSON.stringify({ tabs: stripPrivateTabs(tabs), activeTabId }), SESSION_DEBOUNCE_MS)
+  const sessionJson = useDebouncedValue(JSON.stringify({ tabs: stripTransientTabStates(stripPrivateTabs(tabs)), activeTabId }), SESSION_DEBOUNCE_MS)
   useEffect(() => {
     if (!hydrated || recoveryPendingRef.current) return
+    // Runtime error/crash state must never be persisted (see
+    // `stripTransientTabState`): it cannot be true for the next process.
+    const persistableTabs = stripTransientTabStates(stripPrivateTabs(tabs))
     void setSession(SESSION_KEY, sessionJson)
-    void saveBrowserWorkspace({ tabs: stripPrivateTabs(tabs), activeTabId })
+    void saveBrowserWorkspace({ tabs: persistableTabs, activeTabId })
     const snapshot: SessionSnapshot = {
       schemaVersion: 2,
       savedAt: Date.now(),
       windows: [{
         id: 'main',
-        tabs: stripPrivateTabs(tabs),
+        tabs: persistableTabs,
         activeTabId,
         scrollPositions: Object.fromEntries(
           tabsRef.current

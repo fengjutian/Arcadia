@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Webview } from '@tauri-apps/api/webview'
 import { readSitePermissions } from '../features/browser/sitePermissions'
 import { isAdBlockerEnabled } from '../features/plugins/adBlocker'
+import { isMissingWebviewError } from '../features/browser/tabViewErrors'
 
 export interface BrowserBounds { x: number; y: number; width: number; height: number }
 export interface NativeBrowserState { url: string; title: string; favicon?: string; loading: boolean; scrollX: number; scrollY: number; scrollDepth?: number; canGoBack: boolean; canGoForward: boolean }
@@ -60,8 +61,47 @@ const isTauri = () => '__TAURI_INTERNALS__' in window
 export const isNativeBrowserAvailable = (): boolean => isTauri()
 const labelFor = (tabId: string) => `browser-${tabId.replace(/[^a-zA-Z0-9-]/g, '-')}`
 
-export async function openNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
-  if (!isTauri()) return false
+/**
+ * Forget the cached label and best-effort destroy the native view. Used when
+ * the native side reports the WebView is gone: keeping a dead handle in
+ * `labels` makes every later show/resize/state call fail against it.
+ */
+async function forgetNativeTab(tabId: string): Promise<void> {
+  const label = labels.get(tabId) ?? labelFor(tabId)
+  labels.delete(tabId)
+  try { await invoke('browser_close_tab', { label }) } catch { /* already gone */ }
+  try { await (await Webview.getByLabel(label))?.close() } catch { /* already gone */ }
+}
+
+/**
+ * `webview not found` means the native WebView died underneath us (LRU sweep,
+ * window teardown, half-created tab). Purge the stale handle and rebuild once
+ * before letting the error reach the UI.
+ */
+async function rebuildWhenViewMissing<T>(tabId: string, action: () => Promise<T>): Promise<T> {
+  try {
+    return await action()
+  } catch (error) {
+    if (!isMissingWebviewError(error)) throw error
+    await forgetNativeTab(tabId)
+    return await action()
+  }
+}
+
+/**
+ * Position/size the native view. Throws (including `webview not found`) so the
+ * callers that care — `openNativeTab` / `ensureNativeTab` — can rebuild.
+ */
+async function applyBounds(tabId: string, bounds: BrowserBounds): Promise<void> {
+  const label = labels.get(tabId)
+  if (!label) return
+  const view = await Webview.getByLabel(label)
+  if (!view) return
+  await view.setPosition(new LogicalPosition(bounds.x, bounds.y))
+  await view.setSize(new LogicalSize(Math.max(1, bounds.width), Math.max(1, bounds.height)))
+}
+
+async function openNativeTabOnce(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   const label = labelFor(tabId)
   let webview = await Webview.getByLabel(label)
   if (!webview) {
@@ -73,12 +113,11 @@ export async function openNativeTab(tabId: string, url: string, bounds: BrowserB
     await webview.show()
   }
   labels.set(tabId, label)
-  await resizeNativeTab(tabId, bounds)
+  await applyBounds(tabId, bounds)
   return true
 }
 
-export async function ensureNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
-  if (!isTauri()) return false
+async function ensureNativeTabOnce(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   const label = labelFor(tabId)
   const existing = await Webview.getByLabel(label)
   if (existing) {
@@ -89,14 +128,51 @@ export async function ensureNativeTab(tabId: string, url: string, bounds: Browse
     if (!created) throw new Error('browser tab webview was not created')
   }
   labels.set(tabId, label)
-  await resizeNativeTab(tabId, bounds)
+  await applyBounds(tabId, bounds)
   return true
 }
 
-export async function showNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId); if(label) await (await Webview.getByLabel(label))?.show() }
-export async function hideNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId); if(label) await (await Webview.getByLabel(label))?.hide() }
+export async function openNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
+  if (!isTauri()) return false
+  return rebuildWhenViewMissing(tabId, () => openNativeTabOnce(tabId, url, bounds, options))
+}
+
+export async function ensureNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
+  if (!isTauri()) return false
+  return rebuildWhenViewMissing(tabId, () => ensureNativeTabOnce(tabId, url, bounds, options))
+}
+
+export async function showNativeTab(tabId: string): Promise<void> {
+  const label = labels.get(tabId)
+  if (!label) return
+  try {
+    await (await Webview.getByLabel(label))?.show()
+  } catch (error) {
+    if (!isMissingWebviewError(error)) throw error
+    labels.delete(tabId)
+  }
+}
+export async function hideNativeTab(tabId: string): Promise<void> {
+  const label = labels.get(tabId)
+  if (!label) return
+  try {
+    await (await Webview.getByLabel(label))?.hide()
+  } catch (error) {
+    if (!isMissingWebviewError(error)) throw error
+    labels.delete(tabId)
+  }
+}
 export async function closeNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId); if(label) { try { await invoke('browser_close_tab',{label}) } catch { /* webview already gone: fall back to a direct close */ await (await Webview.getByLabel(label))?.close() } } labels.delete(tabId) }
-export async function resizeNativeTab(tabId: string, bounds: BrowserBounds): Promise<void> { const label=labels.get(tabId); if(!label)return;const view=await Webview.getByLabel(label);if(!view)return;await view.setPosition(new LogicalPosition(bounds.x,bounds.y));await view.setSize(new LogicalSize(Math.max(1,bounds.width),Math.max(1,bounds.height))) }
+export async function resizeNativeTab(tabId: string, bounds: BrowserBounds): Promise<void> {
+  try {
+    await applyBounds(tabId, bounds)
+  } catch (error) {
+    // Layout callbacks are fire-and-forget (`void resizeNativeTab(...)`), so a
+    // dead view must not surface as an unhandled rejection.
+    if (!isMissingWebviewError(error)) throw error
+    labels.delete(tabId)
+  }
+}
 export async function reloadNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_reload',{label}) }
 export async function stopNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_stop',{label}) }
 export async function editNativePage(tabId: string, action: 'cut'|'paste'|'select-all'): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_edit_action',{label,action}) }

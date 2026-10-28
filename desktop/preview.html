@@ -7,11 +7,92 @@
     <script>
       // TEMPORARY layout-inspection harness. Stubs the Tauri v2 internals so the
       // React shell renders in a plain browser. Not part of the app build.
+      //
+      // `?demo=search` supplies representative local-search data so the search
+      // page can be reviewed (and screenshotted) without the desktop database.
+      const demo = new URLSearchParams(location.search).get('demo')
+      const demoSearch = demo === 'search'
+      const demoLibrary = demo === 'library'
+      const demoTasks = new URLSearchParams(location.search).get('tasks') === '1'
+      const now = Math.floor(Date.now() / 1000)
+      const savedDocuments = [
+        {
+          id: 'doc-github', title: 'GitHub · Change is constant. GitHub keeps you ahead.',
+          url: 'https://github.blog/news-insights/change-is-constant/', source: 'GitHub Blog',
+          summary: 'Mona the Octocat, Copilot, and Ducky float jubilantly upward from behind the GitHub wordmark. A look at what changed this year and what is next.',
+          markdown: '', wordCount: 1840, status: 'READY', tags: ['Inbox'], autoTags: [], starred: false,
+          createdAt: new Date((now - 86400 * 3) * 1000).toISOString(),
+        },
+        {
+          id: 'doc-brics', title: '学习手记 | 习近平主席引领“大金砖合作”高质量发展',
+          url: 'https://www.news.cn/politics/leaders/2026-09/12/c_112726.htm', source: '新华网',
+          summary: '应印度总理莫迪邀请，国家主席习近平将于9月12日至13日赴印度新德里出席金砖国家领导人第十七次会晤。',
+          markdown: '', wordCount: 2600, status: 'READY', tags: ['Inbox'], autoTags: [], starred: true,
+          createdAt: new Date((now - 86400 * 8) * 1000).toISOString(),
+        },
+      ]
+      const readingActivity = [
+        {
+          url: 'https://developer.mozilla.org/zh-CN/', title: 'MDN Web Docs',
+          firstVisitedAt: now - 86400 * 5, lastVisitedAt: now - 86400, activeSeconds: 3815,
+          maxScrollDepth: 1, visitCount: 4,
+          excerpt: 'MDN Web Docs 网站提供有关开放 Web 技术的信息，包括 HTML、CSS 以及适用于网站和渐进式 Web 应用的 API。',
+          markdown: '# MDN Web Docs\n\nMDN Web Docs 网站提供有关开放 Web 技术的信息，包括 HTML、CSS 以及适用于网站和渐进式 Web 应用的 API。',
+          capturedAt: now - 86400 * 2,
+        },
+        {
+          url: 'https://juejin.cn/', title: '稀土掘金', firstVisitedAt: now - 86400 * 4,
+          lastVisitedAt: now - 86400 * 2, activeSeconds: 265, maxScrollDepth: 0.46, visitCount: 2,
+        },
+        {
+          url: 'https://juejin.cn/post/7531209842038153216',
+          title: '2026 上半年，前端圈已经炸了五次2026 上半年，前端圈已经炸了五次一、TypeScript 7.0：14 年来最大变革，10 倍提速',
+          firstVisitedAt: now - 86400 * 6, lastVisitedAt: now - 86400 * 3, activeSeconds: 150,
+          maxScrollDepth: 0.32, visitCount: 1,
+          excerpt: '2026 上半年，前端圈已经炸了五次 一、TypeScript 7.0：14 年来最大变革，10 倍提速。二、Vite 8 默认使用 Rolldown。',
+          markdown: '# 2026 上半年，前端圈已经炸了五次\n\n一、TypeScript 7.0：14 年来最大变革，10 倍提速。',
+          capturedAt: now - 86400 * 3,
+        },
+        {
+          url: 'https://juejin.cn/post/7532034858215436288',
+          title: 'Flutter Golden Tests：给 AI Agent 的 UI 测试系统',
+          firstVisitedAt: now - 86400 * 7, lastVisitedAt: now - 86400 * 4, activeSeconds: 280,
+          maxScrollDepth: 0.67, visitCount: 2,
+          excerpt: '最近 ASO.dev 发了一个 Flutter Golden Test，开源了两个工具：ff_golden 负责场景执行、变体生成与像素级比对。',
+          markdown: '# Flutter Golden Tests\n\n最近 ASO.dev 发了一个 Flutter Golden Test，开源了两个工具：ff_golden 负责场景执行、变体生成与像素级比对。',
+          capturedAt: now - 86400 * 4,
+        },
+        {
+          url: 'https://juejin.cn/post/7630290760560295974',
+          title: '为什么我不建议普通前端盲目卷全栈？周末，一个半年前从我们组离职去当独立开发者的小伙伴回来吃饭，聊了聊他的近况。',
+          firstVisitedAt: now - 86400 * 9, lastVisitedAt: now - 86400 * 5, activeSeconds: 60,
+          maxScrollDepth: 0.83, visitCount: 1,
+        },
+      ]
+      const libraryHistory = savedDocuments.map((document, index) => ({
+        url: document.url,
+        title: document.title,
+        visitedAt: Date.now() - 3600_000 * (index + 1),
+      }))
+      const libraryCollections = [
+        { id: 'collection-reading', name: '深度阅读', description: '值得慢慢读完的长文和专题。', createdAt: new Date((now - 86400 * 20) * 1000).toISOString(), updatedAt: new Date().toISOString(), documentCount: 2 },
+      ]
       window.__TAURI_INTERNALS__ = {
         metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main', windowLabel: 'main' } },
         // Resolve instead of throwing: the audit harness only needs layout, and
         // rejected invokes would spam the console and stall async effects.
-        invoke: async (cmd) => (/list|^recover_stale_tasks$/.test(cmd) ? [] : null),
+        invoke: async (cmd, args) => {
+          if (cmd === 'local_save_document') return args?.document ?? null
+          if ((demoSearch || demoLibrary) && cmd === 'local_list_documents') return savedDocuments
+          if (demoSearch && cmd === 'local_list_reading_activity') return readingActivity
+          if (demoLibrary && cmd === 'local_list_history') return libraryHistory
+          if (demoLibrary && cmd === 'local_list_collections') return libraryCollections
+          if (demoLibrary && demoTasks && cmd === 'local_list_recent_tasks') return [
+            { id: 'task-1', kind: 'embedding.index', documentId: 'doc-github', payload: '{}', status: 'PROCESSING', attempts: 1, maxAttempts: 3, availableAt: new Date().toISOString() },
+            { id: 'task-2', kind: 'autotag.generate', documentId: 'doc-brics', payload: '{}', status: 'FAILED', attempts: 3, maxAttempts: 3, availableAt: new Date().toISOString(), lastError: 'Provider request timed out after 30s' },
+          ]
+          return /list|^recover_stale_tasks$/.test(cmd) ? [] : null
+        },
         transformCallback: (cb) => { const id = Math.floor(Math.random() * 1e9); window[`_${id}`] = cb; return id },
         convertFileSrc: (p) => p,
         unregisterCallback: () => {},

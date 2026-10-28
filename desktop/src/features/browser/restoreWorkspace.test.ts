@@ -106,4 +106,12 @@ describe('restoreTabsFromWorkspace', () => {
     ], 'missing'))
     expect(result.activeTabId).toBe('a')
   })
+
+  it('clears a stale runtime error when the tab is re-opened', () => {
+    const result = restoreTabsFromWorkspace([
+      tab({ id: 'a', url: 'https://a', crashed: true, error: { kind: 'load-failed', message: 'webview not found' } }),
+    ], ws([{ id: 'a', url: 'https://a' }], 'a'))
+    expect(result.tabs[0].error).toBeUndefined()
+    expect(result.tabs[0].crashed).toBe(false)
+  })
 })

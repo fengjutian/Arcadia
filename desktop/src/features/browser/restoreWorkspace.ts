@@ -102,6 +102,8 @@ export function restoreTabsFromWorkspace(current: readonly BrowserTab[], workspa
       audible: snap.audible ?? tab.audible,
       private: snap.private ?? tab.private,
       groupId: snap.groupId ?? tab.groupId ?? undefined,
+      // The merge re-opens the tab, so a stale runtime error no longer applies.
+      error: undefined,
       crashed: false,
     })
   }

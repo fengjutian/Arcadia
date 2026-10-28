@@ -56,6 +56,23 @@ export function emptySnapshot(): SessionSnapshot {
   }
 }
 
+/**
+ * Drop runtime-only fields that describe the *current* native WebView. A
+ * snapshot that keeps `error` / `crashed` restores dead error pages: the new
+ * process has no WebView for the tab yet, so the stale error short-circuits
+ * the "recreate and show" path until the user clicks 重试.
+ */
+export function stripTransientTabState(tab: BrowserTab): BrowserTab {
+  if (tab.error === undefined && tab.crashed !== true) return tab
+  const next: BrowserTab = { ...tab, crashed: false }
+  delete next.error
+  return next
+}
+
+export function stripTransientTabStates(tabs: BrowserTab[]): BrowserTab[] {
+  return tabs.map(stripTransientTabState)
+}
+
 function parseSlot(raw: string | null): SessionSnapshot | null {
   if (!raw) return null
   try {
@@ -138,7 +155,7 @@ export function writeSnapshot(snapshot: SessionSnapshot, options: { rotatedAt?: 
     schemaVersion: SESSION_SCHEMA_VERSION,
     windows: snapshot.windows.map(window => ({
       ...window,
-      tabs: redactSessionTabs(window.tabs),
+      tabs: stripTransientTabStates(redactSessionTabs(window.tabs)),
     })),
     history: snapshot.history.map(entry => ({ ...entry, url: redactUrl(entry.url) })),
     closedTabs: snapshot.closedTabs.map(tab => ({ ...tab, url: redactUrl(tab.url) })),
@@ -172,7 +189,7 @@ export function restoreFromSnapshot(snapshot: SessionSnapshot): RestoredSession 
   for (const tab of window.tabs) {
     if (!tab.id || !tab.title) { skipped++; continue }
     if (tab.private) { skipped++; continue }
-    tabs.push(tab)
+    tabs.push(stripTransientTabState(tab))
   }
   const activeTabId = tabs.some(tab => tab.id === window.activeTabId)
     ? window.activeTabId

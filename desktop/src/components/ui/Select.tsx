@@ -25,9 +25,10 @@ export interface SelectProps<Value = string, Option extends SelectOption<Value> 
   style?: CSSProperties
   name?: string
   id?: string
+  ariaLabel?: string
 }
 
-export function Select<Value = string, Option extends SelectOption<Value> = SelectOption<Value>>({ value, defaultValue, options = [], onChange, mode, placeholder = '请选择', disabled, size = 'middle', className = '', style, name, id }: SelectProps<Value, Option>) {
+export function Select<Value = string, Option extends SelectOption<Value> = SelectOption<Value>>({ value, defaultValue, options = [], onChange, mode, placeholder = '请选择', disabled, size = 'middle', className = '', style, name, id, ariaLabel }: SelectProps<Value, Option>) {
   const [open, setOpen] = useState(false)
   const multiple = mode === 'multiple'
   useModalOverlayLifecycle(open)
@@ -51,7 +52,7 @@ export function Select<Value = string, Option extends SelectOption<Value> = Sele
     open={open}
     onOpenChange={setOpen}
   >
-    <BaseSelect.Trigger className={`ui-select ui-select--${size} ${className}`.trim()} style={style}>
+    <BaseSelect.Trigger className={`ui-select ui-select--${size} ${className}`.trim()} style={style} aria-label={ariaLabel}>
       <BaseSelect.Value placeholder={placeholder}>
         {(selected: Value | Value[] | null) => {
           if (multiple) {
