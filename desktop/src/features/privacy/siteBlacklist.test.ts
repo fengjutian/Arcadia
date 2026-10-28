@@ -53,6 +53,8 @@ describe('matchSiteBlacklist', () => {
     expect(matchSiteBlacklist('https://a.news.example.com/x', rules)?.host).toBe('example.com')
     const onlyNarrow = [entry({ host: 'news.example.com', includeSubdomains: false })]
     expect(matchSiteBlacklist('https://a.news.example.com/x', onlyNarrow)).toBeNull()
+    // Exact-only still matches the host itself.
+    expect(matchSiteBlacklist('https://news.example.com/x', onlyNarrow)?.host).toBe('news.example.com')
   })
 
   it('does not match a suffix without a dot boundary', () => {
@@ -60,15 +62,30 @@ describe('matchSiteBlacklist', () => {
     expect(matchSiteBlacklist('https://example.org/', rules)).toBeNull()
   })
 
-  it('returns the most specific rule first', () => {
+  it('returns the most specific rule regardless of array order', () => {
     const nested = [entry({ host: 'example.com' }), entry({ host: 'news.example.com' })]
-    // Array order must not decide: the matcher sorts by host length.
     expect(matchSiteBlacklist('https://news.example.com/x', nested)?.host).toBe('news.example.com')
+    const reversed = [...nested].reverse()
+    expect(matchSiteBlacklist('https://news.example.com/x', reversed)?.host).toBe('news.example.com')
+  })
+
+  it('handles a large imported list without changing the result', () => {
+    const many = Array.from({ length: 2_000 }, (_, index) => entry({ host: `spam${index}.example.net` }))
+    many.push(entry({ host: 'example.com' }))
+    expect(matchSiteBlacklist('https://deep.a.example.com/x', many)?.host).toBe('example.com')
+    expect(matchSiteBlacklist('https://unrelated.org/', many)).toBeNull()
   })
 
   it('ignores disabled entries and the global switch', () => {
     expect(matchSiteBlacklist('https://example.com/', [entry({ host: 'example.com', enabled: false })])).toBeNull()
     expect(matchSiteBlacklist('https://example.com/', rules, false)).toBeNull()
+  })
+
+  it('treats IP literals as exact-only', () => {
+    const ipRules = [entry({ host: '0.0.1', includeSubdomains: true }), entry({ host: '127.0.0.1', includeSubdomains: false })]
+    expect(matchSiteBlacklist('http://127.0.0.1:8080/', ipRules)?.host).toBe('127.0.0.1')
+    // 10.0.0.1 ends with 0.0.1 but must not inherit its suffix rule.
+    expect(matchSiteBlacklist('http://10.0.0.1/', ipRules)).toBeNull()
   })
 
   it('never matches internal or invalid URLs', () => {

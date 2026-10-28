@@ -18,6 +18,7 @@ import {
   siteBlacklistList,
   siteBlacklistRemove,
   siteBlacklistSetEnabled,
+  siteBlacklistSetScope,
   siteBlacklistSetSettings,
   siteBlacklistSummary,
   type SiteBlacklistEntry,
@@ -35,6 +36,57 @@ let entries: SiteBlacklistEntry[] = []
 let settings: SiteBlacklistSettings = { enabled: true, blockSubresources: true, updatedAt: 0 }
 let loaded = false
 let inflight: Promise<void> | null = null
+
+interface BlacklistIndex {
+  /** `includeSubdomains = false`: only the exact host matches. */
+  exact: Map<string, SiteBlacklistEntry>
+  /** `includeSubdomains = true`: the host and every parent suffix match. */
+  suffix: Map<string, SiteBlacklistEntry>
+}
+
+const EMPTY_INDEX: BlacklistIndex = { exact: new Map(), suffix: new Map() }
+let index: BlacklistIndex = EMPTY_INDEX
+
+/**
+ * Compile the flat list once per change. Lookups then walk at most one entry
+ * per label instead of scanning and sorting the whole list on every poll.
+ */
+function buildIndex(candidates: SiteBlacklistEntry[]): BlacklistIndex {
+  const exact = new Map<string, SiteBlacklistEntry>()
+  const suffix = new Map<string, SiteBlacklistEntry>()
+  for (const entry of candidates) {
+    if (!entry.enabled) continue
+    const host = normalizeHost(entry.host)
+    if (!host) continue
+    if (entry.includeSubdomains) suffix.set(host, entry)
+    else exact.set(host, entry)
+  }
+  return { exact, suffix }
+}
+
+function lookup(indexToSearch: BlacklistIndex, url: string): SiteBlacklistEntry | null {
+  const host = hostFromUrl(url)
+  if (!host) return null
+  const exactMatch = indexToSearch.exact.get(host)
+  if (exactMatch) return exactMatch
+  // IP literals have no subdomain hierarchy, matching the Rust matcher.
+  if (isIpLiteral(host)) return null
+  // a.b.example.com → b.example.com → example.com; the first hit is the
+  // longest (most specific) suffix.
+  let cursor = host
+  while (cursor) {
+    const match = indexToSearch.suffix.get(cursor)
+    if (match) return match
+    const dot = cursor.indexOf('.')
+    if (dot < 0) break
+    cursor = cursor.slice(dot + 1)
+  }
+  return null
+}
+
+function isIpLiteral(host: string): boolean {
+  return host.includes(':') || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
+}
 
 /** Lowercase, strip IPv6 brackets and a trailing root dot. */
 export function normalizeHost(value: string): string {
@@ -57,8 +109,8 @@ export function hostFromUrl(value: string): string | null {
 
 /**
  * Pure matcher used by both the cache and unit tests.
- * Mirrors `SiteRules::match_url`: longest rule first, exact host or a dot
- * boundary subdomain when `includeSubdomains` is set.
+ * Mirrors `SiteRules::match_host`: exact rules first, then the longest suffix
+ * rule, so a narrow exact rule beats a broader parent rule.
  */
 export function matchSiteBlacklist(
   url: string,
@@ -66,18 +118,7 @@ export function matchSiteBlacklist(
   enabled = true,
 ): SiteBlacklistEntry | null {
   if (!enabled) return null
-  const host = hostFromUrl(url)
-  if (!host) return null
-  const ordered = [...candidates]
-    .filter(entry => entry.enabled)
-    .sort((left, right) => right.host.length - left.host.length)
-  for (const entry of ordered) {
-    const rule = normalizeHost(entry.host)
-    if (!rule) continue
-    if (host === rule) return entry
-    if (entry.includeSubdomains && host.endsWith(`.${rule}`)) return entry
-  }
-  return null
+  return lookup(buildIndex(candidates), url)
 }
 
 export async function refreshSiteBlacklist(force = false): Promise<void> {
@@ -90,6 +131,7 @@ export async function refreshSiteBlacklist(force = false): Promise<void> {
   inflight = (async () => {
     const [list, current] = await Promise.all([siteBlacklistList(), siteBlacklistGetSettings()])
     entries = Array.isArray(list) ? list : []
+    index = buildIndex(entries)
     settings = current
     loaded = true
   })().finally(() => {
@@ -109,7 +151,8 @@ export function getBlacklistSettings(): SiteBlacklistSettings {
 }
 
 export function findBlockingEntry(url: string): SiteBlacklistEntry | null {
-  return matchSiteBlacklist(url, entries, settings.enabled)
+  if (!settings.enabled) return null
+  return lookup(index, url)
 }
 
 export function notifySiteBlacklistChanged(): void {
@@ -121,8 +164,13 @@ async function afterMutation(): Promise<void> {
   notifySiteBlacklistChanged()
 }
 
-export async function addBlockedSite(input: string, note?: string | null, source = 'manual'): Promise<SiteBlacklistEntry> {
-  const entry = await siteBlacklistAdd(input, note ?? null, source)
+export async function addBlockedSite(
+  input: string,
+  note?: string | null,
+  source = 'manual',
+  includeSubdomains = true,
+): Promise<SiteBlacklistEntry> {
+  const entry = await siteBlacklistAdd(input, note ?? null, source, includeSubdomains)
   await afterMutation()
   return entry
 }
@@ -140,6 +188,11 @@ export async function removeBlockedSite(id: string): Promise<void> {
 
 export async function setBlockedSiteEnabled(id: string, enabled: boolean): Promise<void> {
   await siteBlacklistSetEnabled(id, enabled)
+  await afterMutation()
+}
+
+export async function setBlockedSiteScope(id: string, includeSubdomains: boolean): Promise<void> {
+  await siteBlacklistSetScope(id, includeSubdomains)
   await afterMutation()
 }
 

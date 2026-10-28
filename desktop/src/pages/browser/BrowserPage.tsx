@@ -54,6 +54,7 @@ import { forceAllDenyFor } from '../../features/browser/usePermissionPrompt'
 import { LockOutlined } from '../../components/ui/icons'
 import { readRecoverySnapshot, restoreFromSnapshot, writeSnapshot, type SessionSnapshot } from '../../features/browser/sessionStore'
 import { RecoveryPanel, type RecoveryChoice } from '../../features/browser/RecoveryPanel'
+import { TopBarPortal } from '../../app/TopBarPortal'
 import { dropSessionLock, getSessionLockState, type SessionLockState } from '../../services/session'
 import { toggleFullscreen as toggleWindowFullscreen } from '../../services/webviewCompat'
 import { buildSuggestions, trimSuggestions } from '../../features/browser/suggestionProvider'
@@ -511,7 +512,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const tabRuntime = useTabRuntime({
     tab: active,
     visible,
-    enabled: nativeMode && hasNativeTab(active.id),
+    enabled: nativeMode && hasNativeTab(active.id) && !active.error,
     onApply: (patch) => {
       // macOS / Linux fallback: no navigation guard, so the polling loop is the
       // only place a redirect into a blacklisted host can be caught.
@@ -1000,7 +1001,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     { key: 'screenshot-full', label: '截取整个网页', disabled: !nativeMode, onClick: () => runBrowserMenuAction('screenshot-full') },
     { key: 'clear-site-data', label: '清除此网站数据', disabled: !active.url || !nativeMode, onClick: () => runBrowserMenuAction('clear-site-data') },
     currentBlock
-      ? { key: 'site-unblock', label: '解除封杀此网站', icon: <StopOutlined/>, disabled: !nativeMode, onClick: () => runBrowserMenuAction('site-unblock') }
+      ? { key: 'site-unblock', label: '解除封杀此网站', icon: <StopOutlined/>, onClick: () => runBrowserMenuAction('site-unblock') }
       : { key: 'site-block', label: '封杀此网站', icon: <StopOutlined/>, disabled: !currentHost || !nativeMode, onClick: () => runBrowserMenuAction('site-block') },
     { type: 'divider' },
     { key: 'new-private', label: '新建私密窗口', icon: <LockOutlined/>, extra: 'Shift+Ctrl+N', onClick: () => runBrowserMenuAction('new-private') },
@@ -1784,7 +1785,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }
 
   return <div className="browser-page">{contextHolder}
-    <div className="browser-tabs" style={{ '--tab-count': tabs.length } as CSSProperties}><Tabs type="editable-card" items={(() => {
+    <TopBarPortal><div className="browser-tabs" style={{ '--tab-count': tabs.length } as CSSProperties}><Tabs type="editable-card" items={(() => {
           const groupDecisions = groupTabsByOrigin(tabs)
           return tabs.map((tab, index) => {
           const isDragging = draggingIndex === index
@@ -1810,7 +1811,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             className: `${tab.pinned ? 'browser-tab--pinned ' : ''}${tab.suspended ? 'browser-tab--suspended' : ''}${tab.private ? ' browser-tab--private' : ''}${tab.muted ? ' browser-tab--muted' : ''}${tab.crashed ? ' browser-tab--crashed' : ''}${group.groupId ? ' browser-tab--grouped' : ''}`.trim() || undefined,
             closable: tabs.length > 1 && !tab.pinned,
           }
-        })})()} activeKey={activeTabId} onChange={activateTab} addIcon={<Tooltip title="新建标签页 (Ctrl+T)"><PlusOutlined aria-label="新建标签页"/></Tooltip>} onEdit={(target, action) => action === 'add' ? openNewTab() : closeTab(String(target))}/></div>
+        })})()} activeKey={activeTabId} onChange={activateTab} addIcon={<Tooltip title="新建标签页 (Ctrl+T)"><PlusOutlined aria-label="新建标签页"/></Tooltip>} onEdit={(target, action) => action === 'add' ? openNewTab() : closeTab(String(target))}/></div></TopBarPortal>
     <div className="browser-toolbar"><Space><Button type="text" aria-label="后退" title="后退 (Alt+←)" icon={<ArrowLeftOutlined/>} disabled={!nativeMode || !active.canGoBack} onClick={() => void navigateHistory(active.id,-1)}/><Button type="text" aria-label="前进" title="前进 (Alt+→)" icon={<ArrowRightOutlined/>} disabled={!nativeMode || !active.canGoForward} onClick={() => void navigateHistory(active.id,1)}/><Button type="text" aria-label={active.loading?'停止加载':'重新加载'} title={active.loading?'停止加载 (Esc)':'重新加载 (F5)'} icon={active.loading?<CloseOutlined/>:<ReloadOutlined/>} disabled={!nativeMode} onClick={() => void (active.loading ? stopNativeTab(active.id) : reloadNativeTab(active.id))}/><Button type="text" icon={<BookOutlined/>} onClick={() => void openReader()}>阅读模式</Button></Space><form onSubmit={event => { event.preventDefault(); void navigate(address) }}><AutoComplete value={address} options={addressSuggestions} onChange={setAddress} onSelect={value=>void navigate(value)}><Input ref={addressRef} prefix={<SafetyCertificateOutlined/>} suffix={<button type="button" className={`browser-star${starredDocId ? ' is-active' : ''}`} disabled={!active.url} aria-label={starredDocId ? '取消收藏' : '收藏当前页'} title={starredDocId ? '取消收藏' : '收藏当前页'} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleStarCurrent() }}><StarOutlined/></button>} onFocus={event=>event.currentTarget.select()} placeholder="搜索或输入网址"/></AutoComplete></form><Tooltip title={adBlockerEnabled ? `广告过滤已开启，本标签已过滤 ${blockedAdsByTab[active.id] ?? 0} 项` : '广告过滤已关闭'}><Tag icon={<SafetyCertificateOutlined/>} color={adBlockerEnabled ? 'green' : 'default'}>{blockedAdsByTab[active.id] ?? 0}</Tag></Tooltip><Button type={aiOpen?'primary':'text'} ghost={aiOpen} icon={<RobotOutlined/>} onClick={()=>setAiOpen(value=>!value)}/><Popover trigger="click" placement="bottomRight" content={downloadPanel} open={toolbarOverlay==='downloads'} onOpenChange={open=>void changeToolbarOverlay('downloads',open)}><Badge size="small" count={downloads.filter(item=>item.status==='downloading').length}><Button type="text" aria-label="下载" icon={<DownloadOutlined/>}/></Badge></Popover><Popover trigger="click" placement="bottomRight" content={bookmarkBarPanel} open={toolbarOverlay==='bookmarks'} onOpenChange={open=>void changeToolbarOverlay('bookmarks',open)}><Button type="text" aria-label="收藏夹" title={`${bookmarkActions.bookmarks.length} 条收藏 (Ctrl+Shift+O)`} icon={<StarFilled style={{ color: bookmarkActions.bookmarks.length ? '#d49a26' : undefined }}/>}/></Popover><Popover trigger="click" placement="bottomRight" content={resourcePanel} open={toolbarOverlay==='resources'} onOpenChange={open=>void changeToolbarOverlay('resources',open)}><Button type="text" aria-label="资源面板" icon={<ThunderboltOutlined/>} title={`${resourceStats.liveTabs} 个 WebView / ${resourceStats.totalTabs} 标签`}/></Popover><Dropdown menu={{items:browserMenu}} trigger={['click']} open={toolbarOverlay==='menu'} onOpenChange={open=>void changeToolbarOverlay('menu',open)}><Button type="text" aria-label="浏览器菜单" icon={<MoreOutlined/>}/></Dropdown></div>
     {findOpen&&<div className="browser-find"><Input autoFocus allowClear prefix={<SearchOutlined/>} value={findQuery} status={findStatus==='missing'?'error':undefined} placeholder="在页面中查找" onChange={event=>{setFindQuery(event.target.value);setFindStatus('idle')}} onPressEnter={event=>void runFind(event.shiftKey)}/><Typography.Text type={findStatus==='missing'?'danger':'secondary'}>{findStatus==='missing'?'未找到':findStatus==='found'?'已定位':''}</Typography.Text><Button type="text" aria-label="上一个匹配项" icon={<ArrowUpOutlined/>} onClick={()=>void runFind(true)}/><Button type="text" aria-label="下一个匹配项" icon={<ArrowDownOutlined/>} onClick={()=>void runFind(false)}/><Button type="text" aria-label="关闭查找" icon={<CloseOutlined/>} onClick={closeFind}/></div>}
     <PermissionPromptBar prompt={permissionPrompt} />

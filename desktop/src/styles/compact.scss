@@ -207,15 +207,71 @@ body {
 }
 
 .app-layout {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   min-height: 0;
   overflow: hidden;
 }
 
+// The title bar spans the whole window: brand at the far left, route chrome
+// (the browser tab strip) in the middle, window buttons at the far right. The
+// navigation rail starts underneath it, so the rail and the page both begin
+// below the same row.
+.app-topbar {
+  position: relative;
+  z-index: 1500;
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  height: var(--app-topbar-height, 44px);
+  padding-right: var(--window-control-strip);
+  background: var(--chrome-bg, #e7ebe7);
+  color: var(--chrome-fg, #31483a);
+  box-shadow: inset 0 -1px 0 var(--chrome-border, #d8ded9);
+
+  .brand {
+    width: var(--sider-width, 72px);
+    height: 100% !important;
+    flex: none;
+    padding: 0 10px;
+    font-size: 15px;
+  }
+
+  .brand__mark { width: 32px; height: 32px; border-radius: 10px; }
+}
+
+.app-topbar--collapsed .brand {
+  justify-content: center;
+  padding-inline: 0;
+
+  > b { display: none; }
+}
+
+.app-topbar__slot {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: stretch;
+}
+
+// Only the browser route owns chrome for the title bar. Its tab strip stays
+// mounted while another view is active (the route is hidden, not unmounted), so
+// the slot itself has to be hidden or the tabs would float over every page.
+.app-topbar:not(.app-topbar--browser) .app-topbar__slot { display: none; }
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
 // Bounded viewport frame for the active route. It must not scroll: letting it
 // scroll would move the sidebar chrome and clip the route's bottom edge.
 .app-content {
-  height: 100vh;
+  height: 100%;
+  flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -314,10 +370,17 @@ body {
 @media (max-width: 980px) { .visit-statistics__charts { grid-template-columns:1fr; } }
 
 body[data-theme='green'] {
+  --chrome-bg: #e7ebe7;
+  --chrome-border: #d8ded9;
+
   .app-content { background: #f5f7f4; }
 }
 
 body[data-theme='beige'] {
+  --chrome-bg: #e9e1d6;
+  --chrome-border: #d9cbb8;
+  --chrome-fg: #55493e;
+
   background: #f7f2e9;
   color: #302a24;
 
@@ -329,7 +392,6 @@ body[data-theme='beige'] {
   .user-card { border-top-color: #ded2c3; }
   .browser-tabs {
     --browser-tab-active-bg: #fcfaf6;
-    background: #e9e1d6;
   }
   .browser-toolbar,
   .ai-panel { background: #fcfaf6; }
@@ -338,6 +400,10 @@ body[data-theme='beige'] {
 }
 
 body[data-theme='light'] {
+  --chrome-bg: #e9ecea;
+  --chrome-border: #d9dedb;
+  --chrome-fg: #39443e;
+
   background: #f7f8f7;
 
   .app-content { background: #f7f8f7; }
@@ -348,12 +414,14 @@ body[data-theme='light'] {
   .user-card { border-top-color: #dde2df; }
   .browser-tabs {
     --browser-tab-active-bg: #f7f8f7;
-    background: #e9ecea;
   }
   .new-tab { background: radial-gradient(circle at 50% 30%, #edf1ee, #fafbfa 44%); }
 }
 
 body[data-theme='github'] {
+  --chrome-bg: #eaeef2;
+  --chrome-border: #d0d7de;
+
   background: #f6f8fa;
   color: #1f2328;
 
@@ -376,7 +444,6 @@ body[data-theme='github'] {
   .document-card h4.ant-typography { font-family: inherit; }
   .browser-tabs {
     --browser-tab-active-bg: #f6f8fa;
-    background: #eaeef2;
   }
   .browser-toolbar,
   .ai-panel { background: #f6f8fa; }
@@ -417,6 +484,10 @@ body[data-theme='github'] {
 }
 
 body[data-theme='dark'] {
+  --chrome-bg: #1b2420;
+  --chrome-border: #2a3730;
+  --chrome-fg: #d2ddd6;
+
   background: #111714;
   color: #d8e0db;
 
@@ -437,7 +508,6 @@ body[data-theme='dark'] {
   }
   .browser-tabs {
     --browser-tab-active-bg: #171e1a;
-    background: #1b2420;
   }
   .browser-toolbar,
   .ai-panel { background: #171e1a; }
@@ -565,11 +635,6 @@ body[data-theme='github'] {
 .route-view[data-view='browser'],
 .route-view[data-view='ai'] {
   overflow: hidden;
-}
-
-.route-view:not(.is-hidden):not([data-view='browser']) {
-  height: calc(100% - var(--window-control-height, 38px));
-  margin-top: var(--window-control-height, 38px);
 }
 
 .route-view > .browser-page {
@@ -1487,18 +1552,21 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
 // content that reaches that corner — the tab strip, right-anchored drawers — has
 // to reserve the strip. Keep one source of truth instead of repeating 46*3.
 :root {
+  --app-topbar-height: 44px;
   --window-control-width: 46px;
-  --window-control-height: 38px;
+  --window-control-height: var(--app-topbar-height);
   --window-control-strip: calc(var(--window-control-width) * 3);
+  --chrome-bg: #e7ebe7;
+  --chrome-border: #d8ded9;
 }
 
 .window-drag-strip {
   position: fixed;
   z-index: 2000;
   top: 0;
-  left: var(--sider-width, 72px);
+  left: 0;
   right: var(--window-control-strip);
-  height: 7px;
+  height: 5px;
 }
 
 .window-controls {
@@ -1563,12 +1631,14 @@ body[data-theme='dark'] .window-controls > .window-controls__close:hover { backg
 .browser-tabs {
   --browser-tab-active-bg: #f7f8f7;
   position: relative;
+  flex: 1;
+  min-width: 0;
   align-items: stretch !important;
   gap: 0 !important;
-  height: 44px !important;
-  padding: 5px calc(var(--window-control-strip) + 8px) 0 8px !important;
-  border-bottom: 1px solid #d8ded9;
-  background: #e7ebe7 !important;
+  height: 100% !important;
+  padding: 5px 8px 0 !important;
+  border-bottom: 0;
+  background: transparent !important;
 
   > .ant-tabs { width: 100%; }
 
@@ -1845,6 +1915,17 @@ body[data-theme='github'] {
     grid-template-columns: minmax(200px, 1.5fr) minmax(150px, 1fr) auto;
     gap: 10px;
     margin-bottom: 12px;
+  }
+
+  &__scope {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: -2px 0 14px;
+    color: #5f6b64;
+    font-size: 12px;
+
+    code { font-size: 11px; }
   }
 
   &__toolbar { margin-bottom: 16px; }

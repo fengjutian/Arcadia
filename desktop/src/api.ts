@@ -911,9 +911,9 @@ export async function siteBlacklistList(): Promise<SiteBlacklistEntry[]> {
   return invoke<SiteBlacklistEntry[]>('site_blacklist_list')
 }
 
-export async function siteBlacklistAdd(input: string, note?: string | null, source?: string): Promise<SiteBlacklistEntry> {
+export async function siteBlacklistAdd(input: string, note?: string | null, source?: string, includeSubdomains = true): Promise<SiteBlacklistEntry> {
   if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
-  return invoke<SiteBlacklistEntry>('site_blacklist_add', { input, note: note ?? null, source: source ?? null })
+  return invoke<SiteBlacklistEntry>('site_blacklist_add', { input, note: note ?? null, source: source ?? null, includeSubdomains })
 }
 
 export async function siteBlacklistAddMany(input: string): Promise<SiteBlacklistImportResult> {
@@ -929,6 +929,11 @@ export async function siteBlacklistRemove(id: string): Promise<void> {
 export async function siteBlacklistSetEnabled(id: string, enabled: boolean): Promise<void> {
   if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
   await invoke('site_blacklist_set_enabled', { id, enabled })
+}
+
+export async function siteBlacklistSetScope(id: string, includeSubdomains: boolean): Promise<void> {
+  if (!isTauri()) throw new Error('网站封杀仅在桌面应用中可用')
+  await invoke('site_blacklist_set_scope', { id, includeSubdomains })
 }
 
 export async function siteBlacklistClear(): Promise<number> {

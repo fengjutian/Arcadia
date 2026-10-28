@@ -4,6 +4,7 @@ import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui
 import { Bot, BookOpen, Globe2, Minus, Search, Settings, Square, X } from 'lucide-react'
 import type { View } from '../types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { TopBarPortalProvider } from '../app/TopBarPortal'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label: '浏览器' }, { key: 'library', icon: <BookOpen/>, label: '知识库' }, { key: 'search', icon: <Search/>, label: '搜索' }, { key: 'ai', icon: <Bot/>, label: 'AI Research' }] as const
 
@@ -12,6 +13,9 @@ const MAX_SIDER_WIDTH = 280
 
 export function AppLayout({ view, onViewChange, children }: { view: View; onViewChange: (view: View) => void; children: ReactNode }) {
   const [siderWidth, setSiderWidth] = useState(MIN_SIDER_WIDTH)
+  // Set by the top bar's slot element; chrome owned by a route (the browser tab
+  // strip) portals into it so the whole title row spans the window width.
+  const [topBarSlot, setTopBarSlot] = useState<HTMLDivElement | null>(null)
   const collapsed = siderWidth === MIN_SIDER_WIDTH
 
   useEffect(() => {
@@ -48,7 +52,19 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
     return collapsed ? <Tooltip key={item.key} title={item.label} placement="right" mouseEnterDelay={0.5}>{button}</Tooltip> : <span key={item.key}>{button}</span>
   }
 
-  return <Layout className="app-layout"><WindowChrome/><Layout.Sider width={siderWidth} collapsedWidth={MIN_SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="brand"><span className="brand__mark"><ThunderboltOutlined /></span><b>Arcadia</b></div><nav className="rail-nav rail-nav--primary" aria-label="主导航">{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>保护已开启</b></Space><Typography.Text>已拦截 43 个请求</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label="辅助导航">{navButton({ key: 'settings', icon: <Settings/>, label: '设置' })}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>本地工作区</small></span></div><div className="sider-resizer" role="separator" aria-label="调整左侧栏宽度" aria-orientation="vertical" aria-valuemin={MIN_SIDER_WIDTH} aria-valuemax={MAX_SIDER_WIDTH} aria-valuenow={siderWidth} onPointerDown={startResize}/></Layout.Sider><Layout.Content className="app-content">{children}</Layout.Content></Layout>
+  return <TopBarPortalProvider target={topBarSlot}>
+    <Layout className="app-layout">
+      <WindowChrome/>
+      <header className={`app-topbar${collapsed ? ' app-topbar--collapsed' : ''}${view === 'browser' ? ' app-topbar--browser' : ''}`} data-tauri-drag-region onDoubleClick={() => void getCurrentWindow().toggleMaximize().catch(() => undefined)}>
+        <div className="brand" data-tauri-drag-region><span className="brand__mark"><ThunderboltOutlined /></span><b>Arcadia</b></div>
+        <div className="app-topbar__slot" ref={setTopBarSlot} data-tauri-drag-region/>
+      </header>
+      <Layout className="app-body">
+        <Layout.Sider width={siderWidth} collapsedWidth={MIN_SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><nav className="rail-nav rail-nav--primary" aria-label="主导航">{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>保护已开启</b></Space><Typography.Text>已拦截 43 个请求</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label="辅助导航">{navButton({ key: 'settings', icon: <Settings/>, label: '设置' })}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>本地工作区</small></span></div><div className="sider-resizer" role="separator" aria-label="调整左侧栏宽度" aria-orientation="vertical" aria-valuemin={MIN_SIDER_WIDTH} aria-valuemax={MAX_SIDER_WIDTH} aria-valuenow={siderWidth} onPointerDown={startResize}/></Layout.Sider>
+        <Layout.Content className="app-content">{children}</Layout.Content>
+      </Layout>
+    </Layout>
+  </TopBarPortalProvider>
 }
 
 function WindowChrome() {

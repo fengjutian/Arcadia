@@ -104,6 +104,7 @@ const DOWNLOAD_EVENT_KIND_FAILED: &str = "failed";
 const DOWNLOAD_EVENT_KIND_CANCELLED: &str = "cancelled";
 #[allow(dead_code)]
 const DOWNLOAD_EVENT_KIND_PROGRESS: &str = "progress";
+const DOWNLOAD_EVENT_KIND_BLOCKED: &str = "blocked";
 
 #[derive(Default)]
 struct DownloadIndex {
@@ -762,6 +763,19 @@ async fn browser_create(
                         .and_then(|n| n.to_str())
                         .map(|s| s.to_owned())
                         .unwrap_or_else(|| "download".to_string());
+                    // A download requested from a blacklisted host is a network
+                    // request too: refuse it before WebView2 starts the transfer.
+                    if let Some(found) = site_blacklist::match_url(&url_str) {
+                        emit_blocked_download(
+                            &app,
+                            &label,
+                            &url_str,
+                            &file_name,
+                            private_mode,
+                            &found.rule_host,
+                        );
+                        return false;
+                    }
                     tauri::async_runtime::spawn(async move {
                         handle_download_started(
                             app,
@@ -1405,6 +1419,35 @@ fn source_origin_from_url(url: &str) -> Option<String> {
         .ok()
         .map(|u| u.origin().ascii_serialization())
         .filter(|s| s != "null")
+}
+
+fn emit_blocked_download(
+    app: &tauri::AppHandle,
+    tab_label: &str,
+    url: &str,
+    file_name: &str,
+    private: bool,
+    rule_host: &str,
+) {
+    let progress = DownloadProgress {
+        version: EVENT_PAYLOAD_VERSION,
+        kind: DOWNLOAD_EVENT_KIND_BLOCKED.into(),
+        id: uuid::Uuid::new_v4().to_string(),
+        tab_label: tab_label.to_string(),
+        url: url.to_string(),
+        file_name: file_name.to_string(),
+        target_path: None,
+        mime_type: None,
+        received_bytes: 0,
+        total_bytes: None,
+        progress_known: false,
+        status: "blocked".into(),
+        danger_type: "none".into(),
+        error_message: Some(format!("该下载来自已封杀的网站：{rule_host}")),
+        private,
+        source_origin: source_origin_from_url(url),
+    };
+    let _ = app.emit_to("main", "browser://download", progress);
 }
 
 async fn handle_download_started(
@@ -2191,6 +2234,7 @@ pub fn run() {
             site_blacklist::site_blacklist_add_many,
             site_blacklist::site_blacklist_remove,
             site_blacklist::site_blacklist_set_enabled,
+            site_blacklist::site_blacklist_set_scope,
             site_blacklist::site_blacklist_clear,
             site_blacklist::site_blacklist_get_settings,
             site_blacklist::site_blacklist_set_settings,

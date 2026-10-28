@@ -34,9 +34,9 @@
 | --- | --- |
 | 总开关 | 「启用网站封杀」关闭后，名单保留但不再拦截任何请求。默认开启。 |
 | 子资源开关 | 「同时阻断被封杀站点的嵌入资源」默认开启；关闭后只拦顶级页面导航。 |
-| 添加 | 输入域名或完整 URL，回车或点「添加」。支持 `example.com`、`https://example.com/path`、`*.example.com`、IDN（自动转 punycode）。重复项直接提示已存在。 |
+| 添加 | 输入域名或完整 URL，回车或点「添加」。支持 `example.com`、`https://example.com/path`、`*.example.com`、IDN（自动转 punycode）。默认同时封杀子域，可关闭「同时封杀子域」。重复项直接提示已存在。 |
 | 批量导入 | 多行文本一次导入，每行一个地址；也接受逗号/分号分隔。返回「新增 / 重复 / 无效」三类计数与无效原因。 |
-| 名单 | 每项显示主机名、是否仅本站（默认含子域）、命中次数、最近命中时间、来源；提供启用/停用开关与删除。支持按主机名过滤。 |
+| 名单 | 每项显示主机名、`含子域 / 仅本站`、命中次数、最近命中时间、来源；点击范围标签可在两种范围间切换，提供启用/停用开关与删除。支持按主机名过滤。 |
 | 统计 | 名单总数、启用数、累计命中次数；「清空全部」需二次确认。 |
 | 最近命中 | 最近 20 条顶级页面拦截记录（主机、URL、时间、标签）。 |
 | 导出 | 把启用中的主机名导出为 `.txt`（一行一个），便于迁移。 |
@@ -53,6 +53,7 @@
   - **返回新标签页**；
   - **复制 URL**；
   - 提示可前往「设置 → 隐私 → 网站封杀」管理完整名单。
+- 从被封杀站点直接触发的下载会被拒绝，并在下载中心显示一条 `blocked` 记录（原因「该下载来自已封杀的网站」）。
 
 ### 2.3 拦截页不做什么
 
@@ -65,7 +66,7 @@
 `normalize_host_input(input) -> Result<String, String>`：
 
 1. 去掉首尾空白；空输入报错。
-2. 所有新增项默认 `include_subdomains = true`：封杀 `example.com` 同时覆盖 `www.example.com`、`news.example.com`。接受 `*.` / `.` 前缀，但不改变行为；该列保留给未来的「仅本站」选项。
+2. 新增项默认 `include_subdomains = true`：封杀 `example.com` 同时覆盖 `www.example.com`、`news.example.com`。设置页的「同时封杀子域」开关可以改为「仅本站」；已存在的条目可以在列表中点击范围标签切换。接受 `*.` / `.` 前缀，但不改变行为。
 3. 没有 scheme 时按 `https://` 解析；有 scheme 时只接受 `http` / `https`。
 4. 拒绝带用户名/密码的 URL。
 5. 取 `Url::host_str()`，转小写、去掉末尾 `.`、去掉 `www.` 前缀（`www.example.com` → `example.com`）。
@@ -83,7 +84,7 @@
      且 (host == r.host  或  (r.include_subdomains 且 host 以 "." + r.host 结尾))
 ```
 
-- 规则按主机名长度倒序排列，最长（最具体）规则先命中，用于展示与统计。
+- 精确规则优先；否则从完整主机名开始逐级去掉最左标签查后缀规则，首个命中即最长（最具体）规则，用于展示与统计。实现为两张哈希表（`exact` / `suffix`），单次匹配 O(标签数)，与名单规模无关。
 - `www.` 已被规范化剥离，因此 `example.com` 天然覆盖 `www.example.com`；`a.b.example.com` 由默认开启的子域匹配覆盖，关闭该标志时只匹配精确主机。
 - 端口、路径、查询串、片段不参与匹配。
 - 匹配只针对 `http` / `https`；`about:`、`data:`、`tauri:` 等内部 URL 永不匹配。
@@ -160,10 +161,11 @@ record_block(app, ...)          异步写事件表 + 累加命中计数（私密
 | 命令 | 参数 | 返回 |
 | --- | --- | --- |
 | `site_blacklist_list` | — | `SiteBlacklistEntry[]` |
-| `site_blacklist_add` | `input`, `note?`, `source?` | 新增项；重复/非法返回错误 |
+| `site_blacklist_add` | `input`, `note?`, `source?`, `includeSubdomains?` | 新增项；重复/非法返回错误 |
 | `site_blacklist_add_many` | `input`（多行文本） | `{ added, duplicates, invalid: [{input, reason}] }` |
 | `site_blacklist_remove` | `id` | `()` |
 | `site_blacklist_set_enabled` | `id`, `enabled` | `()` |
+| `site_blacklist_set_scope` | `id`, `includeSubdomains` | `()` |
 | `site_blacklist_clear` | — | 删除数量 |
 | `site_blacklist_get_settings` | — | `{ enabled, blockSubresources }` |
 | `site_blacklist_set_settings` | `enabled`, `blockSubresources` | `()` |
@@ -184,7 +186,7 @@ record_block(app, ...)          异步写事件表 + 累加命中计数（私密
 | `WebResourceRequested`（Windows） | 子资源开关开启时，在 ABP 判定之前检查主机；命中返回 `204 No Content`，计入隐私统计。 |
 | `on_new_window` | 新窗口 URL 进入前端后会走 `browser_create`，由该入口兜底；不在 Rust 侧重复判断。 |
 | 前端轮询（macOS / Linux） | `browser_state` 返回的 URL 变化时，前端用同一份名单缓存判定；命中则隐藏 WebView 并显示拦截页。属于事后拦截，文档中明确标注。 |
-| 下载 | 首版不单独拦截下载 URL；被封杀站点的页面无法打开，仅站外页面直链下载可能绕过。列为已知限制。 |
+| 下载 | 在 `on_download::Requested` 中检查下载 URL；命中则拒绝开始传输，并发出 `browser://download` 的 `blocked` 事件（不写下载历史）。 |
 
 ### 5.4 事件契约
 
@@ -223,6 +225,7 @@ site-blocked:<host>|<ruleHost>|<entryId>
 - 顶级页面命中：写 `site_blacklist_events`，`hit_count += 1`，更新 `last_blocked_at`。
 - 子资源命中：只计入现有隐私统计（`privacy_block_events` / 拦截计数），不写封杀事件表，也不累加 `hit_count`，避免每个请求一次写库。
 - 私密标签：不写事件、不累加计数（与 `privacy_block_events` 的现有约定一致）；拦截本身仍然生效。
+- 事件表只保留最新 1000 条（`EVENT_RETENTION`）；写入与计数更新在同一个 SQLite 事务中完成。
 - 记录异步执行，失败只写日志，不影响拦截结果。
 
 ## 6. 前端设计
@@ -287,14 +290,14 @@ browser://site-blocked（页面内跳转 / 重定向 / 返回前进）
 | --- | --- | --- |
 | 顶级导航前置拦截 | 是（命令 + `NavigationStarting`） | 命令入口拦截；页面内跳转/重定向靠轮询事后拦截 |
 | 子资源拦截 | 是（`WebResourceRequested`） | 否（现有隐私模块同为 no-op） |
+| 下载拦截 | 是（`on_download`） | 是（`on_download`） |
 | 快捷封杀菜单 | React + 原生菜单 | React 菜单 / 页面内菜单不含该项 |
 
 已知限制（首版接受）：
 
 1. Service Worker 已缓存的响应可能不经过 `WebResourceRequested`；Windows 上仍会被 `NavigationStarting` 拦下，但离线缓存可能短暂显示旧内容。
-2. 站外页面通过 `<a download>` 直链下载被封杀站点的文件不会被拦。
-3. 非 Windows 平台在轮询间隔（约 750ms）内可能已经发出请求。
-4. 单标签页内的 `blob:` / `data:` 导航不匹配名单。
+2. 非 Windows 平台在轮询间隔（约 750ms）内可能已经发出请求。
+3. 单标签页内的 `blob:` / `data:` 导航不匹配名单。
 
 ## 8. 测试计划
 
@@ -352,3 +355,32 @@ cd desktop/src-tauri && cargo fmt -- --check && cargo check --all-targets && car
 - 私密标签不写封杀命中记录。
 - 现有隐私规则集、站点权限、广告拦截行为不回归。
 - `npm test`、`npm run build`、`cargo check --all-targets`、（可用时）`cargo test` 全部通过。
+
+## 11. 优化记录（2026-10-28）
+
+首版上线后做了一轮不改变交互契约的优化，重点是把“每个请求都要付的代价”和“名单规模”解耦，并补齐两个实际缺口。
+
+### 11.1 匹配性能
+
+| 项 | 优化前 | 优化后 |
+| --- | --- | --- |
+| Rust 匹配 | 每次请求线性扫描全部规则，O(规则数)，并按下标排序 | `exact` / `suffix` 两张哈希表；精确命中一次查表，否则最多按标签数逐级查后缀，O(标签数) |
+| 子资源 URL 解析 | 每次 `WebResourceRequested` 都 `Url::parse` | `fast_url_host` 直接切出 authority 的主机，零分配；仅导航仍走 `Url::parse` |
+| 前端匹配 | 每 750ms 轮询都复制并排序整份名单 | 名单变更时编译一次索引；轮询只做 O(标签数) 查表 |
+| 浏览器轮询 | 拦截页/错误页也每 750ms 调 `browser_state` | 显示错误页时暂停轮询，解除后再恢复 |
+| 命中记录写入 | 两次独立写库；事件表无上限 | 计数与事件同一事务；事件表只保留最新 1000 条 |
+
+5,000 条导入名单的匹配成本与 5 条时基本相同，`WebResourceRequested` 热路径不再随名单增长而变慢。
+
+### 11.2 补齐的缺口
+
+1. **下载拦截**：`on_download::Requested` 命中名单时直接拒绝传输，并发出 `blocked` 下载事件，下载中心可见，不写下载历史。
+2. **范围可调**：新增 `site_blacklist_set_scope` 与「同时封杀子域」开关；列表里的 `含子域 / 仅本站` 可点击切换。此前 `include_subdomains` 只能恒为 true。
+3. **菜单可用性**：快捷封杀会关闭当前 WebView，因此 `nativeMode` 变为 false；「解除封杀此网站」不再依赖原生 WebView，拦截页与菜单都能解除。
+4. **拦截页文案**：不再断言“没有发出任何请求”（macOS / Linux 的轮询兜底是事后拦截），改为“应用已阻止该网站继续加载”。
+
+### 11.3 新增测试
+
+- Rust：`exact_only_scope_does_not_cover_children`、`fast_host_handles_authority_forms`、`indexed_lookup_scales_without_linear_scan`。
+- 前端：exact-only 规则、数组顺序无关的最具体规则、2,000 条名单的匹配结果一致性。
+- 结果：`site_blacklist` 14 个单测全部通过，Rust 全量 243 个用例通过；前端 468 个用例通过；`npm run build` 与 `cargo check --all-targets` 通过。

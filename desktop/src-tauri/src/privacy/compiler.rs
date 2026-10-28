@@ -64,7 +64,10 @@ pub fn compile(parsed: &ParsedRule, _opts: &ParserOptions) -> CompiledRuleSet {
             // full `NetworkRule` and can evaluate them.
             let unconditional = rule.third_party.is_none() && rule.resource_types.is_empty();
             if unconditional {
-                out.exact_hosts.entry(host.clone()).or_default().push(rule.id);
+                out.exact_hosts
+                    .entry(host.clone())
+                    .or_default()
+                    .push(rule.id);
             } else {
                 out.suffix_hosts.push(rule.clone());
             }

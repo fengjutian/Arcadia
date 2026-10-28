@@ -42,8 +42,8 @@ export function BrowserErrorView({ tab, onRetry, onNewTab, onCopy, onUnblock }: 
       ? <>
           <Typography.Paragraph type="secondary">
             {host
-              ? <>你已把 <b>{host}</b> 加入封杀名单{ruleHost && ruleHost !== host ? `（命中规则 ${ruleHost}）` : ''}。为保护隐私，本次访问没有向该网站发出任何请求。</>
-              : '该网站已在封杀名单中，本次访问没有发出任何请求。'}
+              ? <>你已把 <b>{host}</b> 加入封杀名单{ruleHost && ruleHost !== host ? `（命中规则 ${ruleHost}）` : ''}，应用已阻止该网站继续加载。</>
+              : '该网站已在封杀名单中，应用已阻止它继续加载。'}
           </Typography.Paragraph>
           <Typography.Paragraph type="secondary">可在「设置 → 隐私 → 网站封杀」中管理名单；解除封杀后即可重新访问。</Typography.Paragraph>
         </>

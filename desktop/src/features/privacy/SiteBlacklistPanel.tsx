@@ -24,6 +24,7 @@ import {
   refreshSiteBlacklist,
   removeBlockedSite,
   setBlockedSiteEnabled,
+  setBlockedSiteScope,
   subscribeSiteBlacklist,
   updateBlacklistSettings,
 } from './siteBlacklist'
@@ -40,6 +41,7 @@ export function SiteBlacklistPanel() {
   const [blockSubresources, setBlockSubresources] = useState(true)
   const [input, setInput] = useState('')
   const [note, setNote] = useState('')
+  const [includeSubdomains, setIncludeSubdomains] = useState(true)
   const [filter, setFilter] = useState('')
   const [busy, setBusy] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -84,7 +86,7 @@ export function SiteBlacklistPanel() {
     if (!value) return
     setBusy(true)
     try {
-      const entry = await addBlockedSite(value, note.trim() || null, 'manual')
+      const entry = await addBlockedSite(value, note.trim() || null, 'manual', includeSubdomains)
       setInput('')
       setNote('')
       await reload()
@@ -139,6 +141,17 @@ export function SiteBlacklistPanel() {
     try {
       await setBlockedSiteEnabled(entry.id, next)
       await reload()
+    } catch (error) {
+      messageApi.error(String(error))
+    }
+  }
+
+  async function toggleScope(entry: SiteBlacklistEntry) {
+    const next = !entry.includeSubdomains
+    try {
+      await setBlockedSiteScope(entry.id, next)
+      await reload()
+      messageApi.success(next ? `${entry.host} 现在同时封杀子域` : `${entry.host} 现在只封杀该主机`)
     } catch (error) {
       messageApi.error(String(error))
     }
@@ -221,6 +234,10 @@ export function SiteBlacklistPanel() {
       />
       <Button type="primary" disabled={!desktop || busy || !input.trim()} onClick={() => void handleAdd()}>添加</Button>
     </div>
+    <div className="site-blacklist__scope">
+      <Switch checked={includeSubdomains} disabled={!desktop} onChange={setIncludeSubdomains} />
+      <span>同时封杀子域（如 <code>news.example.com</code>）；关闭后只封杀该主机</span>
+    </div>
 
     <Space wrap className="site-blacklist__toolbar">
       <Button disabled={!desktop} onClick={() => { setLastImport(null); setImportOpen(true) }}>批量导入</Button>
@@ -262,7 +279,13 @@ export function SiteBlacklistPanel() {
           {filtered.map(entry => <div className="site-blacklist__row" role="listitem" key={entry.id}>
             <span className="site-blacklist__host" title={entry.note ?? entry.host}>
               <b>{entry.host}</b>
-              {!entry.includeSubdomains && <Tag>仅本站</Tag>}
+              <Button
+                size="small"
+                type={entry.includeSubdomains ? 'default' : 'primary'}
+                disabled={!desktop}
+                title={entry.includeSubdomains ? '点击改为只封杀该主机' : '点击改为同时封杀子域'}
+                onClick={() => void toggleScope(entry)}
+              >{entry.includeSubdomains ? '含子域' : '仅本站'}</Button>
               {entry.source !== 'manual' && <Tag color="default">{entry.source === 'import' ? '导入' : entry.source === 'quick-block' ? '快捷封杀' : entry.source}</Tag>}
             </span>
             <span>{entry.hitCount}</span>

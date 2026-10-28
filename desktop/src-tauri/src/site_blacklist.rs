@@ -13,6 +13,7 @@
 //! list is compiled into an in-memory [`SiteRules`] snapshot on startup and
 //! after every mutation. See `docs/site-blacklist-plan.md`.
 
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::{Arc, OnceLock, RwLock};
 
@@ -28,6 +29,8 @@ pub const SITE_BLACKLIST_CHANGED_EVENT: &str = "browser://site-blacklist-changed
 pub const BLOCKED_ERROR_PREFIX: &str = "site-blocked:";
 
 const MAX_NOTE_CHARS: usize = 200;
+/// Newest N block events kept in SQLite. Older rows are pruned on insert.
+const EVENT_RETENTION: i64 = 1_000;
 
 /// Hosts that would block an entire public suffix if accepted. Keeping the list
 /// short is fine: anything here is a user mistake, not a real site.
@@ -131,68 +134,94 @@ struct SiteBlockedEvent {
 }
 
 #[derive(Debug, Clone)]
-struct Rule {
+struct RuleRef {
     entry_id: String,
-    host: String,
-    include_subdomains: bool,
 }
 
 /// Immutable compiled snapshot. Cloned atomically on reload.
+///
+/// Rules are split into two hash maps instead of a linear list so request-time
+/// matching is O(labels) rather than O(rules). A 5,000-entry imported list no
+/// longer adds work to every `WebResourceRequested` callback.
 #[derive(Debug, Clone, Default)]
 pub struct SiteRules {
     enabled: bool,
     block_subresources: bool,
-    rules: Vec<Rule>,
+    /// `include_subdomains = false`: only the exact host matches.
+    exact: HashMap<String, RuleRef>,
+    /// `include_subdomains = true`: the host and every parent suffix match.
+    suffix: HashMap<String, RuleRef>,
 }
 
 impl SiteRules {
     fn build(settings: SiteBlacklistSettings, entries: Vec<SiteBlacklistEntry>) -> Self {
-        let mut rules: Vec<Rule> = entries
-            .into_iter()
-            .filter(|entry| entry.enabled)
-            .map(|entry| Rule {
-                entry_id: entry.id,
-                host: entry.host,
-                include_subdomains: entry.include_subdomains,
-            })
-            .collect();
-        // Most specific rule first so diagnostics report the narrowest match.
-        rules.sort_by(|left, right| right.host.len().cmp(&left.host.len()));
+        let mut exact = HashMap::new();
+        let mut suffix = HashMap::new();
+        for entry in entries.into_iter().filter(|entry| entry.enabled) {
+            let rule = RuleRef { entry_id: entry.id };
+            if entry.include_subdomains {
+                suffix.insert(entry.host, rule);
+            } else {
+                exact.insert(entry.host, rule);
+            }
+        }
         Self {
             enabled: settings.enabled,
             block_subresources: settings.block_subresources,
-            rules,
+            exact,
+            suffix,
         }
-    }
-
-    pub fn enabled(&self) -> bool {
-        self.enabled
     }
 
     pub fn blocks_subresources(&self) -> bool {
-        self.enabled && self.block_subresources && !self.rules.is_empty()
+        self.enabled
+            && self.block_subresources
+            && !(self.exact.is_empty() && self.suffix.is_empty())
     }
 
-    fn match_host(&self, host: &str) -> Option<SiteMatch> {
+    fn match_host(&self, raw_host: &str) -> Option<SiteMatch> {
         if !self.enabled {
             return None;
         }
-        let host = normalize_match_host(host);
+        let host = normalize_match_host(raw_host);
         if host.is_empty() {
             return None;
         }
-        self.rules
-            .iter()
-            .find(|rule| host_matches(rule, &host))
-            .map(|rule| SiteMatch {
+        if let Some(rule) = self.exact.get(host.as_str()) {
+            return Some(SiteMatch {
+                rule_host: host.clone(),
                 host,
-                rule_host: rule.host.clone(),
                 entry_id: rule.entry_id.clone(),
-            })
+            });
+        }
+        // IP literals have no subdomain hierarchy; suffix matching would let a
+        // rule like `0.0.1` match every unrelated address ending in it.
+        if host.parse::<IpAddr>().is_ok() {
+            return None;
+        }
+        // Walk up the label chain: a.b.example.com → b.example.com →
+        // example.com. The first hit is the longest (most specific) suffix.
+        let mut found: Option<(String, String)> = None;
+        let mut cursor = host.as_str();
+        loop {
+            if let Some(rule) = self.suffix.get(cursor) {
+                found = Some((cursor.to_string(), rule.entry_id.clone()));
+                break;
+            }
+            match cursor.find('.') {
+                Some(index) => cursor = &cursor[index + 1..],
+                None => break,
+            }
+        }
+        found.map(|(rule_host, entry_id)| SiteMatch {
+            host,
+            rule_host,
+            entry_id,
+        })
     }
 
     fn match_url(&self, url: &str) -> Option<SiteMatch> {
-        if !self.enabled || self.rules.is_empty() {
+        if !self.enabled || (self.exact.is_empty() && self.suffix.is_empty()) {
             return None;
         }
         let parsed = Url::parse(url).ok()?;
@@ -204,14 +233,49 @@ impl SiteRules {
     }
 }
 
-fn host_matches(rule: &Rule, host: &str) -> bool {
-    if rule.host == host {
-        return true;
+/// Extract the host from a canonical http(s) or ws(s) URL without constructing
+/// a `Url`.
+///
+/// WebView2 hands `WebResourceRequested` a canonical lowercase ASCII URL, so
+/// this hot path can stay allocation-free. It deliberately returns `None` for
+/// anything that is not clearly http(s)/ws(s); navigations still go through
+/// `Url::parse` in [`SiteRules::match_url`].
+fn fast_url_host(url: &str) -> Option<&str> {
+    let prefix_len = [
+        ("https://", 8usize),
+        ("http://", 7),
+        ("wss://", 6),
+        ("ws://", 5),
+    ]
+    .into_iter()
+    .find_map(|(prefix, len)| {
+        url.get(..len)
+            .filter(|candidate| candidate.eq_ignore_ascii_case(prefix))
+            .map(|_| len)
+    })?;
+    let rest = &url[prefix_len..];
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..end];
+    if authority.is_empty() {
+        return None;
     }
-    rule.include_subdomains
-        && host.len() > rule.host.len()
-        && host.ends_with(&rule.host)
-        && host.as_bytes()[host.len() - rule.host.len() - 1] == b'.'
+    let authority = match authority.rfind('@') {
+        Some(index) => &authority[index + 1..],
+        None => authority,
+    };
+    if authority.starts_with('[') {
+        let close = authority.find(']')?;
+        return Some(&authority[..=close]);
+    }
+    let host = match authority.rfind(':') {
+        Some(index) => &authority[..index],
+        None => authority,
+    };
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
 }
 
 fn normalize_match_host(host: &str) -> String {
@@ -247,13 +311,15 @@ pub fn match_url(url: &str) -> Option<SiteMatch> {
 }
 
 /// One-stop check for the sub-resource filter: honours the global switch and
-/// the "block embedded resources" setting, and reads the snapshot once.
+/// the "block embedded resources" setting, reads the snapshot once, and avoids
+/// `Url::parse` on the request hot path.
 pub fn match_blocked_subresource(url: &str) -> Option<SiteMatch> {
     let rules = snapshot();
     if !rules.blocks_subresources() {
         return None;
     }
-    rules.match_url(url)
+    let host = fast_url_host(url)?;
+    rules.match_host(host)
 }
 
 /// Error string understood by `classifyNavigationError` on the UI side.
@@ -316,30 +382,45 @@ fn persist_block<R: Runtime>(
     found: &SiteMatch,
     tab_label: Option<&str>,
 ) -> Result<(), String> {
-    let database = local_store::connection(app)?;
+    let mut database = local_store::connection(app)?;
     let now = now_seconds();
-    database
-        .execute(
-            "UPDATE site_blacklist
-             SET hit_count = hit_count + 1, last_blocked_at = ?1
-             WHERE id = ?2",
-            params![now, found.entry_id],
-        )
-        .map_err(|error| error.to_string())?;
-    database
-        .execute(
-            "INSERT INTO site_blacklist_events(id, host, rule_host, url, tab_label, blocked_at)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                uuid::Uuid::new_v4().to_string(),
-                found.host,
-                found.rule_host,
-                url,
-                tab_label,
-                now
-            ],
-        )
-        .map_err(|error| error.to_string())?;
+    {
+        let transaction = database.transaction().map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "UPDATE site_blacklist
+                 SET hit_count = hit_count + 1, last_blocked_at = ?1
+                 WHERE id = ?2",
+                params![now, found.entry_id],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO site_blacklist_events(id, host, rule_host, url, tab_label, blocked_at)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    uuid::Uuid::new_v4().to_string(),
+                    found.host,
+                    found.rule_host,
+                    url,
+                    tab_label,
+                    now
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+    }
+    // Keep the history bounded: the settings page only ever shows the newest
+    // 20 rows, and a redirect chain can otherwise grow the table forever.
+    let _ = database.execute(
+        "DELETE FROM site_blacklist_events
+         WHERE id NOT IN (
+             SELECT id FROM site_blacklist_events
+             ORDER BY blocked_at DESC, rowid DESC
+             LIMIT ?1
+         )",
+        params![EVENT_RETENTION],
+    );
     Ok(())
 }
 
@@ -565,15 +646,16 @@ pub fn site_blacklist_add(
     input: String,
     note: Option<String>,
     source: Option<String>,
+    include_subdomains: Option<bool>,
 ) -> Result<SiteBlacklistEntry, String> {
     let host = normalize_host_input(&input)?;
     let database = local_store::connection(&app)?;
     // Blocking `example.com` covers its subdomains by default; this mirrors
-    // how users describe "封杀一个网站".
+    // how users describe "封杀一个网站". The form can opt into "仅本站".
     let entry = insert_entry(
         &database,
         &host,
-        true,
+        include_subdomains.unwrap_or(true),
         note.as_deref(),
         sanitize_source(source.as_deref()),
     )?
@@ -645,6 +727,26 @@ pub fn site_blacklist_set_enabled(app: AppHandle, id: String, enabled: bool) -> 
         .execute(
             "UPDATE site_blacklist SET enabled = ?1, updated_at = ?2 WHERE id = ?3",
             params![enabled as i64, now_seconds(), id],
+        )
+        .map_err(|error| error.to_string())?;
+    reload(&app)?;
+    notify_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn site_blacklist_set_scope(
+    app: AppHandle,
+    id: String,
+    include_subdomains: bool,
+) -> Result<(), String> {
+    let database = local_store::connection(&app)?;
+    database
+        .execute(
+            "UPDATE site_blacklist
+             SET include_subdomains = ?1, updated_at = ?2
+             WHERE id = ?3",
+            params![include_subdomains as i64, now_seconds(), id],
         )
         .map_err(|error| error.to_string())?;
     reload(&app)?;
@@ -892,6 +994,67 @@ mod tests {
         assert!(rules.match_url("data:text/html,example.com").is_none());
         assert!(rules.match_url("about:blank").is_none());
         assert!(rules.match_url("not a url").is_none());
+    }
+
+    #[test]
+    fn exact_only_scope_does_not_cover_children() {
+        let rules = SiteRules::build(settings(true, true), vec![entry("example.com", false)]);
+        assert!(rules.match_url("https://example.com/").is_some());
+        assert!(rules.match_url("https://www.example.com/").is_none());
+        assert!(rules.match_url("https://a.example.com/").is_none());
+    }
+
+    #[test]
+    fn fast_host_handles_authority_forms() {
+        assert_eq!(
+            fast_url_host("https://Example.COM:8443/a"),
+            Some("Example.COM")
+        );
+        assert_eq!(
+            fast_url_host("http://user:pass@a.example.com/x"),
+            Some("a.example.com")
+        );
+        assert_eq!(fast_url_host("https://[::1]:8080/"), Some("[::1]"));
+        assert_eq!(
+            fast_url_host("HTTPS://a.example.com"),
+            Some("a.example.com")
+        );
+        assert_eq!(
+            fast_url_host("wss://socket.example.com/ws"),
+            Some("socket.example.com")
+        );
+        assert_eq!(fast_url_host("ws://a.example.com"), Some("a.example.com"));
+        assert_eq!(fast_url_host("ftp://a.example.com"), None);
+        assert_eq!(fast_url_host("https:///nohost"), None);
+    }
+
+    #[test]
+    fn ip_hosts_only_match_exactly() {
+        let rules = SiteRules::build(
+            settings(true, true),
+            vec![entry("0.0.1", true), entry("127.0.0.1", false)],
+        );
+        assert!(rules.match_url("http://127.0.0.1:8080/").is_some());
+        // 10.0.0.1 ends with "0.0.1" but must not inherit its suffix rule.
+        assert!(rules.match_url("http://10.0.0.1/").is_none());
+    }
+
+    #[test]
+    fn indexed_lookup_scales_without_linear_scan() {
+        // 2,000 unrelated rules must not change the result for a matched host.
+        let mut entries: Vec<SiteBlacklistEntry> = (0..2_000)
+            .map(|index| entry(&format!("spam{index}.example.net"), true))
+            .collect();
+        entries.push(entry("example.com", true));
+        let rules = SiteRules::build(settings(true, true), entries);
+        assert_eq!(
+            rules
+                .match_url("https://deep.a.example.com/x")
+                .unwrap()
+                .rule_host,
+            "example.com"
+        );
+        assert!(rules.match_url("https://unrelated.org/").is_none());
     }
 
     #[test]
