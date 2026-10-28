@@ -18,7 +18,7 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
 
 const BaseInput = forwardRef<InputRef, InputProps>(function Input({
   size = 'middle', prefix, suffix, allowClear, status, className = '',
-  onPressEnter, onKeyDown, value, defaultValue, type = 'text', ...props
+  onPressEnter, onKeyDown, value, defaultValue, type = 'text', style, ...props
 }, forwardedRef) {
   const inputRef = useRef<HTMLInputElement>(null)
   useImperativeHandle(forwardedRef, () => ({
@@ -43,7 +43,7 @@ const BaseInput = forwardRef<InputRef, InputProps>(function Input({
     inputRef.current.focus()
   }
   const hasValue = String(value ?? defaultValue ?? '').length > 0
-  return <span className={`ui-input ant-input-affix-wrapper ui-input--${size} ${status ? `is-${status}` : ''} ${props.disabled ? 'is-disabled' : ''} ${className}`.trim()}>
+  return <span className={`ui-input ant-input-affix-wrapper ui-input--${size} ${status ? `is-${status}` : ''} ${props.disabled ? 'is-disabled' : ''} ${className}`.trim()} style={style}>
     {prefix && <span className="ui-input__prefix ant-input-prefix">{prefix}</span>}
     <input ref={inputRef} className="ui-input__control ant-input" type={type} value={value} defaultValue={defaultValue} onKeyDown={event => { if (event.key === 'Enter') onPressEnter?.(event); onKeyDown?.(event) }} {...props}/>
     {allowClear && hasValue && <button type="button" className="ui-input__clear" aria-label="清空" onClick={clear}>×</button>}

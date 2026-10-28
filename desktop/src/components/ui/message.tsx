@@ -2,10 +2,11 @@ import { CheckCircle2, CircleAlert, Info, LoaderCircle, TriangleAlert, X } from 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { TOAST_STACK_VARIABLE, tallestToastStack, toastStackCssValue } from './toastStack'
+import { repeatedContentKey, trimToVisible } from './toastPolicy'
 
 type MessageType = 'success' | 'error' | 'info' | 'warning' | 'loading'
 interface MessageConfig { key?: string; type?: MessageType; content: ReactNode; duration?: number }
-interface Toast extends MessageConfig { id: string; type: MessageType }
+interface Toast extends MessageConfig { id: string; type: MessageType; repeated?: string }
 interface MessageApi { open: (config: MessageConfig) => void; success: (content: ReactNode, duration?: number) => void; error: (content: ReactNode, duration?: number) => void; info: (content: ReactNode, duration?: number) => void; warning: (content: ReactNode, duration?: number) => void; loading: (content: ReactNode, duration?: number) => void; destroy: (key?: string) => void }
 
 const EVENT = 'arcadia-ui-message'
@@ -32,7 +33,12 @@ function useToastStore(): [MessageApi, ReactNode] {
   const remove = useCallback((id: string) => setToasts(items => items.filter(item => item.id !== id)), [])
   const open = useCallback((config: MessageConfig) => {
     const id = config.key ?? crypto.randomUUID()
-    setToasts(items => [...items.filter(item => item.id !== id), { ...config, id, type: config.type ?? 'info' }])
+    // A repeated text message replaces its predecessor instead of stacking.
+    const repeated = config.key ? undefined : repeatedContentKey(config.content)
+    setToasts(items => trimToVisible([
+      ...items.filter(item => item.id !== id && !(repeated !== undefined && item.repeated === repeated)),
+      { ...config, id, repeated, type: config.type ?? 'info' },
+    ]))
     if (config.duration !== 0) window.setTimeout(() => remove(id), (config.duration ?? 3) * 1000)
   }, [remove])
   const api = useMemo<MessageApi>(() => ({

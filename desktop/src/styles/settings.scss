@@ -42,10 +42,123 @@
   max-width: none;
 }
 
-// Privacy uses a two-column layout inside the card, so let the card use the
-// full pane width instead of leaving a large empty band on the right.
-.privacy-settings-card {
+// Settings cards fill the pane and keep the same 20px inset as the page.
+.settings-page .settings-card {
   max-width: none;
+}
+
+// Provider settings use a fixed form grid instead of a wrapping Space so the
+// six fields line up in two balanced rows at every desktop width.
+.provider-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 16px;
+
+  > .ui-form-item {
+    min-width: 0;
+    margin-bottom: 12px;
+  }
+
+  .ui-form-item__control {
+    display: block;
+    min-width: 0;
+  }
+
+  .ui-input,
+  .ui-select,
+  .ui-input-number {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.provider-form-actions {
+  margin-top: 2px;
+}
+
+@media (max-width: 1180px) {
+  .provider-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+// MCP connection form: labelled fields, a command/arguments row and two
+// half-width JSON editors keep the form scannable and avoid clipped text.
+.mcp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.mcp-form__row {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.mcp-form__row--identity {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.mcp-form__row--connection {
+  grid-template-columns: minmax(220px, .8fr) minmax(0, 2fr);
+}
+
+.mcp-form__row--json {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mcp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mcp-field__label {
+  color: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  opacity: .68;
+
+  small {
+    font-size: 11px;
+    opacity: .82;
+  }
+}
+
+.mcp-field:not(.mcp-field--transport) .ui-input,
+.mcp-field:not(.mcp-field--transport) .ui-textarea {
+  width: 100%;
+}
+
+.mcp-field--transport {
+  width: auto;
+}
+
+.mcp-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.mcp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-size: 13px;
+  opacity: .78;
+}
+
+@media (max-width: 900px) {
+  .mcp-form__row--identity,
+  .mcp-form__row--connection,
+  .mcp-form__row--json {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .route-view[data-view='settings']:not(.is-hidden) {

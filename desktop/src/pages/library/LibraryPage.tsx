@@ -346,23 +346,25 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         </div>
       </header>
 
-      <div className="library-overview" aria-label="知识库概览">
-        <OverviewMetric icon={<BookOutlined/>} label="全部文档" value={documents.length} hint="网页与笔记"/>
-        <OverviewMetric icon={<StarOutlined/>} label="收藏" value={starredCount} hint="值得重读"/>
-        <OverviewMetric icon={<FolderOutlined/>} label="集合" value={collections.length} hint="主题归档"/>
-      </div>
+      <div className="library-page__body">
+        <div className="library-overview" aria-label="知识库概览">
+          <OverviewMetric icon={<BookOutlined/>} label="全部文档" value={documents.length} hint="网页与笔记"/>
+          <OverviewMetric icon={<StarOutlined/>} label="收藏" value={starredCount} hint="值得重读"/>
+          <OverviewMetric icon={<FolderOutlined/>} label="集合" value={collections.length} hint="主题归档"/>
+        </div>
 
-      <Tabs
-        className="library-tabs"
-        activeKey={tab}
-        onChange={setTab}
-        items={[
-          { key: 'documents', label: <TabLabel label="最近保存" count={documents.length}/>, children: documentsContent },
-          { key: 'collections', label: <TabLabel label="集合" count={collections.length}/>, children: collectionContent },
-          { key: 'history', label: <TabLabel label="近期浏览" count={recentHistory.length}/>, children: historyContent },
-          { key: 'downloads', label: <TabLabel label="下载记录" count={downloadCenter.records.length}/>, children: downloadContent },
-        ]}
-      />
+        <Tabs
+          className="library-tabs"
+          activeKey={tab}
+          onChange={setTab}
+          items={[
+            { key: 'documents', label: <TabLabel label="最近保存" count={documents.length}/>, children: documentsContent },
+            { key: 'collections', label: <TabLabel label="集合" count={collections.length}/>, children: collectionContent },
+            { key: 'history', label: <TabLabel label="近期浏览" count={recentHistory.length}/>, children: historyContent },
+            { key: 'downloads', label: <TabLabel label="下载记录" count={downloadCenter.records.length}/>, children: downloadContent },
+          ]}
+        />
+      </div>
     </div>
 
     <Modal title="添加文档" open={addOpen} onCancel={() => setAddOpen(false)} footer={null} width={580} className="library-add-modal">

@@ -164,6 +164,52 @@ body {
   overflow: hidden;
 }
 
+// One quiet scrollbar treatment for every scroll container. WebView2 is
+// Chromium based, so the pseudo-elements also remove the classic Windows
+// arrow buttons in favour of a slim rounded thumb.
+:root {
+  --scrollbar-thumb: #c5cfc8;
+  --scrollbar-thumb-hover: #a7b6ab;
+}
+
+body[data-theme='dark'] {
+  --scrollbar-thumb: #48574d;
+  --scrollbar-thumb-hover: #607567;
+}
+
+body[data-theme='github'] {
+  --scrollbar-thumb: #c9d1d9;
+  --scrollbar-thumb-hover: #8c959f;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .app-layout {
   display: flex;
   flex-direction: column;
@@ -277,7 +323,7 @@ body {
 .privacy-section {
   min-height: 150px;
 
-  > .ant-alert { margin-bottom: 14px; }
+  > .ui-alert { margin-bottom: 14px; }
   > p.ant-typography:first-child { margin-bottom: 18px; }
 }
 
@@ -652,8 +698,12 @@ body[data-reduce-motion='true'] {
   .rail-button .nav-glyph { transition-duration: .01ms !important; }
 }
 
-.plugin-settings .ant-alert { margin-bottom: 16px; }
-.plugin-list { border-top: 1px solid var(--accent-border); }
+.plugin-settings .ui-alert { margin-bottom: 16px; }
+.plugin-list {
+  border-top: 1px solid var(--accent-border);
+
+  .ui-list-item { padding: 14px 0; }
+}
 .plugin-description .ant-typography { margin-bottom: 8px; }
 
 .advanced-setting-row {
@@ -2193,25 +2243,55 @@ body[data-theme='dark'] .window-controls > .window-controls__close:hover { backg
   padding-right: calc(var(--window-control-strip) + 18px);
 }
 
-// Toasts are portalled to `body` by `components/ui/message.tsx`, so they can no
+// Toasts are portalled to `body` by `components/ui/message.tsx`, so they no
 // longer inherit the route's stacking context — a fixed layer nested inside the
 // route used to be repainted under the tab strip by `.route-view`'s entry
 // animation. Docking the stack below the chrome also keeps it off the tab strip
 // and the omnibox.
 //
-// On the browser route the page lives in a native child WebView that paints
-// above the React surface, so nothing can float over the page: the route
-// reserves a shelf of exactly the stack height (`--toast-stack-height`, measured
-// and published by the message layer) and the surface slides down until the
-// stack empties. Never overlap the chrome instead — the toolbar row hosts the
-// address bar and the tab strip hosts the tabs.
+// On the browser route a message is a notification bar rather than a floating
+// card, next to `.browser-find` and `.browser-permission-prompt`: none of them
+// may float. The page is a native child WebView painted above the React
+// surface, so a card over the page would be invisible, while a card over the
+// toolbar would sit on the omnibox. The route instead reserves a shelf of
+// exactly the stack height (`--toast-stack-height`, measured and published by
+// the message layer) directly under the toolbar, and the surface — the element
+// whose rect defines the native WebView bounds — starts below it.
 //
 // The shelf moves without a transition on purpose: every step of a margin
 // animation resizes the native WebView through the surface's ResizeObserver,
-// which would reflow the page a dozen times for one toast.
+// which would reflow the page a dozen times for one message.
 .ui-message-layer {
   top: calc(var(--app-topbar-height, 44px) + var(--browser-chrome-extra, 0px));
   padding-top: 10px;
+}
+
+body[data-view='browser'] .ui-message-layer {
+  left: var(--sider-width, 72px);
+  right: 0;
+  transform: none;
+  align-items: stretch;
+  gap: 0;
+  padding-top: 0;
+}
+
+body[data-view='browser'] .ui-message {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  padding: 9px 16px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  border-color: #d8ded9;
+  background: #fafbf9;
+  color: #303a34;
+  box-shadow: none;
+}
+
+body[data-theme='dark'][data-view='browser'] .ui-message {
+  border-color: #2a3730;
+  background: #1b2420;
+  color: #d2ddd6;
 }
 
 body[data-view='browser'] .browser-content > .web-surface {
@@ -2487,17 +2567,23 @@ body[data-theme='github'] {
 /* ------------------------------------------------------------------ */
 .site-blacklist {
   &__switches {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px 28px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 24px;
     margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--accent-border) 82%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent-soft) 48%, transparent);
 
     label {
       display: flex;
       align-items: center;
       gap: 9px;
+      min-height: 24px;
+      color: inherit;
       font-size: 13px;
-      color: var(--text-color, #1f2329);
+      line-height: 1.4;
     }
   }
 
@@ -2637,6 +2723,7 @@ body[data-theme='github'] {
 
 @media (max-width: 900px) {
   .site-blacklist__add { grid-template-columns: 1fr; }
+  .site-blacklist__switches { grid-template-columns: 1fr; }
   .site-blacklist__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .site-blacklist__row { grid-template-columns: minmax(130px, 1fr) 56px 68px 68px; }
   .site-blacklist__row > span:nth-child(3) { display: none; }

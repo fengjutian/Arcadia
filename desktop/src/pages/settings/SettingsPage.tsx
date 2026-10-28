@@ -531,21 +531,21 @@ function AIProviderSettings() {
     }
   }
 
-  return <>{contextHolder}<Card title="AI Provider" className="settings-card"><Typography.Paragraph type="secondary">连接兼容 Provider，用于摘要、翻译和知识问答。普通配置写入本地 SQLite，API Key 通过操作系统密钥环保存；前端不会回显 Key 明文。</Typography.Paragraph>
+  return <>{contextHolder}<Card title="AI Provider" className="settings-card provider-settings-card"><Typography.Paragraph type="secondary">连接兼容 Provider，用于摘要、翻译和知识问答。普通配置写入本地 SQLite，API Key 通过操作系统密钥环保存；前端不会回显 Key 明文。</Typography.Paragraph>
     <Form form={form} layout="vertical" initialValues={{type:'openai-compatible',timeoutSeconds:60}} onFinish={handleSubmit}>
-      <Space wrap>
-        <Form.Item name="type" label="Provider 类型" rules={[{required:true}]}><Select options={PROVIDER_OPTIONS} style={{minWidth:220}} onChange={handleProviderTypeChange}/></Form.Item>
-        <Form.Item name="baseUrl" label="Base URL" rules={[{required:true,message:'请输入 Base URL'},{type:'url',message:'需为有效 http(s) URL'}]}><Input placeholder="https://api.example.com/v1" style={{minWidth:280}}/></Form.Item>
+      <div className="provider-form-grid">
+        <Form.Item name="type" label="Provider 类型" rules={[{required:true}]}><Select options={PROVIDER_OPTIONS} onChange={handleProviderTypeChange}/></Form.Item>
+        <Form.Item name="baseUrl" label="Base URL" rules={[{required:true,message:'请输入 Base URL'},{type:'url',message:'需为有效 http(s) URL'}]}><Input placeholder="https://api.example.com/v1"/></Form.Item>
         <Form.Item name="model" label="模型" rules={[{required:true,message:'请输入模型名称'}]}>
           {activeType === 'minimax'
-            ? <Select options={MINIMAX_MODEL_OPTIONS} style={{minWidth:250}}/>
-            : <Input placeholder={activeType ? PROVIDER_PRESETS[activeType].placeholderModel : 'Qwen/Qwen3.6-27B'} style={{minWidth:250}}/>}
+            ? <Select options={MINIMAX_MODEL_OPTIONS}/>
+            : <Input placeholder={activeType ? PROVIDER_PRESETS[activeType].placeholderModel : 'Qwen/Qwen3.6-27B'}/>}
         </Form.Item>
-        <Form.Item name="embeddingModel" label="Embedding 模型（可选）"><Input placeholder={activeType ? PROVIDER_PRESETS[activeType].embeddingPlaceholder : 'text-embedding-3-small'} style={{minWidth:220}}/></Form.Item>
-        <Form.Item name="timeoutSeconds" label="超时（秒）" rules={[{type:'number',min:1,max:600,message:'范围 1-600'}]}><InputNumber min={1} max={600} style={{width:120}}/></Form.Item>
-        <Form.Item name="apiKey" label={activeType === 'ollama' ? 'API Key（可选）' : 'API Key'} tooltip="已保存的 Key 不会回显，留空表示不清除"><Input.Password prefix={<KeyOutlined/>} placeholder={activeType === 'ollama' ? '本地服务通常不需要' : 'sk-...'} style={{minWidth:260}} autoComplete="off"/></Form.Item>
-      </Space>
-      <Space>
+        <Form.Item name="embeddingModel" label="Embedding 模型（可选）"><Input placeholder={activeType ? PROVIDER_PRESETS[activeType].embeddingPlaceholder : 'text-embedding-3-small'}/></Form.Item>
+        <Form.Item name="timeoutSeconds" label="超时（秒）" rules={[{type:'number',min:1,max:600,message:'范围 1-600'}]}><InputNumber min={1} max={600}/></Form.Item>
+        <Form.Item name="apiKey" label={activeType === 'ollama' ? 'API Key（可选）' : 'API Key'} tooltip="已保存的 Key 不会回显，留空表示不清除"><Input.Password prefix={<KeyOutlined/>} placeholder={activeType === 'ollama' ? '本地服务通常不需要' : 'sk-...'} autoComplete="off"/></Form.Item>
+      </div>
+      <Space className="provider-form-actions">
         <Button type="primary" htmlType="submit" icon={<SaveOutlined/>} loading={saving}>保存到密钥环</Button>
         <Button icon={<ThunderboltOutlined/>} loading={testing} onClick={() => void handleTestCurrent()}>测试连接</Button>
         <Button onClick={()=>form.resetFields()}>清空</Button>
@@ -1034,17 +1034,49 @@ function McpSettings() {
 
   return <>{contextHolder}<Card title="MCP Server" className="settings-card mcp-settings">
     <Alert type="info" showIcon message="MCP 连接已启用" description="支持本地 stdio、Streamable HTTP 与 SSE 响应。每次工具调用都会显示参数并要求明确授权。"/>
-    <Space direction="vertical" style={{width:'100%',marginTop:16}}>
-      <Input value={name} onChange={event=>setName(event.target.value)} placeholder="Server 名称"/>
-      <Segmented value={transport} onChange={value=>setTransport(value as McpTransport)} options={[{label:'stdio',value:'stdio'},{label:'HTTP',value:'http'},{label:'SSE',value:'sse'}]}/>
+    <div className="mcp-form">
+      <div className="mcp-form__row mcp-form__row--identity">
+        <label className="mcp-field">
+          <span className="mcp-field__label">Server 名称</span>
+          <Input value={name} onChange={event=>setName(event.target.value)} placeholder="例如 filesystem"/>
+        </label>
+        <div className="mcp-field mcp-field--transport">
+          <span className="mcp-field__label">传输方式</span>
+          <Segmented value={transport} onChange={value=>setTransport(value as McpTransport)} options={[{label:'stdio',value:'stdio'},{label:'HTTP',value:'http'},{label:'SSE',value:'sse'}]}/>
+        </div>
+      </div>
       {transport === 'stdio'
-        ? <><Input value={command} onChange={event=>setCommand(event.target.value)} placeholder="启动命令，例如 npx"/><Input.TextArea value={args} onChange={event=>setArgs(event.target.value)} autoSize={{minRows:2,maxRows:5}} placeholder={'参数，每行一个\n-y\n@modelcontextprotocol/server-filesystem'}/></>
-        : <Input value={url} onChange={event=>setUrl(event.target.value)} placeholder={transport === 'sse' ? 'https://example.com/sse' : 'https://example.com/mcp'}/>
+        ? <div className="mcp-form__row mcp-form__row--connection">
+            <label className="mcp-field">
+              <span className="mcp-field__label">启动命令</span>
+              <Input value={command} onChange={event=>setCommand(event.target.value)} placeholder="例如 npx"/>
+            </label>
+            <label className="mcp-field">
+              <span className="mcp-field__label">参数 <small>每行一个</small></span>
+              <Input.TextArea value={args} onChange={event=>setArgs(event.target.value)} rows={3} placeholder={'例如：\n-y\n@modelcontextprotocol/server-filesystem'}/>
+            </label>
+          </div>
+        : <label className="mcp-field">
+            <span className="mcp-field__label">服务地址</span>
+            <Input value={url} onChange={event=>setUrl(event.target.value)} placeholder={transport === 'sse' ? 'https://example.com/sse' : 'https://example.com/mcp'}/>
+          </label>
       }
-      <Input.TextArea value={env} onChange={event=>setEnv(event.target.value)} autoSize={{minRows:2,maxRows:6}} placeholder={'环境变量 JSON，例如 {"TOKEN":"..."}'}/>
-      <Input.TextArea value={headers} onChange={event=>setHeaders(event.target.value)} autoSize={{minRows:2,maxRows:6}} placeholder={'请求头 JSON，例如 {"Authorization":"Bearer ..."}'}/>
-      <Space><Switch checked={enabled} onChange={setEnabled}/><span>启用</span><Button type="primary" loading={saving} onClick={()=>void save()}>{editingId ? '保存修改' : '添加 Server'}</Button>{editingId&&<Button onClick={reset}>取消编辑</Button>}</Space>
-    </Space>
+      <div className="mcp-form__row mcp-form__row--json">
+        <label className="mcp-field">
+          <span className="mcp-field__label">环境变量 JSON</span>
+          <Input.TextArea value={env} onChange={event=>setEnv(event.target.value)} rows={2} placeholder={'{"TOKEN":"..."}'}/>
+        </label>
+        <label className="mcp-field">
+          <span className="mcp-field__label">请求头 JSON</span>
+          <Input.TextArea value={headers} onChange={event=>setHeaders(event.target.value)} rows={2} placeholder={'{"Authorization":"Bearer ..."}'}/>
+        </label>
+      </div>
+      <div className="mcp-form__actions">
+        <label className="mcp-toggle"><Switch checked={enabled} onChange={setEnabled}/><span>启用</span></label>
+        <Button type="primary" loading={saving} onClick={()=>void save()}>{editingId ? '保存修改' : '添加 Server'}</Button>
+        {editingId&&<Button onClick={reset}>取消编辑</Button>}
+      </div>
+    </div>
     <List style={{marginTop:18}} dataSource={servers} locale={{emptyText:'尚未配置 MCP Server'}} renderItem={server=><List.Item actions={[<Button size="small" disabled={!server.enabled} onClick={()=>void inspect(server)}>连接</Button>,<Button size="small" onClick={()=>edit(server)}>编辑</Button>,<Popconfirm title="删除这个 MCP Server？" onConfirm={()=>void remove(server.id)}><Button size="small" danger>删除</Button></Popconfirm>]}><List.Item.Meta title={<Space><b>{server.name}</b><Tag>{server.transport}</Tag><Tag color={server.enabled?'green':'default'}>{server.enabled?'启用':'停用'}</Tag></Space>} description={server.transport==='stdio'?[server.command,...server.args].filter(Boolean).join(' '):server.url}/></List.Item>}/>
     <Drawer title={inspecting ? `MCP · ${inspecting.name}` : 'MCP'} width={560} open={Boolean(inspecting)} onClose={()=>setInspecting(null)}>
       {mcpBusy && <Spin/>}<Typography.Title level={5}>工具</Typography.Title>
