@@ -235,7 +235,7 @@ body[data-theme='github'] {
   box-shadow: inset 0 -1px 0 var(--chrome-border, #d8ded9);
 
   .brand {
-    width: var(--sider-width, 72px);
+    width: var(--sider-width, 64px);
     height: 100% !important;
     flex: none;
     padding: 0 10px;
@@ -799,8 +799,7 @@ body[data-reduce-motion='true'] {
     font-family: var(--font-ui);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    letter-spacing: .6px;
   }
 
   p {
@@ -824,6 +823,30 @@ body[data-reduce-motion='true'] {
 
 @media (max-width: 760px) {
   .font-option-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+body[data-theme='dark'] {
+  .font-option {
+    background: #1a231e;
+  }
+
+  .font-option__sample,
+  .font-option__name {
+    color: #e2eae4;
+  }
+
+  .font-option__meta {
+    color: #9aa89f;
+  }
+
+  .typography-preview {
+    background: #1a231e;
+    color: #d2ddd6;
+  }
+
+  .typography-preview p + p {
+    color: #9aa89f;
+  }
 }
 
 

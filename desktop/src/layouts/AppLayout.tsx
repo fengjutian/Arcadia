@@ -8,7 +8,7 @@ import { TopBarPortalProvider } from '../app/TopBarPortal'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label: '浏览器' }, { key: 'library', icon: <BookOpen/>, label: '知识库' }, { key: 'search', icon: <Search/>, label: '搜索' }, { key: 'ai', icon: <Bot/>, label: 'AI Research' }] as const
 
-const MIN_SIDER_WIDTH = 72
+const MIN_SIDER_WIDTH = 64
 const MAX_SIDER_WIDTH = 280
 
 export function AppLayout({ view, onViewChange, children }: { view: View; onViewChange: (view: View) => void; children: ReactNode }) {

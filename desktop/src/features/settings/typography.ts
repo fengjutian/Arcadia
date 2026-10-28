@@ -71,8 +71,9 @@ export function clampTypographyFontSize(value: number): number {
 }
 
 function normalizeSettings(value: Partial<TypographySettings> | null | undefined): TypographySettings {
-  const fontFamily = TYPOGRAPHY_FONTS.some(font => font.id === value?.fontFamily)
-    ? value!.fontFamily as TypographyFontId
+  const requested = value?.fontFamily
+  const fontFamily = TYPOGRAPHY_FONTS.some(font => font.id === requested)
+    ? requested as TypographyFontId
     : DEFAULT_TYPOGRAPHY_SETTINGS.fontFamily
   return {
     fontFamily,
@@ -100,9 +101,10 @@ export function applyTypographySettings(settings: TypographySettings): void {
   root.dataset.typographyFont = normalized.fontFamily
 }
 
-export function writeTypographySettings(settings: TypographySettings): void {
+export function writeTypographySettings(settings: TypographySettings): TypographySettings {
   const normalized = normalizeSettings(settings)
   localStorage.setItem(TYPOGRAPHY_STORAGE_KEY, JSON.stringify(normalized))
   applyTypographySettings(normalized)
   window.dispatchEvent(new CustomEvent<TypographySettings>(TYPOGRAPHY_CHANGE_EVENT, { detail: normalized }))
+  return normalized
 }

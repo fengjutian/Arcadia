@@ -43,8 +43,9 @@ describe('typography settings', () => {
   it('persists, applies CSS variables and notifies listeners', () => {
     const listener = vi.fn()
     window.addEventListener(TYPOGRAPHY_CHANGE_EVENT, listener)
-    writeTypographySettings({ fontFamily: 'lxgw-wenkai', fontSize: 22 })
+    const saved = writeTypographySettings({ fontFamily: 'lxgw-wenkai', fontSize: 22 })
 
+    expect(saved).toEqual({ fontFamily: 'lxgw-wenkai', fontSize: 22 })
     expect(readTypographySettings()).toEqual({ fontFamily: 'lxgw-wenkai', fontSize: 22 })
     const style = document.documentElement.style
     expect(style.getPropertyValue('--font-ui')).toContain('LXGW WenKai')
@@ -53,6 +54,13 @@ describe('typography settings', () => {
     expect(document.documentElement.dataset.typographyFont).toBe('lxgw-wenkai')
     expect(listener).toHaveBeenCalledOnce()
     window.removeEventListener(TYPOGRAPHY_CHANGE_EVENT, listener)
+  })
+
+  it('returns the normalized settings so callers can mirror the stored values', () => {
+    const saved = writeTypographySettings({ fontFamily: 'system', fontSize: 99 })
+    expect(saved).toEqual({ fontFamily: 'system', fontSize: FONT_SIZE_MAX })
+    expect(readTypographySettings()).toEqual(saved)
+    expect(document.documentElement.style.getPropertyValue('--reading-font-size')).toBe(`${FONT_SIZE_MAX}px`)
   })
 
   it('offers only the known open-source-first font families', () => {

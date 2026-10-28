@@ -1129,18 +1129,15 @@ function TypographySettingsPanel() {
   const activeFont = typographyFont(settings.fontFamily)
 
   function update(patch: Partial<TypographySettings>) {
-    const next = { ...settings, ...patch }
-    setSettings(next)
-    writeTypographySettings(next)
+    setSettings(writeTypographySettings({ ...settings, ...patch }))
   }
 
   function reset() {
-    setSettings(DEFAULT_TYPOGRAPHY_SETTINGS)
-    writeTypographySettings(DEFAULT_TYPOGRAPHY_SETTINGS)
+    setSettings(writeTypographySettings(DEFAULT_TYPOGRAPHY_SETTINGS))
   }
 
   return <Card title="字体" className="settings-card typography-settings">
-    <Typography.Paragraph type="secondary">为界面和阅读正文选择字体。优先使用开源字体；本机未安装时会回退到同一风格的系统字体，不会影响排版与阅读。</Typography.Paragraph>
+    <Typography.Paragraph type="secondary">为界面和阅读正文选择字体。优先使用开源字体；本机未安装时会回退到同一风格的系统字体，仍可正常阅读。</Typography.Paragraph>
     <div className="font-option-grid" role="radiogroup" aria-label="字体">
       {TYPOGRAPHY_FONTS.map(font => {
         const selected = font.id === settings.fontFamily
