@@ -806,8 +806,13 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
             }
             extra={
               <Space size={6} wrap>
-                <Button size="small" icon={<RobotOutlined />} onClick={() => void openAgent()}>
-                  Agent 运行历史
+                <Button
+                  size="small"
+                  icon={<RobotOutlined />}
+                  title="查看通过“深度研究”执行的任务，不包含普通问答"
+                  onClick={() => void openAgent()}
+                >
+                  深度研究记录{agentRuns.length > 0 ? ` ${agentRuns.length}` : ''}
                 </Button>
                 <Button size="small" icon={<FileTextOutlined />} onClick={() => setSourcesOpen(true)}>
                   {citedDocIds.size > 0 ? `引用 ${citedDocIds.size}` : `来源 ${documents.length}`}
@@ -928,7 +933,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           onDeleted={() => setSelectedDoc(null)}
         />
         <Drawer
-          title="Agent 运行历史"
+          title="深度研究记录"
           placement="right"
           width={460}
           open={agentOpen}

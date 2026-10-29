@@ -1313,7 +1313,7 @@ export function SettingsPage() {
   const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','高级','字体','搜索引擎'].map((label, index) => ({
     key: label,
     label,
-    children: index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <AdvancedSettingsPanel/> : index === 9 ? <TypographySettingsPanel/> : <SearchEngineSettings/>,
+    children: <div className="settings-pane">{index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <AdvancedSettingsPanel/> : index === 9 ? <TypographySettingsPanel/> : <SearchEngineSettings/>}</div>,
   }))
   return <section className="page settings-page">
     <PageHeader eyebrow="PREFERENCES" title="设置" description="调整浏览器、隐私、AI Provider、字体与知识库工作流。"/>

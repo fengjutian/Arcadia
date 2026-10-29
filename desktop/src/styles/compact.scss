@@ -3070,12 +3070,9 @@ body[data-view='browser'] .ui-message {
     }
 
     &.browser-tab--pinned {
-      width: 48px;
-      min-width: 48px !important;
-      padding-inline: 14px !important;
-
-      .browser-tab-title { justify-content: center; }
-      .browser-tab-title > span:last-child { display: none; }
+      // A pinned tab remains protected from closing, but its name must stay
+      // visible so pinned and ordinary tabs are equally identifiable.
+      .browser-tab-title { justify-content: flex-start; }
     }
 
     &.browser-tab--suspended {

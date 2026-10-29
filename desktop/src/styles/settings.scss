@@ -30,6 +30,8 @@
   }
 
   > .ui-tabs__content {
+    display: flex;
+    align-items: stretch;
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
@@ -39,12 +41,85 @@
 }
 
 .settings-page > .settings-tabs > .ui-tabs__content > .ant-tabs-content {
+  display: flex;
+  flex: 1 0 auto;
+  align-items: stretch;
+  min-width: 0;
   max-width: none;
+}
+
+.settings-page > .settings-tabs > .ui-tabs__content > .ant-tabs-content > .ant-tabs-tabpane {
+  display: flex;
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+.settings-pane {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+// Every settings category reaches the bottom of the available pane. Categories
+// containing several cards keep their natural stack and let the final card
+// occupy the remaining space.
+.settings-pane > .settings-card:last-child {
+  flex: 1 0 auto;
 }
 
 // Settings cards fill the pane and keep the same 20px inset as the page.
 .settings-page .settings-card {
   max-width: none;
+}
+
+// Stretch the card body as well as the card shell. This is required by
+// settings pages with nested navigation (privacy/browser), whose rail and
+// content pane must reach the bottom instead of stopping after their content.
+.settings-pane > .settings-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  > .ui-card__body {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+.privacy-settings-card > .ui-card__body > .privacy-section-tabs {
+  flex: 1 1 0;
+  min-height: 0;
+
+  > .ui-tabs__nav {
+    align-self: stretch;
+  }
+
+  > .ui-tabs__content {
+    display: flex;
+    min-height: 0;
+  }
+
+  > .ui-tabs__content > .ant-tabs-content,
+  > .ui-tabs__content > .ant-tabs-content > .ant-tabs-tabpane:not([hidden]),
+  > .ui-tabs__content > .ant-tabs-content > .ant-tabs-tabpane:not([hidden]) > .privacy-section {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  > .ui-tabs__content > .ant-tabs-content > .ant-tabs-tabpane:not([hidden]) > .privacy-section {
+    flex-direction: column;
+  }
+
+  .privacy-history-list {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+  }
 }
 
 // Provider settings use a fixed form grid instead of a wrapping Space so the

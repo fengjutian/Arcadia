@@ -35,7 +35,17 @@ export function parseAgentSteps(stepsJson: string): ParsedStep[] {
  */
 export function AgentRunHistory({ runs }: { runs: readonly AgentRun[] }) {
   if (runs.length === 0) {
-    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 Agent 运行记录" />
+    return <Empty
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description={
+        <div>
+          <div>暂无深度研究记录</div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            普通问答保存在左侧当前对话中；这里只记录点击“深度研究”后执行的任务。
+          </Typography.Text>
+        </div>
+      }
+    />
   }
   return <List
     dataSource={[...runs]}
