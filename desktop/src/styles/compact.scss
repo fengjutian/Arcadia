@@ -1324,9 +1324,33 @@ body[data-theme='dark'] {
 // New-tab search workspace. Keeping all search choices inside one card makes
 // the page hierarchy independent from the browser's omnibox above it.
 .new-tab {
+  position: relative;
   justify-content: flex-start;
   padding: clamp(32px, 6vh, 58px) 24px 32px;
   overflow: auto;
+}
+
+.new-tab.has-background {
+  background-image: linear-gradient(rgba(247, 244, 237, .38), rgba(247, 244, 237, .56)), var(--new-tab-background) !important;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.new-tab__background-actions {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 18px;
+  display: flex;
+  gap: 4px;
+
+  .ant-btn {
+    border: 1px solid rgba(120, 105, 84, .2);
+    background: rgba(255, 255, 255, .78);
+    box-shadow: 0 4px 14px rgba(39, 32, 24, .08);
+    backdrop-filter: blur(12px);
+  }
 }
 
 .new-tab__workspace {
@@ -1487,6 +1511,8 @@ body[data-theme='dark'] .search-engine-settings__presets button:hover { backgrou
 body[data-theme='dark'] .search-engine-settings__presets button.is-active { border-color: var(--accent); background: #2d3932; }
 
 body[data-theme='dark'] {
+  .new-tab.has-background { background-image: linear-gradient(rgba(12, 18, 15, .48), rgba(12, 18, 15, .68)), var(--new-tab-background) !important; }
+  .new-tab__background-actions .ant-btn { border-color: rgba(255,255,255,.12); background: rgba(24, 33, 28, .76); }
   .new-tab__workspace {
     border-color: #334139;
     background: rgba(24, 33, 28, .82);
@@ -2542,7 +2568,7 @@ body[data-view='browser'] .ui-message {
   .ant-tabs-nav-list {
     width: auto !important;
     min-width: 0 !important;
-    align-items: flex-end;
+    align-items: center;
     gap: 0;
   }
 
@@ -2564,7 +2590,7 @@ body[data-view='browser'] .ui-message {
     margin: 0 !important;
     padding: 0 8px 0 11px !important;
     border: 1px solid transparent !important;
-    border-radius: 7px 7px 0 0 !important;
+    border-radius: 7px !important;
     background: transparent !important;
     color: #59645e;
     opacity: .9;
@@ -2591,7 +2617,6 @@ body[data-view='browser'] .ui-message {
       z-index: 1;
       height: 34px;
       border-color: rgba(79, 92, 84, .16) !important;
-      border-bottom-color: var(--browser-tab-active-bg) !important;
       background: var(--browser-tab-active-bg) !important;
       color: #243029;
       opacity: 1;
