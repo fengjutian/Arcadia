@@ -2204,6 +2204,7 @@ pub fn run() {
             local_store::local_delete_search_alias,
             local_store::local_search_index_status,
             local_store::local_rebuild_search_index,
+            local_store::local_search_suggestions,
             local_store::local_save_document,
             local_store::local_get_document,
             local_store::local_delete_document,

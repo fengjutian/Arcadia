@@ -370,15 +370,13 @@
 
 .result-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 13px;
 }
 
-// Saved documents are the primary result and are usually few; a two-up grid
-// keeps them large without leaving an empty third column on the first screen.
+// Keep both result groups on the same four-column rhythm so saved and reading
+// cards align vertically and use the available desktop width consistently.
 .result-grid--saved {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-
   .result-card { min-height: 148px; }
 
   .result-card__title {
@@ -947,7 +945,11 @@ body[data-theme='github'] .search-page {
   .site-badge { border-radius: 6px; }
 }
 
-@media (max-width: 1420px) {
+@media (max-width: 1600px) {
+  .result-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1180px) {
   .result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

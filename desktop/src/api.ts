@@ -70,6 +70,11 @@ export async function rebuildSearchIndex(): Promise<SearchIndexStatus> {
   return invoke<SearchIndexStatus>('local_rebuild_search_index')
 }
 
+export async function getSearchSuggestions(query: string): Promise<string[]> {
+  if (!isTauri() || !query.trim()) return []
+  return invoke<string[]>('local_search_suggestions', { query })
+}
+
 export async function searchDocuments(query: string): Promise<DocumentSearchHit[]> {
   const exact = await localSearch(query)
   const trimmed = query.trim()

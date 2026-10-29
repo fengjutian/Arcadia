@@ -2268,6 +2268,42 @@ pub fn local_rebuild_search_index(app: tauri::AppHandle) -> Result<SearchIndexSt
     local_search_index_status(app)
 }
 
+#[tauri::command]
+pub fn local_search_suggestions(
+    app: tauri::AppHandle,
+    query: String,
+) -> Result<Vec<String>, String> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let database = connection(&app)?;
+    let pattern = format!("%{}%", trimmed.replace('%', "\\%").replace('_', "\\_"));
+    let mut statement = database
+        .prepare(
+            "SELECT value FROM (
+                SELECT title AS value, 0 AS priority FROM local_documents WHERE title LIKE ?1 ESCAPE '\\'
+                UNION
+                SELECT term AS value, 1 AS priority FROM search_aliases WHERE term LIKE ?1 ESCAPE '\\'
+                UNION
+                SELECT alias AS value, 1 AS priority FROM search_aliases WHERE alias LIKE ?1 ESCAPE '\\'
+                UNION
+                SELECT json_each.value AS value, 2 AS priority FROM local_documents, json_each(local_documents.tags)
+                    WHERE json_each.value LIKE ?1 ESCAPE '\\'
+            ) WHERE length(trim(value)) > 0
+              AND lower(value) <> lower(?2)
+            ORDER BY priority, length(value), value COLLATE NOCASE
+            LIMIT 8",
+        )
+        .map_err(|error| error.to_string())?;
+    let suggestions = statement
+        .query_map(params![pattern, trimmed], |row| row.get(0))
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<String>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(suggestions)
+}
+
 /// Build a sanitised FTS5 MATCH expression from a free-form user query.
 /// Each whitespace-separated term is wrapped in double quotes (so FTS5
 /// treats it as a literal token) and a trailing `*` enables prefix matching.

@@ -1,13 +1,14 @@
-import { Button, Input, Modal, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
+import { AutoComplete, Button, Input, Modal, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
 import { BookOutlined, ClockCircleOutlined, FileTextOutlined, InboxOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { deleteReadingSnapshot, searchDocuments, listReadingActivity, getSession, setSession, type DocumentSearchHit } from '../../api'
+import { deleteReadingSnapshot, searchDocuments, listReadingActivity, getSearchSuggestions, getSession, setSession, type DocumentSearchHit } from '../../api'
 import type { ReadingActivity } from '../../types'
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { renderHighlightedSnippet } from '../../features/search/renderSnippet'
 import { X } from 'lucide-react'
+import { dedupeSearchResults, matchesAdvancedSearch, parseAdvancedSearch } from '../../features/search/advancedSearch'
 
 type SortKey = 'recent' | 'oldest' | 'starred' | 'relevance'
 
@@ -20,6 +21,7 @@ const SORT_OPTIONS: Array<{ label: string; value: SortKey }> = [
 export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
   const [query, setQuery] = useState(initialQuery)
   const debouncedQuery = useDebouncedValue(query, 250)
+  const advancedQuery = useMemo(() => parseAdvancedSearch(debouncedQuery), [debouncedQuery])
   const [documents, setDocuments] = useState<DocumentSearchHit[]>([])
   const [reading, setReading] = useState<ReadingActivity[]>([])
   const [selected, setSelected] = useState<DocumentSearchHit | null>(null)
@@ -35,6 +37,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const [durationMs, setDurationMs] = useState<number | null>(null)
   const [recentQueries, setRecentQueries] = useState<string[]>([])
   const [reloadToken, setReloadToken] = useState(0)
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
   const searchRef = useRef<InputRef>(null)
 
   useEffect(() => {
@@ -69,7 +72,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     let current = true
     setLoading(true)
     const startedAt = performance.now()
-    void Promise.all([searchDocuments(debouncedQuery), listReadingActivity()])
+    void Promise.all([searchDocuments(advancedQuery.text), listReadingActivity()])
       .then(([items, activity]) => {
         if (!current) return
         setDocuments(items)
@@ -92,7 +95,13 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
       })
       .finally(() => { if (current) setLoading(false) })
     return () => { current = false }
-  }, [debouncedQuery, reloadToken])
+  }, [advancedQuery, reloadToken])
+
+  useEffect(() => {
+    let current = true
+    void getSearchSuggestions(debouncedQuery).then(items => { if (current) setSearchSuggestions(items) }).catch(() => { if (current) setSearchSuggestions([]) })
+    return () => { current = false }
+  }, [debouncedQuery])
 
   useEffect(() => {
     if (!debouncedQuery && sort === 'relevance') setSort('recent')
@@ -102,7 +111,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
 
   const unsavedReading = useMemo(() => {
     const savedUrls = new Set(documents.map(item => item.url))
-    const lower = debouncedQuery.trim().toLowerCase()
+    const lower = advancedQuery.text.toLowerCase()
     return reading
       .filter(item => {
         if (savedUrls.has(item.url) || readingStatus(item) === 'seen') return false
@@ -110,7 +119,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
         return [item.title, item.url, item.excerpt ?? '', item.markdown ?? ''].some(field => field.toLowerCase().includes(lower))
       })
       .sort((a, b) => sort === 'oldest' ? a.lastVisitedAt - b.lastVisitedAt : b.lastVisitedAt - a.lastVisitedAt)
-  }, [documents, reading, debouncedQuery, sort])
+  }, [documents, reading, advancedQuery.text, sort])
 
   const allTags = useMemo(() => {
     const set = new Set<string>()
@@ -119,17 +128,18 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   }, [documents])
 
   const filtered = useMemo(() => {
-    return documents
+    return dedupeSearchResults(documents
       .filter(doc => {
         if (starredOnly && !doc.starred) return false
         if (readOnly && readingStatus(readingByUrl.get(doc.url)) === 'seen') return false
         if (!includeArchived && doc.status === 'ARCHIVED') return false
         if (tagFilter.length > 0 && !tagFilter.every(tag => doc.tags.includes(tag))) return false
+        if (!matchesAdvancedSearch(doc, advancedQuery)) return false
         // The backend may return Pinyin, initials, synonym and semantic
         // matches that do not literally contain the typed query. Do not apply
         // a second client-side substring filter or those results disappear.
         return true
-      })
+      }))
       .sort((a, b) => {
         if (sort === 'starred') return Number(b.starred) - Number(a.starred) || b.createdAt.localeCompare(a.createdAt)
         if (sort === 'oldest') return a.createdAt.localeCompare(b.createdAt)
@@ -139,7 +149,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
         if (sort === 'relevance') return 0
         return (readingByUrl.get(b.url)?.lastVisitedAt ?? Date.parse(b.createdAt) / 1000) - (readingByUrl.get(a.url)?.lastVisitedAt ?? Date.parse(a.createdAt) / 1000)
       })
-  }, [documents, starredOnly, includeArchived, tagFilter, sort, readOnly, readingByUrl])
+  }, [documents, advancedQuery, starredOnly, includeArchived, tagFilter, sort, readOnly, readingByUrl])
 
   const terms = useMemo(() => debouncedQuery.trim().split(/\s+/).filter(Boolean), [debouncedQuery])
   const hasQuery = debouncedQuery.trim().length > 0
@@ -184,6 +194,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
 
     <div className="search-page__body">
       <div className="search-console">
+        <AutoComplete options={searchSuggestions.map(value => ({ value, label: value }))} value={query} onChange={setQuery} onSelect={value => { setQuery(value); rememberQuery(value) }}>
         <Input
           ref={searchRef}
           size="large"
@@ -197,6 +208,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
           autoFocus
           aria-label="搜索标题、正文或标签"
         />
+        </AutoComplete>
 
         {recentQueries.length > 0 && !query && (
           <div className="search-recent">
