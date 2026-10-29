@@ -80,8 +80,17 @@ export function reciprocalRankFusion(
  * its answer. Citations are rendered from structured chunks instead, so the
  * raw evidence quotes would only duplicate them in the chat transcript.
  */
-export function stripSourceBlocks(answer: string): string {
+/** Remove provider-specific hidden reasoning blocks before display or reuse. */
+export function stripModelReasoning(answer: string): string {
   return answer
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<think\b[^>]*>[\s\S]*$/gi, '')
+    .trim()
+}
+
+export function stripSourceBlocks(answer: string): string {
+  return stripModelReasoning(answer)
     .replace(/\[SOURCE id="[^"]*"\][\s\S]*?(?:\[\/SOURCE\]|$)/gi, '')
     .replace(/\[source:\d+\]/gi, '')
     .replace(/\[doc-\d+\]/gi, '')
@@ -111,6 +120,17 @@ export function validateAnswerCitations(answer: string, availableCitationIds: re
     unknownIds,
     uncitedStatements,
   }
+}
+
+/**
+ * Provider-compatible acceptance after one strict repair attempt. Some models
+ * place one citation at the end of a paragraph rather than after every
+ * sentence. Keep rejecting missing/unknown citations, but accept that common
+ * paragraph-level form once every emitted id belongs to the supplied context.
+ */
+export function hasUsableAnswerCitations(validation: CitationValidation): boolean {
+  return validation.valid
+    || (validation.citedIds.length > 0 && validation.unknownIds.length === 0)
 }
 
 /** Compute retrieval Recall@K and MRR over a small deterministic evaluation set. */

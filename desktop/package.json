@@ -17,6 +17,7 @@
     "test:rust": "node scripts/run-rust-tests.mjs"
   },
   "dependencies": {
+    "@assistant-ui/react": "^0.15.32",
     "@base-ui/react": "^1.8.0",
     "@mozilla/readability": "^0.6.0",
     "@tauri-apps/api": "^2.11.1",

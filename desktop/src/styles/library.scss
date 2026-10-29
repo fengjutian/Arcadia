@@ -1101,6 +1101,95 @@
   svg { width: 13px; height: 13px; }
 }
 
+// Document reader drawer -------------------------------------------------
+.document-detail-drawer .ui-drawer__body { padding: 0; }
+
+.document-detail-drawer .ui-drawer__header {
+  min-height: 54px;
+  background: color-mix(in srgb, var(--library-surface-strong) 92%, transparent);
+}
+
+.document-reader {
+  max-width: none;
+  margin: 0;
+  padding: 24px 30px 30px;
+}
+
+.document-reader__hero {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--library-line);
+
+  h1.ant-typography {
+    margin: 5px 0 0;
+    color: var(--library-text);
+    font-size: clamp(28px, 3vw, 38px);
+    line-height: 1.2;
+    letter-spacing: -.035em;
+  }
+}
+
+.document-reader__source {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .08em;
+}
+
+.document-reader .document-reader__summary {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-left-width: 3px;
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.document-reader .document-reader__meta {
+  margin: 16px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--library-line);
+  border-radius: 10px;
+  background: var(--library-surface);
+}
+
+.document-reader__tags { margin-bottom: 4px; }
+
+.document-reader .markdown-body {
+  margin: 22px 0;
+  font-size: clamp(15px, var(--reading-font-size, 17px), 18px);
+  line-height: 1.78;
+
+  h1 { font-size: 1.7em; }
+  h2 { font-size: 1.38em; }
+  h3 { font-size: 1.16em; }
+  img {
+    display: block;
+    max-height: 420px;
+    margin: 18px auto;
+    object-fit: contain;
+    background: var(--library-surface);
+  }
+}
+
+.document-reader__continue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 6px 0 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--library-line);
+  border-radius: 10px;
+  background: var(--library-surface);
+  color: var(--library-muted);
+  font-size: 12px;
+}
+
+.document-reader__footer {
+  padding-top: 18px;
+  border-top: 1px solid var(--library-line);
+}
+
 // Theme-specific surfaces -------------------------------------------------
 body[data-theme='dark'] .library-page {
   --library-text: #e7eee9;

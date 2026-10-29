@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateRetrieval, reciprocalRankFusion, stripSourceBlocks, validateAnswerCitations } from './rag'
+import { evaluateRetrieval, hasUsableAnswerCitations, reciprocalRankFusion, stripModelReasoning, stripSourceBlocks, validateAnswerCitations } from './rag'
 
 const hit = (documentId: string, chunkIndex: number, excerpt = documentId) => ({ documentId, chunkIndex, excerpt })
 
@@ -47,6 +47,16 @@ describe('stripSourceBlocks', () => {
   })
 })
 
+describe('stripModelReasoning', () => {
+  it('removes closed provider reasoning blocks and keeps the final answer', () => {
+    expect(stripModelReasoning('<think>internal reasoning</think>\n\n南京是历史文化名城。')).toBe('南京是历史文化名城。')
+  })
+
+  it('does not expose an unterminated reasoning block', () => {
+    expect(stripModelReasoning('<think>unfinished internal reasoning')).toBe('')
+  })
+})
+
 describe('validateAnswerCitations', () => {
   it('accepts statements grounded in known citations', () => {
     const result = validateAnswerCitations('SQLite 支持事务。[doc-1]\nFTS5 用于全文检索。[doc-2]', [1, 2])
@@ -63,6 +73,12 @@ describe('validateAnswerCitations', () => {
 
   it('allows the explicit not-found response without citations', () => {
     expect(validateAnswerCitations('知识库中未找到相关信息。', []).valid).toBe(true)
+  })
+
+  it('accepts paragraph-level citations after strict repair but rejects missing or unknown ids', () => {
+    expect(hasUsableAnswerCitations(validateAnswerCitations('南京是江苏省省会。它是历史文化名城。[doc-1]', [1]))).toBe(true)
+    expect(hasUsableAnswerCitations(validateAnswerCitations('南京是江苏省省会。', [1]))).toBe(false)
+    expect(hasUsableAnswerCitations(validateAnswerCitations('南京是江苏省省会。[doc-9]', [1]))).toBe(false)
   })
 })
 

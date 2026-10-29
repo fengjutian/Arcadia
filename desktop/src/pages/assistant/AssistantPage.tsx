@@ -37,7 +37,7 @@ import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDra
 import { buildCitationRepairPrompt, buildCrossAskPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
 import type { AIProvider, Document, View } from '../../types'
 import { compactChatHistory, restoreConversation } from '../../features/ai/conversation'
-import { reciprocalRankFusion, stripSourceBlocks, validateAnswerCitations } from '../../features/ai/rag'
+import { hasUsableAnswerCitations, reciprocalRankFusion, stripModelReasoning, stripSourceBlocks, validateAnswerCitations } from '../../features/ai/rag'
 import { applyReranker, rrfReranker } from '../../features/ai/reranker'
 import { defaultAgentDeps, runResearchAgent } from '../../features/ai/agentLoop'
 import { listAgentRuns, type AgentRun } from '../../api'
@@ -239,6 +239,9 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           content: turn.role === 'assistant' ? stripSourceBlocks(turn.content) : turn.content,
         })), 12_000)
       const provider = providers.find(item => item.id === providerId)
+      // Reuse the user-facing local search index here. It includes CJK,
+      // Pinyin and initials, while the chunk-level RAG FTS currently does not.
+      const keywordMatches = await searchDocuments(prompt).catch(() => [])
 
       // Prefer the Rust `rag_answer` pipeline: it builds the evidence pack,
       // calls the model, validates citations, and applies one repair pass on
@@ -261,10 +264,12 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
         chunkerVersion: undefined,
         dimensions: undefined,
       }
-      const rag = await ragAnswer(providerId, ragQuery, { temperature: 0.2, maxTokens: 1024 })
+      const rag = await ragAnswer(providerId, ragQuery, { temperature: 0.2, maxTokens: 1024 }).catch(() => null)
       if (rag) {
         const status = rag.citationStatus
-        const usable = status === 'valid' || status === 'notRequired' || status === 'partial'
+        const usable = status === 'valid'
+          || status === 'partial'
+          || (status === 'notRequired' && keywordMatches.length === 0)
         if (usable) {
           patchTurn(pendingId, {
             content: rag.answer,
@@ -281,19 +286,22 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
       // Fallback: legacy local-RAG path used when `ragAnswer` is unavailable
       // (no Tauri, embedding model missing, or answer is invalid). Kept so
       // the page still works in browser-only mode.
-      let rankedDocumentIds: string[] | undefined
+      let rankedDocumentIds: string[] | undefined = keywordMatches.map(item => item.id)
       if (provider?.embeddingModel) {
-        const [queryVector] = await aiEmbed(providerId, [prompt])
-        const [keyword, vector] = await Promise.all([
-          searchDocuments(prompt),
-          searchSimilarEmbeddings(provider.embeddingModel, queryVector, 16),
-        ])
-        const fused = await applyReranker(rrfReranker, prompt, reciprocalRankFusion(
-          keyword.map((item, index) => ({ documentId:item.id, chunkIndex:0, excerpt:item.markdownSnippet ?? item.summary ?? '', score:1 / (index + 1) })),
-          vector.map(item => ({ documentId:item.documentId, chunkIndex:item.chunkIndex, excerpt:item.excerpt, score:item.similarity })),
-          { limit:8, maxChunksPerDocument:3 },
-        ), 8)
-        rankedDocumentIds = fused.map(item => item.documentId)
+        try {
+          const [queryVector] = await aiEmbed(providerId, [prompt])
+          const vector = await searchSimilarEmbeddings(provider.embeddingModel, queryVector, 16)
+          const fused = await applyReranker(rrfReranker, prompt, reciprocalRankFusion(
+            keywordMatches.map((item, index) => ({ documentId:item.id, chunkIndex:0, excerpt:item.markdownSnippet ?? item.summary ?? '', score:1 / (index + 1) })),
+            vector.map(item => ({ documentId:item.documentId, chunkIndex:item.chunkIndex, excerpt:item.excerpt, score:item.similarity })),
+            { limit:8, maxChunksPerDocument:3 },
+          ), 8)
+          rankedDocumentIds = fused.map(item => item.documentId)
+        } catch {
+          // Embeddings are an optional quality boost. Keyword/Pinyin results
+          // remain a complete fallback when the embedding endpoint is absent
+          // or temporarily unavailable.
+        }
       }
       const request = buildCrossAskPrompt(
         documents,
@@ -302,14 +310,14 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
         { topK: 8, rankedDocumentIds },
       )
       const response = await aiChat(providerId, request)
-      let parsed = parseCrossAnswer(response.content)
+      let parsed = parseCrossAnswer(stripModelReasoning(response.content))
       let validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
       if (!parsed.notFound && !validation.valid) {
         const repairResponse = await aiChat(providerId, buildCitationRepairPrompt(request, parsed.answer))
-        parsed = parseCrossAnswer(repairResponse.content)
+        parsed = parseCrossAnswer(stripModelReasoning(repairResponse.content))
         validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
       }
-      if (!parsed.notFound && !validation.valid) {
+      if (!parsed.notFound && !hasUsableAnswerCitations(validation)) {
         throw new Error('模型未能按资料生成有效引用，请换一种问法或重试')
       }
       patchTurn(pendingId, {
@@ -322,7 +330,9 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
         pending: false,
       })
     } catch (caught) {
-      const errorMessage = caught instanceof Error ? caught.message : '提问失败'
+      const errorMessage = caught instanceof Error
+        ? caught.message
+        : String(caught || '提问失败')
       patchTurn(pendingId, {
         content: errorMessage,
         pending: false,
