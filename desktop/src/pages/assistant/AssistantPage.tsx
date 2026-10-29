@@ -34,7 +34,7 @@ import { PageHeader } from '../../shared/components/PageHeader'
 import { aiChat, aiEmbed, getSession, listAIProviders, listDocuments, ragAnswer, searchDocuments, searchSimilarEmbeddings, setSession } from '../../api'
 import type { RagQuery } from '../../api'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { buildCrossAskPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
+import { buildCitationRepairPrompt, buildCrossAskPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
 import type { AIProvider, Document, View } from '../../types'
 import { compactChatHistory, restoreConversation } from '../../features/ai/conversation'
 import { reciprocalRankFusion, stripSourceBlocks, validateAnswerCitations } from '../../features/ai/rag'
@@ -302,9 +302,16 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
         { topK: 8, rankedDocumentIds },
       )
       const response = await aiChat(providerId, request)
-      const parsed = parseCrossAnswer(response.content)
-      const validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
-      if (!parsed.notFound && !validation.valid) throw new Error('模型回答未通过引用校验，请重试')
+      let parsed = parseCrossAnswer(response.content)
+      let validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
+      if (!parsed.notFound && !validation.valid) {
+        const repairResponse = await aiChat(providerId, buildCitationRepairPrompt(request, parsed.answer))
+        parsed = parseCrossAnswer(repairResponse.content)
+        validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
+      }
+      if (!parsed.notFound && !validation.valid) {
+        throw new Error('模型未能按资料生成有效引用，请换一种问法或重试')
+      }
       patchTurn(pendingId, {
         content: parsed.answer,
         documentIds: parsed.docIds

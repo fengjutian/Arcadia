@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_CHARS_PER_DOC, buildCrossAskPrompt, citationIdsInRequest, parseCrossAnswer } from './crossAsk'
+import { MAX_CHARS_PER_DOC, buildCitationRepairPrompt, buildCrossAskPrompt, citationIdsInRequest, parseCrossAnswer } from './crossAsk'
 import type { Document } from '../../types'
 
 function makeDoc(partial: Partial<Document>): Document {
@@ -70,6 +70,18 @@ describe('crossAsk helpers', () => {
     const parsed = parseCrossAnswer('知识库中未找到相关信息。')
     expect(parsed.notFound).toBe(true)
     expect(parsed.docIds).toEqual([])
+  })
+
+  it('builds a deterministic repair turn with only the available citation ids', () => {
+    const request = buildCrossAskPrompt([
+      makeDoc({ id: 'a', title: 'Alpha', markdown: 'alpha body' }),
+      makeDoc({ id: 'b', title: 'Beta', markdown: 'beta body' }),
+    ], 'Q')
+    const repaired = buildCitationRepairPrompt(request, 'Answer without citations.')
+    expect(repaired.temperature).toBe(0)
+    expect(repaired.messages.at(-2)).toEqual({ role: 'assistant', content: 'Answer without citations.' })
+    expect(repaired.messages.at(-1)?.content).toContain('Allowed citation tags: [doc-1], [doc-2].')
+    expect(repaired.messages.at(-1)?.content).toContain('Do not use any other citation number.')
   })
 
   it('threads prior conversation history between system and current question', () => {

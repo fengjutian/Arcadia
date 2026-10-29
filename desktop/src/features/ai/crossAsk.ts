@@ -116,3 +116,25 @@ export function parseCrossAnswer(raw: string): CrossAskParse {
 
 /** Exact citation IDs exposed in the generated context, used as the answer allow-list. */
 export function citationIdsInRequest(request:ChatRequest):number[]{const user=[...request.messages].reverse().find(message=>message.role==='user');if(!user)return[];return Array.from(new Set(Array.from(user.content.matchAll(/^\[doc-(\d+)\]\s/mg),match=>Number(match[1])).filter(value=>Number.isInteger(value)&&value>0)))}
+
+/** Ask a provider to repair only the citation syntax of an otherwise usable answer. */
+export function buildCitationRepairPrompt(request: ChatRequest, answer: string): ChatRequest {
+  const allowed = citationIdsInRequest(request).map(id => `[doc-${id}]`)
+  return {
+    messages: [
+      ...request.messages,
+      { role: 'assistant', content: answer },
+      {
+        role: 'user',
+        content: [
+          'Rewrite the previous answer using only the supplied knowledge-base documents.',
+          `Allowed citation tags: ${allowed.join(', ') || '(none)'}.`,
+          'Append at least one matching citation tag after every factual sentence.',
+          'Do not use any other citation number. Do not add facts or commentary about this repair.',
+          `If the documents cannot support the answer, reply exactly: "${NOT_FOUND_MARKER}"`,
+        ].join('\n'),
+      },
+    ],
+    temperature: 0,
+  }
+}
