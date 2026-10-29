@@ -15,7 +15,6 @@ import {
   ArrowRightOutlined,
   ArrowUpOutlined,
   BookOutlined,
-  CheckCircleOutlined,
   ClockCircleOutlined,
   CopyOutlined,
   FileTextOutlined,
@@ -28,11 +27,17 @@ import {
 } from '../../components/ui/icons'
 import { useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from 'react'
 import {
+  ActionBarPrimitive,
+  AttachmentPrimitive,
   AssistantRuntimeProvider,
+  BranchPickerPrimitive,
   ComposerPrimitive,
+  MessagePrimitive,
   ThreadPrimitive,
+  SimpleTextAttachmentAdapter,
   useExternalStoreRuntime,
   type AppendMessage,
+  type CompleteAttachment,
   type ThreadMessageLike,
 } from '@assistant-ui/react'
 import ReactMarkdown from 'react-markdown'
@@ -62,6 +67,7 @@ interface UserTurn {
   id: string
   role: 'user'
   content: string
+  attachments?: readonly CompleteAttachment[]
 }
 
 interface AssistantTurn {
@@ -80,6 +86,8 @@ interface AssistantTurn {
 
 type Turn = UserTurn | AssistantTurn
 type AssistantPatch = Partial<Omit<AssistantTurn, 'id' | 'role'>>
+
+const TEXT_ATTACHMENT_ADAPTER = new SimpleTextAttachmentAdapter()
 
 /** Keep in-app navigation intact: answer links open as a normal browser tab. */
 function AssistantMarkdownLink({ href, children, node: _node, onClick, ...props }: ComponentPropsWithoutRef<'a'> & { node?: unknown }) {
@@ -117,7 +125,6 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
   const [agentOpen, setAgentOpen] = useState(false)
   const [agentBusy, setAgentBusy] = useState(false)
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([])
-  const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const busyRef = useRef(false)
 
@@ -214,6 +221,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
       id: turn.id,
       role: turn.role,
       content: turn.content,
+      ...(turn.role === 'user' && turn.attachments ? { attachments: turn.attachments } : {}),
       ...(turn.role === 'assistant'
         ? {
             status: turn.pending
@@ -232,7 +240,56 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
         .map(part => part.text)
         .join('\n')
         .trim()
-      if (prompt) await submitQuestion(prompt)
+      const attachmentText = message.attachments
+        ?.flatMap(attachment => attachment.content)
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n\n')
+        .trim() ?? ''
+      if (prompt || attachmentText) {
+        await submitQuestion(prompt || '请分析附件', {
+          attachments: message.attachments,
+          modelPrompt: attachmentText ? `${prompt || '请分析以下附件'}\n\n${attachmentText}` : prompt,
+        })
+      }
+    },
+    setMessages: messages => setTurns([...messages]),
+    adapters: { attachments: TEXT_ATTACHMENT_ADAPTER },
+    onEdit: async (message: AppendMessage) => {
+      if (!message.sourceId) return
+      const prompt = message.content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n')
+        .trim()
+      const userIndex = turns.findIndex(turn => turn.id === message.sourceId && turn.role === 'user')
+      if (!prompt || userIndex < 0 || busyRef.current) return
+      const pendingTurn: AssistantTurn = {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        content: '',
+        notFound: false,
+        pending: true,
+      }
+      const history = turns.slice(0, userIndex)
+      setTurns([...history, { id: `u-${Date.now()}`, role: 'user', content: prompt }, pendingTurn])
+      await generateAnswer(prompt, pendingTurn.id, history)
+    },
+    onReload: async parentId => {
+      if (!parentId) return
+      const userIndex = turns.findIndex(turn => turn.id === parentId && turn.role === 'user')
+      if (userIndex < 0) return
+      if (busyRef.current || agentBusy) return
+      const pendingTurn: AssistantTurn = {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        content: '',
+        notFound: false,
+        pending: true,
+      }
+      const history = turns.slice(0, userIndex)
+      setTurns([...turns.slice(0, userIndex + 1), pendingTurn])
+      await generateAnswer(turns[userIndex].content, pendingTurn.id, history)
     },
   })
 
@@ -384,11 +441,19 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
     }
   }
 
-  async function submitQuestion(raw: string) {
+  async function submitQuestion(
+    raw: string,
+    options?: { attachments?: readonly CompleteAttachment[]; modelPrompt?: string },
+  ) {
     const trimmed = raw.trim()
     if (!conversationHydrated || !providerId || !trimmed || busyRef.current || agentBusy) return
     const now = Date.now()
-    const userTurn: UserTurn = { id: `u-${now}`, role: 'user', content: trimmed }
+    const userTurn: UserTurn = {
+      id: `u-${now}`,
+      role: 'user',
+      content: trimmed,
+      attachments: options?.attachments,
+    }
     const pendingTurn: AssistantTurn = {
       id: `a-${now}`,
       role: 'assistant',
@@ -399,7 +464,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
     const history = turns
     setTurns(current => [...current, userTurn, pendingTurn])
     setQuestion('')
-    await generateAnswer(trimmed, pendingTurn.id, history)
+    await generateAnswer(options?.modelPrompt?.trim() || trimmed, pendingTurn.id, history)
   }
 
   async function retryTurn(turn: AssistantTurn) {
@@ -473,19 +538,6 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
     onNavigate?.('settings')
   }
 
-  async function copyAnswer(turn: AssistantTurn) {
-    const text = stripSourceBlocks(turn.content)
-    if (!text) return
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopiedTurnId(turn.id)
-      window.setTimeout(() => setCopiedTurnId(current => current === turn.id ? null : current), 1600)
-      messageApi.success('回答已复制')
-    } catch {
-      messageApi.error('复制失败，请检查剪贴板权限')
-    }
-  }
-
   function renderConversation() {
     if (!conversationHydrated) {
       return <div className="assistant-thread-loading"><Spin size="small"/><span>正在恢复对话…</span></div>
@@ -503,9 +555,10 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           {!noDocuments && (
             <div className="assistant-suggestions">
               {SUGGESTED_PROMPTS.map(item => (
-                <button
+                <ThreadPrimitive.Suggestion
                   key={item.title}
-                  type="button"
+                  prompt={item.title}
+                  send={false}
                   className="assistant-suggestion"
                   disabled={noProvider}
                   onClick={() => applySuggestion(item.title)}
@@ -516,7 +569,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                     <small>{item.hint}</small>
                   </span>
                   <ArrowRightOutlined className="assistant-suggestion__arrow"/>
-                </button>
+                </ThreadPrimitive.Suggestion>
               ))}
             </div>
           )}
@@ -526,15 +579,43 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
 
     return (
       <div className="assistant-thread" role="log" aria-live="polite" aria-label="知识库对话">
-        {turns.map(turn => {
+        <ThreadPrimitive.Messages>{({ message: runtimeMessage }) => {
+          const turn = turns.find(item => item.id === runtimeMessage.id)
+          if (!turn) return null
+          if (runtimeMessage.composer.isEditing) {
+            return (
+              <MessagePrimitive.Root className="assistant-message assistant-message--editing">
+                <ComposerPrimitive.Root className="assistant-edit-composer">
+                  <ComposerPrimitive.Input className="assistant-edit-composer__input" minRows={2} maxRows={8} autoFocus />
+                  <div className="assistant-edit-composer__actions">
+                    <ComposerPrimitive.Cancel type="button">取消</ComposerPrimitive.Cancel>
+                    <ComposerPrimitive.Send type="submit">保存并重新生成</ComposerPrimitive.Send>
+                  </div>
+                </ComposerPrimitive.Root>
+              </MessagePrimitive.Root>
+            )
+          }
           if (turn.role === 'user') {
             return (
-              <div className="assistant-message assistant-message--user" key={turn.id}>
+              <MessagePrimitive.Root className="assistant-message assistant-message--user">
                 <div className="assistant-message__body">
                   <div className="assistant-bubble assistant-bubble--user">{turn.content}</div>
+                  {turn.attachments && turn.attachments.length > 0 && (
+                    <div className="assistant-message-attachments">
+                      {turn.attachments.map(attachment => (
+                        <span className="assistant-message-attachment" key={attachment.id}>
+                          <FileTextOutlined />{attachment.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <ActionBarPrimitive.Root className="assistant-response-actions assistant-response-actions--user" autohide="always">
+                    <ActionBarPrimitive.Edit title="编辑问题">编辑</ActionBarPrimitive.Edit>
+                    <ActionBarPrimitive.Copy title="复制问题"><CopyOutlined />复制</ActionBarPrimitive.Copy>
+                  </ActionBarPrimitive.Root>
                 </div>
                 <span className="assistant-avatar assistant-avatar--user" aria-hidden="true"><UserOutlined/></span>
-              </div>
+              </MessagePrimitive.Root>
             )
           }
 
@@ -542,7 +623,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           const answer = stripSourceBlocks(turn.content)
           const noticeOnly = !turn.pending && (Boolean(turn.error) || turn.notFound || (turn.interrupted === true && !answer))
           return (
-            <div className={`assistant-message assistant-message--assistant${turn.pending ? ' is-pending' : ''}`} key={turn.id}>
+            <MessagePrimitive.Root className={`assistant-message assistant-message--assistant${turn.pending ? ' is-pending' : ''}`}>
               <span className="assistant-avatar assistant-avatar--bot" aria-hidden="true"><RobotOutlined/></span>
               <div className="assistant-message__body">
                 <div className="assistant-message__meta">
@@ -632,26 +713,30 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                 )}
 
                 {!turn.pending && !turn.error && !turn.notFound && !turn.interrupted && answer && (
-                  <div className="assistant-response-actions">
-                    <button type="button" onClick={() => void copyAnswer(turn)} title="复制回答">
-                      {copiedTurnId === turn.id ? <CheckCircleOutlined/> : <CopyOutlined/>}
-                      <span>{copiedTurnId === turn.id ? '已复制' : '复制'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void retryTurn(turn)}
-                      disabled={busy || agentBusy}
-                      title="重新生成这条回答"
-                    >
+                  <ActionBarPrimitive.Root className="assistant-response-actions" hideWhenRunning autohide="not-last">
+                    <ActionBarPrimitive.Copy title="复制回答">
+                      <CopyOutlined />
+                      <span>复制</span>
+                    </ActionBarPrimitive.Copy>
+                    <ActionBarPrimitive.Reload title="重新生成回答">
                       <ReloadOutlined/>
                       <span>重新生成</span>
-                    </button>
-                  </div>
+                    </ActionBarPrimitive.Reload>
+                    <ActionBarPrimitive.ExportMarkdown title="导出 Markdown">
+                      <FileTextOutlined />
+                      <span>导出</span>
+                    </ActionBarPrimitive.ExportMarkdown>
+                    <BranchPickerPrimitive.Root className="assistant-branch-picker" hideWhenSingleBranch>
+                      <BranchPickerPrimitive.Previous title="上一个分支">‹</BranchPickerPrimitive.Previous>
+                      <span><BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count /></span>
+                      <BranchPickerPrimitive.Next title="下一个分支">›</BranchPickerPrimitive.Next>
+                    </BranchPickerPrimitive.Root>
+                  </ActionBarPrimitive.Root>
                 )}
               </div>
-            </div>
+            </MessagePrimitive.Root>
           )
-        })}
+        }}</ThreadPrimitive.Messages>
       </div>
     )
   }
@@ -722,6 +807,15 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
 
             <ComposerPrimitive.Root className="assistant-composer">
               <div className="assistant-composer__box">
+                <ComposerPrimitive.Attachments>
+                  {({ attachment }) => (
+                    <AttachmentPrimitive.Root className="assistant-composer-attachment">
+                      <FileTextOutlined />
+                      <AttachmentPrimitive.Name />
+                      <AttachmentPrimitive.Remove aria-label={`移除 ${attachment.name}`}>×</AttachmentPrimitive.Remove>
+                    </AttachmentPrimitive.Root>
+                  )}
+                </ComposerPrimitive.Attachments>
                 <ComposerPrimitive.Input
                   id="assistant-question"
                   className="assistant-composer__input"
@@ -738,6 +832,14 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                     {activeProvider && <span className="assistant-composer__model">{activeProvider.model}</span>}
                   </div>
                   <Space size={6}>
+                    <ComposerPrimitive.AddAttachment
+                      type="button"
+                      className="assistant-attach-button"
+                      title="添加文本附件"
+                      aria-label="添加文本附件"
+                    >
+                      <FileTextOutlined />
+                    </ComposerPrimitive.AddAttachment>
                     <Button
                       size="small"
                       icon={<RobotOutlined />}
