@@ -20,6 +20,8 @@ import { formatBytes as formatProcessBytes } from '../../services/processMemory'
 import { interpretShortcut, readShortcutOverrides } from '../../features/browser/shortcuts'
 import { popClosedTab, recordClosedTab, type ClosedTab } from '../../features/browser/closedTabs'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
+import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '../../features/ai/floatingAssistant'
+import { listen } from '@tauri-apps/api/event'
 import { renderSearchTemplate, resolveNavigationInput } from '../../features/browser/navigation'
 import { useDownloads } from '../../features/downloads/useDownloads'
 import { useDownloadQueue } from '../../features/downloads/useDownloadQueue'
@@ -194,6 +196,34 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const lastAdBlockCountRef = useRef<Record<string, number>>({})
   const active = tabs.find(tab => tab.id === activeTabId) ?? tabs[0]
   const nativeMode = hasNativeTab(active.id)
+
+  useEffect(() => {
+    let unlistenClosed: (() => void) | undefined
+    let unlistenSave: (() => void) | undefined
+    void listen(FLOATING_ASSISTANT_CLOSED_EVENT, () => setAiOpen(false)).then(fn => { unlistenClosed = fn })
+    void listen(FLOATING_ASSISTANT_SAVE_EVENT, () => { void save() }).then(fn => { unlistenSave = fn })
+    return () => { unlistenClosed?.(); unlistenSave?.() }
+  }, [])
+
+  useEffect(() => {
+    if (!aiOpen || !nativeMode) {
+      void closeFloatingAssistant()
+      return
+    }
+    void openFloatingAssistant({
+      currentUrl: active.url,
+      currentTabId: active.id,
+      readerArticle,
+      pdfArticle,
+      pdfContextError,
+      initialQuestion: aiInitialQuestion,
+      initialMode: aiInitialMode,
+      translationSource: aiTranslationSource,
+    }).catch(error => {
+      console.error('failed to open floating AI assistant', error)
+      setAiOpen(false)
+    })
+  }, [active.id, active.url, aiInitialMode, aiInitialQuestion, aiOpen, aiTranslationSource, nativeMode, pdfArticle, pdfContextError, readerArticle])
   const currentHost = useMemo(() => hostFromUrl(active.url), [active.url])
   // `blacklistVersion` forces a re-match after the list is mutated elsewhere.
   const currentBlock = useMemo(() => findBlockingEntry(active.url), [active.url, blacklistVersion])
@@ -2061,7 +2091,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         </span>
       </div>
     )}
-    <div className={`browser-content${aiOpen && nativeMode ? ' has-native-ai-panel' : ''}`}><div className="web-surface" ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
+    <div className="browser-content"><div className="web-surface" ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
       ? <SearchComparisonWorkspace query={comparison.query} sources={comparison.sources} visibleIds={comparison.visibleIds} onShow={showComparisonSource} onClose={closeComparison}/>
       : readerArticle
       ? <ReaderArticleView article={readerArticle}/>
@@ -2075,7 +2105,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             ? <div className="web-surface__loading"><LoadingOutlined spin/></div>
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:'当前网页需要在 Tauri 桌面应用中打开。'}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
-              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{

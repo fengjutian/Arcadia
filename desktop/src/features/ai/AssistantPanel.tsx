@@ -8,6 +8,7 @@ import { buildAskPrompt, numberPassages, parseAnswer, passageById } from './ask'
 import { buildSummaryPrompt, summaryKindLabel, type SummaryKind } from './summarize'
 import { TRANSLATION_VIEW_LABEL, buildTranslatePrompt, detectTranslationTarget, translationKey, type TranslationView } from './translate'
 import { useStreamingChat } from './useStreamingChat'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 type PanelMode = 'summarize' | 'ask' | 'translate'
 
@@ -22,6 +23,7 @@ interface AssistantPanelProps {
   initialQuestion?: string
   initialMode?: PanelMode
   translationSource?: string
+  nativeWindow?: boolean
 }
 
 const TRANSLATION_LANGUAGES = [
@@ -39,7 +41,7 @@ interface PanelPosition { x: number | null; y: number }
 
 const PANEL_EDGE_GAP = 12
 
-export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId, readerArticle, pdfArticle = null, pdfContextError = null, initialQuestion = '', initialMode, translationSource = '' }: AssistantPanelProps) {
+export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId, readerArticle, pdfArticle = null, pdfContextError = null, initialQuestion = '', initialMode, translationSource = '', nativeWindow = false }: AssistantPanelProps) {
   const article = readerArticle ?? pdfArticle
   const isPdfContext = /^file:\/\/.*\.pdf(?:$|[?#])/i.test(currentUrl)
   const [messageApi, contextHolder] = message.useMessage()
@@ -75,6 +77,11 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
 
   function startDragging(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || (event.target as HTMLElement).closest('button, input, select, textarea')) return
+    if (nativeWindow) {
+      event.preventDefault()
+      void getCurrentWindow().startDragging()
+      return
+    }
     const panel = panelRef.current
     const container = panel?.offsetParent as HTMLElement | null
     if (!panel || !container || container.classList.contains('has-native-ai-panel')) return

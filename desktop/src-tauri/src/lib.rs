@@ -2163,7 +2163,7 @@ pub fn run() {
             // Tauri 2 surfaces WindowEvent::CloseRequested for every window;
             // we treat any of them as a graceful exit and clear the lock.
             // SIGKILL / power loss will leave the lock row in place.
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 if let Ok(database) = local_store::connection(window.app_handle()) {
                     let now = chrono::Utc::now().timestamp();
                     if let Err(error) = session_lock::clear_lock(&database, now) {

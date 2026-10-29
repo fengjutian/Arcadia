@@ -1,13 +1,17 @@
 {
   "identifier": "default",
   "description": "Permissions for the trusted application UI",
-  "windows": ["main"],
+  "windows": ["main", "ai-assistant"],
   "permissions": [
     "core:default",
     "core:window:allow-close",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
+    "core:window:allow-create",
+    "core:window:allow-set-focus",
+    "core:window:allow-show",
+    "core:webview:allow-create-webview-window",
     "core:webview:default",
     "core:webview:allow-create-webview",
     "core:webview:allow-set-webview-position",

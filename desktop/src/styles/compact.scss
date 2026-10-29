@@ -136,25 +136,6 @@
   .ai-result .ui-empty { min-height: 130px; padding: 18px 8px; }
 }
 
-// Tauri's native page WebView is composited above the host WebView, so a DOM
-// overlay cannot cover it regardless of z-index. Keep the draggable overlay on
-// host-rendered pages, and dock it only while a native page is visible.
-.browser-content.has-native-ai-panel > .ai-panel {
-  position: relative;
-  z-index: auto;
-  inset: auto !important;
-  flex: 0 0 320px;
-  max-height: none;
-  border-width: 0 0 0 1px;
-  border-radius: 0;
-  box-shadow: -10px 0 28px rgba(31,49,39,.05);
-}
-
-.browser-content.has-native-ai-panel .ai-panel__drag-handle {
-  cursor: default;
-  touch-action: auto;
-}
-
 .ai-panel__drag-handle {
   cursor: grab;
   user-select: none;
@@ -163,6 +144,28 @@
   &:active { cursor: grabbing; }
   button { cursor: pointer; }
 }
+
+.floating-assistant-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+
+  > .ai-panel {
+    inset: 0 !important;
+    width: 100% !important;
+    min-width: 0;
+    height: 100%;
+    max-height: none;
+    border: 1px solid #dce3de;
+    border-radius: 12px;
+  }
+}
+
+body.floating-assistant-window { min-width: 0; background: transparent; }
+body.floating-assistant-window #root { width: 100vw; height: 100vh; }
+.floating-assistant-error { padding: 24px; color: #b42318; }
 
 .ai-panel__heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ai-panel__heading > span:last-child { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
