@@ -23,6 +23,62 @@ pub struct FilePickResult {
     pub paths: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalPdfText {
+    pub title: String,
+    pub text: String,
+    pub word_count: usize,
+    pub truncated: bool,
+}
+
+/// Extract the embedded text layer from a local PDF for the in-app AI panel.
+/// The PDF must exist and the returned context is capped to keep prompts and
+/// frontend memory bounded. Scanned PDFs without a text layer return an error.
+#[tauri::command]
+pub async fn extract_local_pdf(url: String) -> Result<LocalPdfText, String> {
+    let parsed = url::Url::parse(&url).map_err(|error| format!("invalid file URL: {error}"))?;
+    if parsed.scheme() != "file" {
+        return Err("only file:// URLs are accepted".into());
+    }
+    let path = parsed
+        .to_file_path()
+        .map_err(|_| "file URL cannot be converted to a local path".to_string())?
+        .canonicalize()
+        .map_err(|error| format!("local PDF is unavailable: {error}"))?;
+    let is_pdf = path.is_file()
+        && path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("pdf"));
+    if !is_pdf {
+        return Err("only existing local PDF files can be extracted".into());
+    }
+    let title = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("PDF")
+        .to_string();
+    let raw = tauri::async_runtime::spawn_blocking(move || pdf_extract::extract_text(&path))
+        .await
+        .map_err(|error| format!("PDF extraction task failed: {error}"))?
+        .map_err(|error| format!("failed to extract PDF text: {error}"))?;
+    let normalized = raw.trim();
+    if normalized.is_empty() {
+        return Err("该 PDF 没有可读取的文本层，可能是扫描件".into());
+    }
+    const MAX_CONTEXT_CHARS: usize = 200_000;
+    let word_count = normalized.chars().count();
+    let truncated = word_count > MAX_CONTEXT_CHARS;
+    let text = normalized.chars().take(MAX_CONTEXT_CHARS).collect();
+    Ok(LocalPdfText {
+        title,
+        text,
+        word_count,
+        truncated,
+    })
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FilePickFilters {

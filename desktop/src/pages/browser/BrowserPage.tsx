@@ -34,6 +34,7 @@ import type { ContextMenuAction } from '../../features/browser/contextMenu'
 import { startDownload } from '../../services/downloads'
 import { classifyDownload } from '../../features/downloads/dangerClassifier'
 import { shellOpen } from '../../services/webviewCompat'
+import { extractLocalPdf } from '../../services/webviewCompat'
 import { classifyShellOpenUrl, describeScheme } from '../../features/browser/externalSchemes'
 import { redactUrl } from '../../features/browser/logRedaction'
 import { domainFromUrl, recordAdBlock } from '../../features/privacy/adBlockStats'
@@ -145,6 +146,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const certificatePrompt = useCertificatePrompt()
   const bookmarkActions = useBookmarks()
   const [readerArticle, setReaderArticle] = useState<ReaderArticle | null>(null)
+  const [pdfArticle, setPdfArticle] = useState<ReaderArticle | null>(null)
+  const [pdfContextError, setPdfContextError] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [closedTabs, setClosedTabs] = useState<ClosedTab[]>([])
@@ -451,6 +454,38 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }, [active.url, active.title, active.private, hydrated])
 
   useEffect(() => { activeTabIdRef.current = activeTabId }, [activeTabId])
+  useEffect(() => {
+    let disposed = false
+    if (!/^file:\/\/.*\.pdf(?:$|[?#])/i.test(active.url)) {
+      setPdfArticle(null)
+      setPdfContextError(null)
+      return () => { disposed = true }
+    }
+    setPdfArticle(null)
+    setPdfContextError(null)
+    void extractLocalPdf(active.url)
+      .then(result => {
+        if (disposed) return
+        const markdown = result.truncated
+          ? `${result.text}\n\n> PDF 文本较长，AI 上下文已截断。`
+          : result.text
+        setPdfArticle({
+          title: result.title,
+          byline: '',
+          excerpt: result.text.slice(0, 240),
+          siteName: '本地 PDF',
+          language: '',
+          contentHtml: '',
+          markdown,
+          textContent: result.text,
+          wordCount: result.wordCount,
+        })
+      })
+      .catch(error => {
+        if (!disposed) setPdfContextError(error instanceof Error ? error.message : String(error))
+      })
+    return () => { disposed = true }
+  }, [active.url])
   useEffect(() => { tabsRef.current = tabs }, [tabs])
   useEffect(() => { persistNotes(notes) }, [notes])
   useEffect(() => { closedTabsRef.current = closedTabs }, [closedTabs])
@@ -2040,7 +2075,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             ? <div className="web-surface__loading"><LoadingOutlined spin/></div>
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:'当前网页需要在 Tauri 桌面应用中打开。'}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
-              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{

@@ -18,6 +18,18 @@ export interface FilePickResult {
   paths: string[]
 }
 
+export interface LocalPdfText {
+  title: string
+  text: string
+  wordCount: number
+  truncated: boolean
+}
+
+export async function extractLocalPdf(url: string): Promise<LocalPdfText> {
+  if (!isTauri()) throw new Error('本地 PDF 文本提取仅可在桌面应用中使用')
+  return invoke<LocalPdfText>('extract_local_pdf', { url })
+}
+
 /**
  * Open the OS file picker and return the chosen file paths. Wraps
  * `tauri-plugin-dialog`'s `pick_file` / `pick_files` / `pick_folder` so the

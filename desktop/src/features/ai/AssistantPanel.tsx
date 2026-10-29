@@ -17,6 +17,8 @@ interface AssistantPanelProps {
   currentUrl: string
   currentTabId: string
   readerArticle: ReaderArticle | null
+  pdfArticle?: ReaderArticle | null
+  pdfContextError?: string | null
   initialQuestion?: string
   initialMode?: PanelMode
   translationSource?: string
@@ -33,7 +35,9 @@ const TRANSLATION_LANGUAGES = [
 
 interface TranslationCacheEntry { key: string; content: string }
 
-export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId, readerArticle, initialQuestion = '', initialMode, translationSource = '' }: AssistantPanelProps) {
+export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId, readerArticle, pdfArticle = null, pdfContextError = null, initialQuestion = '', initialMode, translationSource = '' }: AssistantPanelProps) {
+  const article = readerArticle ?? pdfArticle
+  const isPdfContext = /^file:\/\/.*\.pdf(?:$|[?#])/i.test(currentUrl)
   const [messageApi, contextHolder] = message.useMessage()
   const [mode, setMode] = useState<PanelMode>('summarize')
   const [providers, setProviders] = useState<AIProvider[]>([])
@@ -72,10 +76,10 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
   useEffect(() => {
     if (initialMode) setMode(initialMode)
     if (initialMode === 'translate') {
-      const source = translationSource.trim() || readerArticle?.markdown || ''
+      const source = translationSource.trim() || article?.markdown || ''
       setTargetLanguage(detectTranslationTarget(source))
     }
-  }, [initialMode, translationSource, readerArticle?.markdown])
+  }, [initialMode, translationSource, article?.markdown])
 
   useEffect(() => {
     void getSession('ai.translations').then(raw => {
@@ -87,15 +91,15 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
     })
   }, [])
 
-  const passages = useMemo(() => readerArticle ? numberPassages(readerArticle.markdown ?? '') : [], [readerArticle])
+  const passages = useMemo(() => article ? numberPassages(article.markdown ?? '') : [], [article])
 
   async function generateSummary() {
     if (!providerId) { setError('请先在「设置 → AI Provider」中配置一个 Provider。'); return }
-    const markdown = (translationSource || readerArticle?.markdown || '').trim()
+    const markdown = (translationSource || article?.markdown || '').trim()
     if (!markdown) { setError('请先打开「阅读模式」提取页面正文。'); return }
     setBusy(true); setError(null); setSummary('')
     try {
-      const request = buildSummaryPrompt(markdown, kind, readerArticle?.title || currentUrl)
+      const request = buildSummaryPrompt(markdown, kind, article?.title || currentUrl)
       const response = await aiChat(providerId, request)
       setSummary(response.content)
     } catch (caught) { setError(caught instanceof Error ? caught.message : '生成摘要失败') }
@@ -104,13 +108,13 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
 
   async function askQuestion() {
     if (!providerId) { setError('请先在「设置 → AI Provider」中配置一个 Provider。'); return }
-    const markdown = readerArticle?.markdown?.trim()
+    const markdown = article?.markdown?.trim()
     const trimmed = question.trim()
     if (!markdown) { setError('请先打开「阅读模式」提取页面正文。'); return }
     if (!trimmed) { setError('请输入问题。'); return }
     setBusy(true); setError(null); setAskAnswer(''); setAskCitations([]); setAskNotFound(false)
     try {
-      const request = buildAskPrompt(markdown, trimmed, readerArticle?.title || currentUrl)
+      const request = buildAskPrompt(markdown, trimmed, article?.title || currentUrl)
       const result = await askStream.start(providerId, request)
       const parsed = parseAnswer(result.content)
       setAskAnswer(parsed.answer)
@@ -125,7 +129,7 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
 
   async function translateArticle() {
     if (!providerId) { setError('请先在「设置 → AI Provider」中配置一个 Provider。'); return }
-    const markdown = readerArticle?.markdown?.trim()
+    const markdown = article?.markdown?.trim()
     if (!markdown) { setError('请先打开「阅读模式」提取页面正文。'); return }
     const input = { markdown, targetLanguage, view: translationView }
     const key = translationKey(input)
@@ -161,8 +165,8 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
 
   const currentProvider = providers.find(item => item.id === providerId)
   const noProvider = providers.length === 0
-  const noArticle = !readerArticle?.markdown?.trim()
-  const noTranslationSource = !(translationSource || readerArticle?.markdown || '').trim()
+  const noArticle = !article?.markdown?.trim()
+  const noTranslationSource = !(translationSource || article?.markdown || '').trim()
 
   return <>{contextHolder}<aside className="ai-panel">
     <div className="panel-title"><div className="ai-panel__heading"><span className="ai-mark"><RobotOutlined/></span><span><b>AI Assistant</b><small>阅读、提问与翻译</small></span></div><Button type="text" aria-label="关闭 AI 助手" icon={<CloseOutlined/>} onClick={close}/></div>
@@ -178,9 +182,11 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
       {providers.length > 1 && <Select<string> size="small" value={providerId ?? undefined} onChange={setProviderId} options={providers.map(item => ({label:item.model,value:item.id}))} style={{minWidth:160}}/>}
     </Space>
     <Card size="small" className="context-card">
-      {readerArticle
-        ? <><GlobalOutlined/> 阅读模式 · {readerArticle.wordCount} 字<Tag color="success">就绪</Tag></>
-        : <><GlobalOutlined/> 当前页面<Tag>请先进入阅读模式</Tag></>}
+      {article
+        ? <><GlobalOutlined/> {isPdfContext ? 'PDF 文本' : '阅读模式'} · {article.wordCount} 字<Tag color="success">就绪</Tag></>
+        : isPdfContext
+          ? <><GlobalOutlined/> PDF 文本<Tag>{pdfContextError || '正在提取'}</Tag></>
+          : <><GlobalOutlined/> 当前页面<Tag>请先进入阅读模式</Tag></>}
     </Card>
 
     {mode === 'summarize' && (
