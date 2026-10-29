@@ -1349,6 +1349,8 @@ body[data-theme='dark'] {
 }
 
 .new-tab-search {
+  display: grid;
+  gap: 10px;
   width: 100%;
   padding: 0;
   border: 0;
@@ -1358,7 +1360,7 @@ body[data-theme='dark'] {
 
   > .ant-segmented {
     width: 100%;
-    margin-bottom: 4px;
+    margin-bottom: 0;
     padding: 4px;
     border-radius: 12px;
     background: var(--accent-soft);
@@ -1390,14 +1392,20 @@ body[data-theme='dark'] {
   grid-template-columns: 72px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  padding: 9px 5px 0;
+  padding: 0 5px;
   color: #667169;
   font-size: 12px;
 
   .ant-select,
   .ui-select { width: 100%; }
   .ant-select-selector,
-  .ui-select { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
+  .ui-select {
+    min-height: 34px;
+    border-color: var(--accent-border) !important;
+    border-radius: 8px;
+    background: color-mix(in srgb, #fff 64%, transparent) !important;
+    box-shadow: none !important;
+  }
 }
 
 .new-tab .quick-sites { width: 100% !important; margin-top: 22px !important; }
@@ -2459,6 +2467,15 @@ body[data-view='browser'] .ui-message {
     min-width: 0 !important;
     align-items: flex-end;
     gap: 0;
+  }
+
+  .ant-tabs-nav-add {
+    align-self: center;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    margin: 0 4px;
+    border-radius: 7px;
   }
 
   .ant-tabs-tab {
