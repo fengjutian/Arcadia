@@ -379,7 +379,7 @@ function SearchEngineSettings() {
     <Typography.Title level={5}>默认搜索引擎</Typography.Title>
     <Typography.Paragraph type="secondary">地址栏中非 URL 输入会作为搜索词提交；自定义模板必须包含 <code>{'{query}'}</code> 占位符。</Typography.Paragraph>
     <div className="search-engine-settings__presets" role="radiogroup" aria-label="默认搜索引擎">
-      {[...SEARCH_ENGINE_PRESETS, { id: 'custom', label: '自定义', template: '' }].map(item => {
+      {[...SEARCH_ENGINE_PRESETS, { id: 'custom', label: '自定义', template: '', iconUrl: '' }].map(item => {
         const active = config.presetId === item.id
         return <button
           key={item.id}
@@ -389,7 +389,9 @@ function SearchEngineSettings() {
           className={active ? 'is-active' : ''}
           onClick={() => pickPreset(item.id)}
         >
-          <span className="search-engine-settings__mark" style={{ background: engineColors[item.id] }}>{item.label.slice(0, 1)}</span>
+          <span className="search-engine-settings__mark" style={{ background: engineColors[item.id] }}>
+            {item.id === 'custom' ? <SearchOutlined/> : <><span>{item.label.slice(0, 1)}</span><img src={item.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/></>}
+          </span>
           <span className="search-engine-settings__name">{item.label}</span>
           {active && <CheckCircleOutlined className="search-engine-settings__check"/>}
         </button>

@@ -18,23 +18,24 @@ export interface QuickSite {
   url: string
   initial: string
   color: string
+  iconUrl: string
 }
 
 export const QUICK_SITES: QuickSite[] = [
-  { name: 'GitHub', url: 'https://github.com', initial: 'G', color: '#1f2328' },
-  { name: '掘金', url: 'https://juejin.cn', initial: 'J', color: '#1e80ff' },
-  { name: 'MDN', url: 'https://developer.mozilla.org', initial: 'M', color: '#1d2421' },
-  { name: 'ChatGPT', url: 'https://chat.openai.com', initial: 'C', color: '#10a37f' },
-  { name: '知乎', url: 'https://www.zhihu.com', initial: '知', color: '#0084ff' },
-  { name: 'Bilibili', url: 'https://www.bilibili.com', initial: 'B', color: '#fb7299' },
-  { name: 'arXiv', url: 'https://arxiv.org', initial: 'a', color: '#b31b1b' },
-  { name: 'Google Scholar', url: 'https://scholar.google.com', initial: 'S', color: '#4285f4' },
-  { name: 'Hacker News', url: 'https://news.ycombinator.com', initial: 'H', color: '#ff6600' },
-  { name: 'Wikipedia', url: 'https://www.wikipedia.org', initial: 'W', color: '#1d2421' },
-  { name: '百度', url: 'https://www.baidu.com', initial: '百', color: '#2932e1' },
-  { name: '微博', url: 'https://weibo.com', initial: '微', color: '#e6162d' },
-  { name: '小红书', url: 'https://www.xiaohongshu.com', initial: '红', color: '#ff2442' },
-  { name: '淘宝', url: 'https://www.taobao.com', initial: '淘', color: '#ff5000' },
+  { name: 'GitHub', url: 'https://github.com', initial: 'G', color: '#1f2328', iconUrl: 'https://github.com/favicon.ico' },
+  { name: '掘金', url: 'https://juejin.cn', initial: 'J', color: '#1e80ff', iconUrl: 'https://juejin.cn/favicon.ico' },
+  { name: 'MDN', url: 'https://developer.mozilla.org', initial: 'M', color: '#1d2421', iconUrl: 'https://developer.mozilla.org/favicon.ico' },
+  { name: 'ChatGPT', url: 'https://chatgpt.com', initial: 'C', color: '#10a37f', iconUrl: 'https://chatgpt.com/favicon.ico' },
+  { name: '知乎', url: 'https://www.zhihu.com', initial: '知', color: '#0084ff', iconUrl: 'https://www.zhihu.com/favicon.ico' },
+  { name: 'Bilibili', url: 'https://www.bilibili.com', initial: 'B', color: '#fb7299', iconUrl: 'https://www.bilibili.com/favicon.ico' },
+  { name: 'arXiv', url: 'https://arxiv.org', initial: 'a', color: '#b31b1b', iconUrl: 'https://arxiv.org/favicon.ico' },
+  { name: 'Google Scholar', url: 'https://scholar.google.com', initial: 'S', color: '#4285f4', iconUrl: 'https://scholar.google.com/favicon.ico' },
+  { name: 'Hacker News', url: 'https://news.ycombinator.com', initial: 'H', color: '#ff6600', iconUrl: 'https://news.ycombinator.com/favicon.ico' },
+  { name: 'Wikipedia', url: 'https://www.wikipedia.org', initial: 'W', color: '#1d2421', iconUrl: 'https://www.wikipedia.org/favicon.ico' },
+  { name: '百度', url: 'https://www.baidu.com', initial: '百', color: '#2932e1', iconUrl: 'https://www.baidu.com/favicon.ico' },
+  { name: '微博', url: 'https://weibo.com', initial: '微', color: '#e6162d', iconUrl: 'https://weibo.com/favicon.ico' },
+  { name: '小红书', url: 'https://www.xiaohongshu.com', initial: '红', color: '#ff2442', iconUrl: 'https://www.xiaohongshu.com/favicon.ico' },
+  { name: '淘宝', url: 'https://www.taobao.com', initial: '淘', color: '#ff5000', iconUrl: 'https://www.taobao.com/favicon.ico' },
 ]
 
 export const newTab = (id: string = crypto.randomUUID()): BrowserTab => ({
