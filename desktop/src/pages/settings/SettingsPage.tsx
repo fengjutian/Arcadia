@@ -663,21 +663,45 @@ function KnowledgeBaseSettings() {
     input.click()
   }
   return <>{contextHolder}
-    <Card title="搜索索引" className="settings-card">
-      <Descriptions size="small" column={3} items={[
-        { key: 'version', label: '索引版本', children: indexStatus?.schemaVersion ?? '—' },
-        { key: 'documents', label: '知识库文档', children: indexStatus?.documentCount ?? '—' },
-        { key: 'indexed', label: '已建立索引', children: indexStatus?.indexedDocumentCount ?? '—' },
-      ]}/>
-      <Typography.Paragraph type="secondary" style={{marginTop:12}}>搜索异常或迁移中断时可以重新建立派生索引，不会删除知识库原文。</Typography.Paragraph>
-      <Button loading={rebuilding} onClick={() => void rebuildIndex()}>重新建立搜索索引</Button>
+    <Card title="知识库管理" className="settings-card knowledge-settings-card">
+      <Tabs
+        className="knowledge-settings-tabs"
+        defaultActiveKey="index"
+        destroyOnHidden={false}
+        items={[
+          {
+            key: 'index',
+            label: '搜索索引',
+            children: <section className="privacy-section">
+              <Descriptions size="small" column={3} items={[
+                { key: 'version', label: '索引版本', children: indexStatus?.schemaVersion ?? '—' },
+                { key: 'documents', label: '知识库文档', children: indexStatus?.documentCount ?? '—' },
+                { key: 'indexed', label: '已建立索引', children: indexStatus?.indexedDocumentCount ?? '—' },
+              ]}/>
+              <Typography.Paragraph type="secondary" style={{marginTop:12}}>搜索异常或迁移中断时可以重新建立派生索引，不会删除知识库原文。</Typography.Paragraph>
+              <Button loading={rebuilding} onClick={() => void rebuildIndex()}>重新建立搜索索引</Button>
+            </section>,
+          },
+          {
+            key: 'aliases',
+            label: `搜索别名${aliases.length > 0 ? ` (${aliases.length})` : ''}`,
+            children: <section className="privacy-section">
+              <Typography.Paragraph type="secondary">双向扩展查询，例如搜索“金陵”也能找到“南京”。别名仅保存在本机。</Typography.Paragraph>
+              <Space.Compact style={{width:'100%'}}><Input value={term} maxLength={80} placeholder="词条，例如：南京" onChange={event => setTerm(event.target.value)}/><Input value={alias} maxLength={80} placeholder="别名，例如：金陵" onChange={event => setAlias(event.target.value)} onPressEnter={() => void addAlias()}/><Button type="primary" disabled={!term.trim() || !alias.trim()} onClick={() => void addAlias()}>添加</Button></Space.Compact>
+              <List size="small" style={{marginTop:12}} dataSource={aliases} locale={{emptyText:'尚未添加搜索别名'}} renderItem={item => <List.Item actions={[<Button key="delete" type="text" danger onClick={() => void removeAlias(item.id)}>删除</Button>]}><Typography.Text>{item.term} <span aria-hidden="true">↔</span> {item.alias}</Typography.Text></List.Item>}/>
+            </section>,
+          },
+          {
+            key: 'backup',
+            label: '备份与恢复',
+            children: <section className="privacy-section">
+              <Typography.Paragraph type="secondary">导出本地文档和会话状态为 JSON 文件；恢复时会以文档 id 做 upsert，已存在的条目会被覆盖。</Typography.Paragraph>
+              <Space><Button type="primary" onClick={doExport}>导出备份</Button><Button onClick={doImport}>从文件恢复</Button></Space>
+            </section>,
+          },
+        ]}
+      />
     </Card>
-    <Card title="搜索别名" className="settings-card">
-      <Typography.Paragraph type="secondary">双向扩展查询，例如搜索“金陵”也能找到“南京”。别名仅保存在本机。</Typography.Paragraph>
-      <Space.Compact style={{width:'100%'}}><Input value={term} maxLength={80} placeholder="词条，例如：南京" onChange={event => setTerm(event.target.value)}/><Input value={alias} maxLength={80} placeholder="别名，例如：金陵" onChange={event => setAlias(event.target.value)} onPressEnter={() => void addAlias()}/><Button type="primary" disabled={!term.trim() || !alias.trim()} onClick={() => void addAlias()}>添加</Button></Space.Compact>
-      <List size="small" style={{marginTop:12}} dataSource={aliases} locale={{emptyText:'尚未添加搜索别名'}} renderItem={item => <List.Item actions={[<Button key="delete" type="text" danger onClick={() => void removeAlias(item.id)}>删除</Button>]}><Typography.Text>{item.term} <span aria-hidden="true">↔</span> {item.alias}</Typography.Text></List.Item>}/>
-    </Card>
-    <Card title="知识库备份" className="settings-card"><Typography.Paragraph type="secondary">导出本地文档和会话状态为 JSON 文件；恢复时会以文档 id 做 upsert，已存在的条目会被覆盖。</Typography.Paragraph><Space><Button type="primary" onClick={doExport}>导出备份</Button><Button onClick={doImport}>从文件恢复</Button></Space></Card>
   </>
 }
 

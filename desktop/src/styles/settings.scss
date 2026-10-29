@@ -122,6 +122,69 @@
   }
 }
 
+// Knowledge management uses a compact horizontal tab strip. Keep these rules
+// scoped so the settings page's outer left-hand navigation cannot leak into it.
+.knowledge-settings-card > .ui-card__body > .knowledge-settings-tabs {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+
+  > .ui-tabs__nav {
+    display: flex;
+    flex: none;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    min-height: 44px;
+    margin: 0 0 20px !important;
+    border-right: 0;
+    border-bottom: 1px solid var(--accent-border);
+  }
+
+  > .ui-tabs__nav .ant-tabs-nav-wrap {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  > .ui-tabs__nav .ant-tabs-nav-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    width: auto;
+    min-width: max-content;
+    gap: 24px;
+  }
+
+  > .ui-tabs__nav .ant-tabs-tab {
+    position: relative;
+    flex: none;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 11px 2px 12px;
+  }
+
+  > .ui-tabs__nav .ant-tabs-tab-active::after {
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--accent);
+    content: '';
+  }
+
+  > .ui-tabs__content {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0 4px;
+  }
+}
+
 // Provider settings use a fixed form grid instead of a wrapping Space so the
 // six fields line up in two balanced rows at every desktop width.
 .provider-form-grid {
