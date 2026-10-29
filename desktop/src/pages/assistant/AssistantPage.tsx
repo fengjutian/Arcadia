@@ -34,7 +34,6 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  SimpleTextAttachmentAdapter,
   useExternalStoreRuntime,
   type AppendMessage,
   type CompleteAttachment,
@@ -46,7 +45,7 @@ import { PageHeader } from '../../shared/components/PageHeader'
 import { aiChat, aiEmbed, getSession, listAIProviders, listDocuments, ragAnswer, searchDocuments, searchSimilarEmbeddings, setSession } from '../../api'
 import type { RagQuery } from '../../api'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { buildCitationRepairPrompt, buildCrossAskPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
+import { buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
 import type { AIProvider, Document, View } from '../../types'
 import { compactChatHistory, restoreConversation } from '../../features/ai/conversation'
 import { hasUsableAnswerCitations, reciprocalRankFusion, stripModelReasoning, stripSourceBlocks, validateAnswerCitations } from '../../features/ai/rag'
@@ -54,6 +53,7 @@ import { applyReranker, rrfReranker } from '../../features/ai/reranker'
 import { defaultAgentDeps, runResearchAgent } from '../../features/ai/agentLoop'
 import { listAgentRuns, type AgentRun } from '../../api'
 import { AgentRunHistory } from '../../features/ai/AgentRunHistory'
+import { KnowledgeAttachmentAdapter } from '../../features/ai/knowledgeAttachmentAdapter'
 
 const CONVERSATION_KEY = 'ai.conversation.v1'
 
@@ -82,12 +82,14 @@ interface AssistantTurn {
   pending: boolean
   interrupted?: boolean
   error?: string
+  /** Answer came from the model's general knowledge after local retrieval missed. */
+  generalKnowledge?: boolean
 }
 
 type Turn = UserTurn | AssistantTurn
 type AssistantPatch = Partial<Omit<AssistantTurn, 'id' | 'role'>>
 
-const TEXT_ATTACHMENT_ADAPTER = new SimpleTextAttachmentAdapter()
+const KNOWLEDGE_ATTACHMENT_ADAPTER = new KnowledgeAttachmentAdapter()
 
 /** Keep in-app navigation intact: answer links open as a normal browser tab. */
 function AssistantMarkdownLink({ href, children, node: _node, onClick, ...props }: ComponentPropsWithoutRef<'a'> & { node?: unknown }) {
@@ -151,6 +153,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
             pending:turn.pending === true,
             interrupted:turn.interrupted === true,
             error:turn.error,
+            generalKnowledge:turn.generalKnowledge === true,
           }))
     }).catch(() => setTurns([])).finally(() => setConversationHydrated(true))
   }, [])
@@ -168,6 +171,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           notFound:turn.notFound,
           interrupted:turn.interrupted,
           error:turn.error,
+          generalKnowledge:turn.generalKnowledge,
           pending:turn.pending,
         })
     void setSession(CONVERSATION_KEY, JSON.stringify(stored)).catch(() => undefined)
@@ -203,19 +207,17 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
   const activeProvider = providers.find(item => item.id === providerId)
   const noProvider = providers.length === 0
   const noDocuments = documents.length === 0
-  const canAsk = conversationHydrated && !noProvider && !noDocuments && question.trim().length > 0
+  const canAsk = conversationHydrated && !noProvider && question.trim().length > 0
   const placeholder = !conversationHydrated
     ? '正在恢复对话…'
-    : noDocuments
-      ? '知识库中暂无真实数据'
-      : noProvider
+    : noProvider
         ? '请先在「设置 → AI Provider」中配置'
         : '继续追问，或换一个角度提问…'
 
   const assistantRuntime = useExternalStoreRuntime<Turn>({
     messages: turns,
     isRunning: busy || agentBusy,
-    isDisabled: !conversationHydrated || noDocuments,
+    isDisabled: !conversationHydrated,
     isSendDisabled: noProvider,
     convertMessage: (turn): ThreadMessageLike => ({
       id: turn.id,
@@ -254,7 +256,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
       }
     },
     setMessages: messages => setTurns([...messages]),
-    adapters: { attachments: TEXT_ATTACHMENT_ADAPTER },
+    adapters: { attachments: KNOWLEDGE_ATTACHMENT_ADAPTER },
     onEdit: async (message: AppendMessage) => {
       if (!message.sourceId) return
       const prompt = message.content
@@ -362,15 +364,27 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
       const rag = await ragAnswer(providerId, ragQuery, { temperature: 0.2, maxTokens: 1024 }).catch(() => null)
       if (rag) {
         const status = rag.citationStatus
-        const usable = status === 'valid'
-          || status === 'partial'
-          || (status === 'notRequired' && keywordMatches.length === 0)
-        if (usable) {
+        if (status === 'valid' || status === 'partial') {
           patchTurn(pendingId, {
             content: rag.answer,
             documentIds: Array.from(new Set(rag.citations.map(citation => citation.documentId).filter(Boolean))),
             docIds: undefined,
-            notFound: status === 'notRequired',
+            notFound: false,
+            pending: false,
+          })
+          return
+        }
+        if (status === 'notRequired') {
+          const general = await aiChat(providerId, buildGeneralAnswerPrompt(
+            prompt,
+            history.map(entry => ({ role: entry.role as 'user' | 'assistant', content: entry.content })),
+          ))
+          patchTurn(pendingId, {
+            content: stripModelReasoning(general.content),
+            documentIds: [],
+            docIds: undefined,
+            notFound: false,
+            generalKnowledge: true,
             pending: false,
           })
           return
@@ -406,6 +420,21 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
       )
       const response = await aiChat(providerId, request)
       let parsed = parseCrossAnswer(stripModelReasoning(response.content))
+      if (parsed.notFound) {
+        const general = await aiChat(providerId, buildGeneralAnswerPrompt(
+          prompt,
+          history.map(entry => ({ role: entry.role as 'user' | 'assistant', content: entry.content })),
+        ))
+        patchTurn(pendingId, {
+          content: stripModelReasoning(general.content),
+          documentIds: [],
+          docIds: undefined,
+          notFound: false,
+          generalKnowledge: true,
+          pending: false,
+        })
+        return
+      }
       let validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
       if (!parsed.notFound && !validation.valid) {
         const repairResponse = await aiChat(providerId, buildCitationRepairPrompt(request, parsed.answer))
@@ -549,7 +578,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           <h2>{noDocuments ? '知识库还是空的' : '从一个好问题开始'}</h2>
           <p>
             {noDocuments
-              ? '请先在浏览器中保存网页，再基于真实资料提问。'
+              ? '可以直接提问；保存网页后，我还会优先结合你的资料并标注来源。'
               : `我会在已保存的 ${documents.length} 篇资料中检索，并标注引用来源。`}
           </p>
           {!noDocuments && (
@@ -630,6 +659,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                   <span className="assistant-message__author">知识助手</span>
                   {turn.pending && <span className="assistant-message__status">正在生成</span>}
                   {turn.interrupted && <span className="assistant-message__status is-interrupted">已中断</span>}
+                  {turn.generalKnowledge && <span className="assistant-message__status">通用知识补充</span>}
                 </div>
                 <div className={`assistant-bubble assistant-bubble--assistant${turn.pending ? ' is-pending' : ''}${noticeOnly ? ' is-notice' : ''}`}>
                   {turn.pending ? (
@@ -835,8 +865,8 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                     <ComposerPrimitive.AddAttachment
                       type="button"
                       className="assistant-attach-button"
-                      title="添加文本附件"
-                      aria-label="添加文本附件"
+                      title="添加附件（PDF、DOCX 或文本文件）"
+                      aria-label="添加附件"
                     >
                       <FileTextOutlined />
                     </ComposerPrimitive.AddAttachment>

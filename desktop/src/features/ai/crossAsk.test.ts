@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_CHARS_PER_DOC, buildCitationRepairPrompt, buildCrossAskPrompt, citationIdsInRequest, parseCrossAnswer } from './crossAsk'
+import { MAX_CHARS_PER_DOC, buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from './crossAsk'
 import type { Document } from '../../types'
 
 function makeDoc(partial: Partial<Document>): Document {
@@ -104,6 +104,18 @@ describe('crossAsk helpers', () => {
     expect(request.messages).toHaveLength(2)
     expect(request.messages[0].role).toBe('system')
     expect(request.messages[1].role).toBe('user')
+  })
+
+  it('builds a conversational general-knowledge fallback without fake citations', () => {
+    const request = buildGeneralAnswerPrompt('南京天气', [
+      { role: 'user', content: '南京是什么？' },
+      { role: 'assistant', content: '南京是江苏省省会。' },
+    ])
+    expect(request.temperature).toBe(0.5)
+    expect(request.messages[0].content).toContain('general-purpose assistant')
+    expect(request.messages[0].content).toContain('live data is unavailable')
+    expect(request.messages[0].content).toContain('do not add [doc-N] citations')
+    expect(request.messages.at(-1)).toEqual({ role: 'user', content: '南京天气' })
   })
 
   it('keeps every document when total count is at or below topK', () => {

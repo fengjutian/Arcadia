@@ -23,6 +23,20 @@ export interface TabSyncInputs {
 
 const FAILURE_THRESHOLD = 3
 
+/** Build a useful label when a page, especially the built-in PDF viewer, has no title. */
+export function fallbackTabTitle(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === 'file:') {
+      const fileName = parsed.pathname.split('/').filter(Boolean).at(-1)
+      if (fileName) return decodeURIComponent(fileName)
+    }
+    return parsed.hostname || '新标签页'
+  } catch {
+    return '新标签页'
+  }
+}
+
 export function decideTabSync(inputs: TabSyncInputs): TabSyncDecision {
   const { state, isAlive, previousFailures, pendingScroll, fallbackTitle } = inputs
   if (state) {

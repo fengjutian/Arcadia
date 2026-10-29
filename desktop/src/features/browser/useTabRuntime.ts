@@ -6,7 +6,7 @@ import {
   restoreNativeScroll,
   type NativeBrowserState,
 } from '../../services/nativeBrowser'
-import { decideTabSync } from './tabSyncReducer'
+import { decideTabSync, fallbackTabTitle } from './tabSyncReducer'
 
 export interface TabRuntimeInputs {
   tab: BrowserTab
@@ -67,7 +67,7 @@ export function useTabRuntime(inputs: TabRuntimeInputs): TabRuntimeHandle {
           state: null,
           isAlive: alive,
           previousFailures,
-          fallbackTitle: safeHostname(tab.url),
+          fallbackTitle: fallbackTabTitle(tab.url),
         })
         if (decision.kind === 'reopen') {
           failureCountRef.current.delete(tab.id)
@@ -86,7 +86,7 @@ export function useTabRuntime(inputs: TabRuntimeInputs): TabRuntimeHandle {
         isAlive: true,
         previousFailures: 0,
         pendingScroll: pending,
-        fallbackTitle: safeHostname(state.url),
+        fallbackTitle: fallbackTabTitle(state.url),
       })
       if (decision.kind !== 'apply') return
       onApplyRef.current(decision.patch, decision.restoreScroll)
@@ -110,6 +110,3 @@ export function useTabRuntime(inputs: TabRuntimeInputs): TabRuntimeHandle {
   }
 }
 
-function safeHostname(url: string): string {
-  try { return new URL(url).hostname } catch { return '新标签页' }
-}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideTabSync, TAB_SYNC_FAILURE_THRESHOLD } from './tabSyncReducer'
+import { decideTabSync, fallbackTabTitle, TAB_SYNC_FAILURE_THRESHOLD } from './tabSyncReducer'
 import type { NativeBrowserState } from '../../services/nativeBrowser'
 
 const makeState = (overrides: Partial<NativeBrowserState> = {}): NativeBrowserState => ({
@@ -11,6 +11,21 @@ const makeState = (overrides: Partial<NativeBrowserState> = {}): NativeBrowserSt
   canGoBack: true,
   canGoForward: false,
   ...overrides,
+})
+
+describe('fallbackTabTitle', () => {
+  it('uses the decoded file name for a local PDF', () => {
+    expect(fallbackTabTitle('file:///C:/Users/Charles.feng/Downloads/Sanger%2096-Well%201%20(1).pdf'))
+      .toBe('Sanger 96-Well 1 (1).pdf')
+  })
+
+  it('uses the hostname for a web URL', () => {
+    expect(fallbackTabTitle('https://example.com/docs/report.pdf')).toBe('example.com')
+  })
+
+  it('uses the new-tab label for an invalid or empty URL', () => {
+    expect(fallbackTabTitle('')).toBe('新标签页')
+  })
 })
 
 describe('decideTabSync', () => {

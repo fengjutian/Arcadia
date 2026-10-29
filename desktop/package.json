@@ -22,6 +22,8 @@
     "@mozilla/readability": "^0.6.0",
     "@tauri-apps/api": "^2.11.1",
     "lucide-react": "^1.47.0",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

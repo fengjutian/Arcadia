@@ -12,6 +12,7 @@ export interface StoredConversationTurn {
   error?: string
   pending?: boolean
   interrupted?: boolean
+  generalKnowledge?: boolean
 }
 
 /** Error text written by older builds when a pending answer was reloaded. */
@@ -50,6 +51,7 @@ export function parseStoredConversation(raw: string | null): StoredConversationT
       if (typeof turn.error === 'string' && turn.error.length > 0) clean.error = turn.error
       if (turn.pending === true) clean.pending = true
       if (turn.interrupted === true) clean.interrupted = true
+      if (turn.generalKnowledge === true) clean.generalKnowledge = true
       return clean
     })
   } catch { return [] }
