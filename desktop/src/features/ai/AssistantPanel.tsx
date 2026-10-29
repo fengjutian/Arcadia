@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Empty, Input, message, Segmented, Select, Space, Spin, Tag, Typography } from '../../components/ui'
 import { ArrowRightOutlined, BookOutlined, CloseOutlined, CopyOutlined, GlobalOutlined, RobotOutlined, SaveOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined } from '../../components/ui/icons'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { aiChat, findDocumentByUrl, getSession, listAIProviders, setSession, updateDocument } from '../../api'
 import type { AIProvider } from '../../types'
 import type { ReaderArticle } from '../reader/types'
@@ -35,6 +35,10 @@ const TRANSLATION_LANGUAGES = [
 
 interface TranslationCacheEntry { key: string; content: string }
 
+interface PanelPosition { x: number | null; y: number }
+
+const PANEL_EDGE_GAP = 12
+
 export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId, readerArticle, pdfArticle = null, pdfContextError = null, initialQuestion = '', initialMode, translationSource = '' }: AssistantPanelProps) {
   const article = readerArticle ?? pdfArticle
   const isPdfContext = /^file:\/\/.*\.pdf(?:$|[?#])/i.test(currentUrl)
@@ -55,6 +59,65 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
   const [translation, setTranslation] = useState('')
   const askStream = useStreamingChat()
   const [cache, setCache] = useState<TranslationCacheEntry[]>([])
+  const panelRef = useRef<HTMLElement>(null)
+  const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
+  const [position, setPosition] = useState<PanelPosition>({ x: null, y: PANEL_EDGE_GAP })
+
+  function clampPosition(x: number, y: number): PanelPosition {
+    const panel = panelRef.current
+    const container = panel?.offsetParent as HTMLElement | null
+    if (!panel || !container) return { x, y }
+    return {
+      x: Math.max(PANEL_EDGE_GAP, Math.min(x, container.clientWidth - panel.offsetWidth - PANEL_EDGE_GAP)),
+      y: Math.max(PANEL_EDGE_GAP, Math.min(y, container.clientHeight - panel.offsetHeight - PANEL_EDGE_GAP)),
+    }
+  }
+
+  function startDragging(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('button, input, select, textarea')) return
+    const panel = panelRef.current
+    const container = panel?.offsetParent as HTMLElement | null
+    if (!panel || !container || container.classList.contains('has-native-ai-panel')) return
+    const panelRect = panel.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
+    dragRef.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - panelRect.left,
+      offsetY: event.clientY - panelRect.top,
+    }
+    setPosition({ x: panelRect.left - containerRect.left, y: panelRect.top - containerRect.top })
+    event.currentTarget.setPointerCapture(event.pointerId)
+    event.preventDefault()
+  }
+
+  function dragPanel(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current
+    const container = panelRef.current?.offsetParent as HTMLElement | null
+    if (!drag || drag.pointerId !== event.pointerId || !container) return
+    const containerRect = container.getBoundingClientRect()
+    setPosition(clampPosition(
+      event.clientX - containerRect.left - drag.offsetX,
+      event.clientY - containerRect.top - drag.offsetY,
+    ))
+  }
+
+  function stopDragging(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.pointerId !== event.pointerId) return
+    dragRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  useEffect(() => {
+    const panel = panelRef.current
+    const container = panel?.offsetParent as HTMLElement | null
+    if (!panel || !container) return
+    const observer = new ResizeObserver(() => {
+      setPosition(current => current.x === null ? current : clampPosition(current.x, current.y))
+    })
+    observer.observe(container)
+    observer.observe(panel)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     void listAIProviders().then(list => {
@@ -168,8 +231,19 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
   const noArticle = !article?.markdown?.trim()
   const noTranslationSource = !(translationSource || article?.markdown || '').trim()
 
-  return <>{contextHolder}<aside className="ai-panel">
-    <div className="panel-title"><div className="ai-panel__heading"><span className="ai-mark"><RobotOutlined/></span><span><b>AI Assistant</b><small>阅读、提问与翻译</small></span></div><Button type="text" aria-label="关闭 AI 助手" icon={<CloseOutlined/>} onClick={close}/></div>
+  return <>{contextHolder}<aside
+    ref={panelRef}
+    className="ai-panel"
+    style={position.x === null ? { right: PANEL_EDGE_GAP, top: position.y } : { left: position.x, top: position.y }}
+  >
+    <div
+      className="panel-title ai-panel__drag-handle"
+      onPointerDown={startDragging}
+      onPointerMove={dragPanel}
+      onPointerUp={stopDragging}
+      onPointerCancel={stopDragging}
+      title="拖拽移动 AI 助手"
+    ><div className="ai-panel__heading"><span className="ai-mark"><RobotOutlined/></span><span><b>AI Assistant</b><small>阅读、提问与翻译</small></span></div><Button type="text" aria-label="关闭 AI 助手" icon={<CloseOutlined/>} onClick={close}/></div>
     <Segmented className="ai-panel__modes" block value={mode} onChange={value => setMode(value as PanelMode)} options={[
       {label:'摘要',value:'summarize' as PanelMode},
       {label:'提问',value:'ask' as PanelMode},

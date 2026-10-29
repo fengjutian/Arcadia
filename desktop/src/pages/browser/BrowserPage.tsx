@@ -2061,7 +2061,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         </span>
       </div>
     )}
-    <div className="browser-content"><div className="web-surface" ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
+    <div className={`browser-content${aiOpen && nativeMode ? ' has-native-ai-panel' : ''}`}><div className="web-surface" ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
       ? <SearchComparisonWorkspace query={comparison.query} sources={comparison.sources} visibleIds={comparison.visibleIds} onShow={showComparisonSource} onClose={closeComparison}/>
       : readerArticle
       ? <ReaderArticleView article={readerArticle}/>

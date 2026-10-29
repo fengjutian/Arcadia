@@ -95,17 +95,22 @@
 }
 .page > h3.ant-typography { margin: 12px 0 8px; font-size: 20px; }
 
+.browser-content { position: relative; }
+
 .browser-content > .ai-panel {
-  flex: 0 0 320px;
+  position: absolute;
+  z-index: 20;
   width: 320px !important;
   min-width: 300px;
+  max-height: calc(100% - 24px);
   padding: 14px !important;
   gap: 11px !important;
   overflow-x: hidden;
   overflow-y: auto;
-  border-left: 1px solid #dce3de;
+  border: 1px solid #dce3de;
+  border-radius: 14px;
   background: linear-gradient(180deg, #fbfcfb 0%, #f5f8f6 100%);
-  box-shadow: -10px 0 28px rgba(31,49,39,.05);
+  box-shadow: 0 16px 44px rgba(31,49,39,.18);
 
   .panel-title { height: 42px !important; flex: none; }
   .context-card { margin: 0 !important; border-color: #dce4df; border-radius: 11px; background: rgba(255,255,255,.78); }
@@ -129,6 +134,34 @@
 
   .ai-result > .ant-card-body { height: 100%; padding: 14px; }
   .ai-result .ui-empty { min-height: 130px; padding: 18px 8px; }
+}
+
+// Tauri's native page WebView is composited above the host WebView, so a DOM
+// overlay cannot cover it regardless of z-index. Keep the draggable overlay on
+// host-rendered pages, and dock it only while a native page is visible.
+.browser-content.has-native-ai-panel > .ai-panel {
+  position: relative;
+  z-index: auto;
+  inset: auto !important;
+  flex: 0 0 320px;
+  max-height: none;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  box-shadow: -10px 0 28px rgba(31,49,39,.05);
+}
+
+.browser-content.has-native-ai-panel .ai-panel__drag-handle {
+  cursor: default;
+  touch-action: auto;
+}
+
+.ai-panel__drag-handle {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+
+  &:active { cursor: grabbing; }
+  button { cursor: pointer; }
 }
 
 .ai-panel__heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
