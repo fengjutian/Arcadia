@@ -1,7 +1,9 @@
 export const site = {
   name: 'Arcadia',
   description: '本地优先的 AI 知识浏览器。阅读、保存、检索与研究，在一个安静的工作空间里完成。',
-  email: 'hello@arcadia.local',
+  url: 'https://arcadia-browser.netlify.app',
+  repository: 'https://github.com/fengjutian/browser',
+  releases: 'https://github.com/fengjutian/browser/releases',
 };
 
 export const capabilities = [
