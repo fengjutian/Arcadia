@@ -1907,10 +1907,10 @@ fn build_hybrid_fts_query(query: &str, aliases: &[(String, String)]) -> String {
     let mut variants = vec![query.trim()];
     let normalized = query.trim().to_lowercase();
     for (left, right) in aliases {
-        if normalized == left {
-            variants.push(right);
-        } else if normalized == right {
-            variants.push(left);
+        if normalized.as_str() == left {
+            variants.push(right.as_str());
+        } else if normalized.as_str() == right {
+            variants.push(left.as_str());
         }
     }
     variants
@@ -1926,11 +1926,12 @@ fn search_alias_pairs(database: &Connection) -> Result<Vec<(String, String)>, St
     let mut statement = database
         .prepare("SELECT lower(term), lower(alias) FROM search_aliases ORDER BY id")
         .map_err(|error| error.to_string())?;
-    statement
+    let aliases = statement
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    Ok(aliases)
 }
 
 fn literal_highlight(text: &str, query: &str) -> String {
@@ -2179,7 +2180,7 @@ pub fn local_list_search_aliases(app: tauri::AppHandle) -> Result<Vec<SearchAlia
     let mut statement = database
         .prepare("SELECT id,term,alias FROM search_aliases ORDER BY term COLLATE NOCASE, alias COLLATE NOCASE")
         .map_err(|error| error.to_string())?;
-    statement
+    let aliases = statement
         .query_map([], |row| {
             Ok(SearchAlias {
                 id: row.get(0)?,
@@ -2189,7 +2190,8 @@ pub fn local_list_search_aliases(app: tauri::AppHandle) -> Result<Vec<SearchAlia
         })
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    Ok(aliases)
 }
 
 #[tauri::command]
@@ -2237,13 +2239,19 @@ pub fn local_search_index_status(app: tauri::AppHandle) -> Result<SearchIndexSta
     let database = connection(&app)?;
     Ok(SearchIndexStatus {
         schema_version: database
-            .query_row("SELECT COALESCE(MAX(version),0) FROM schema_version", [], |row| row.get(0))
+            .query_row(
+                "SELECT COALESCE(MAX(version),0) FROM schema_version",
+                [],
+                |row| row.get(0),
+            )
             .map_err(|error| error.to_string())?,
         document_count: database
             .query_row("SELECT COUNT(*) FROM local_documents", [], |row| row.get(0))
             .map_err(|error| error.to_string())?,
         indexed_document_count: database
-            .query_row("SELECT COUNT(*) FROM local_documents_cjk_fts", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM local_documents_cjk_fts", [], |row| {
+                row.get(0)
+            })
             .map_err(|error| error.to_string())?,
     })
 }

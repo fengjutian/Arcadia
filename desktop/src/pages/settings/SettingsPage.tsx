@@ -36,6 +36,7 @@ import {
 } from '../../features/browser/shortcuts'
 import { deleteWorkspace, listWorkspaces, saveWorkspace, validateWorkspaceDescription, validateWorkspaceName, decorateSummaries, relativeUpdatedAt, type WorkspaceDisplayRow, WORKSPACE_RESTORE_EVENT } from '../../features/browser/workspaces'
 import { getWorkspace } from '../../services/workspaces'
+import { addSearchAlias, deleteSearchAlias, getSearchIndexStatus, listSearchAliases, rebuildSearchIndex, type SearchAlias, type SearchIndexStatus } from '../../api'
 
 const PROVIDER_OPTIONS: { label: string; value: AIProviderType }[] = [
   { label: 'OpenAI 兼容（API Key）', value: 'openai-compatible' },
@@ -579,6 +580,49 @@ function AIProviderSettings() {
 
 function KnowledgeBaseSettings() {
   const [messageApi, contextHolder] = message.useMessage()
+  const [aliases, setAliases] = useState<SearchAlias[]>([])
+  const [indexStatus, setIndexStatus] = useState<SearchIndexStatus | null>(null)
+  const [term, setTerm] = useState('')
+  const [alias, setAlias] = useState('')
+  const [rebuilding, setRebuilding] = useState(false)
+
+  const refreshSearchSettings = async () => {
+    const [nextAliases, status] = await Promise.all([listSearchAliases(), getSearchIndexStatus()])
+    setAliases(nextAliases)
+    setIndexStatus(status)
+  }
+
+  useEffect(() => { void refreshSearchSettings().catch(() => undefined) }, [])
+
+  async function addAlias() {
+    try {
+      const created = await addSearchAlias(term, alias)
+      setAliases(items => [...items, created].sort((a, b) => a.term.localeCompare(b.term, 'zh-CN')))
+      setTerm('')
+      setAlias('')
+      messageApi.success('搜索别名已添加')
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function removeAlias(id: number) {
+    await deleteSearchAlias(id)
+    setAliases(items => items.filter(item => item.id !== id))
+  }
+
+  async function rebuildIndex() {
+    setRebuilding(true)
+    try {
+      const status = await rebuildSearchIndex()
+      setIndexStatus(status)
+      messageApi.success(`已重建 ${status.indexedDocumentCount} 篇文档的搜索索引`)
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '索引重建失败')
+    } finally {
+      setRebuilding(false)
+    }
+  }
   function doExport() {
     void (async () => {
       try {
@@ -618,7 +662,23 @@ function KnowledgeBaseSettings() {
     }
     input.click()
   }
-  return <>{contextHolder}<Card title="知识库备份" className="settings-card"><Typography.Paragraph type="secondary">导出本地文档和会话状态为 JSON 文件；恢复时会以文档 id 做 upsert，已存在的条目会被覆盖。</Typography.Paragraph><Space><Button type="primary" onClick={doExport}>导出备份</Button><Button onClick={doImport}>从文件恢复</Button></Space></Card></>
+  return <>{contextHolder}
+    <Card title="搜索索引" className="settings-card">
+      <Descriptions size="small" column={3} items={[
+        { key: 'version', label: '索引版本', children: indexStatus?.schemaVersion ?? '—' },
+        { key: 'documents', label: '知识库文档', children: indexStatus?.documentCount ?? '—' },
+        { key: 'indexed', label: '已建立索引', children: indexStatus?.indexedDocumentCount ?? '—' },
+      ]}/>
+      <Typography.Paragraph type="secondary" style={{marginTop:12}}>搜索异常或迁移中断时可以重新建立派生索引，不会删除知识库原文。</Typography.Paragraph>
+      <Button loading={rebuilding} onClick={() => void rebuildIndex()}>重新建立搜索索引</Button>
+    </Card>
+    <Card title="搜索别名" className="settings-card">
+      <Typography.Paragraph type="secondary">双向扩展查询，例如搜索“金陵”也能找到“南京”。别名仅保存在本机。</Typography.Paragraph>
+      <Space.Compact style={{width:'100%'}}><Input value={term} maxLength={80} placeholder="词条，例如：南京" onChange={event => setTerm(event.target.value)}/><Input value={alias} maxLength={80} placeholder="别名，例如：金陵" onChange={event => setAlias(event.target.value)} onPressEnter={() => void addAlias()}/><Button type="primary" disabled={!term.trim() || !alias.trim()} onClick={() => void addAlias()}>添加</Button></Space.Compact>
+      <List size="small" style={{marginTop:12}} dataSource={aliases} locale={{emptyText:'尚未添加搜索别名'}} renderItem={item => <List.Item actions={[<Button key="delete" type="text" danger onClick={() => void removeAlias(item.id)}>删除</Button>]}><Typography.Text>{item.term} <span aria-hidden="true">↔</span> {item.alias}</Typography.Text></List.Item>}/>
+    </Card>
+    <Card title="知识库备份" className="settings-card"><Typography.Paragraph type="secondary">导出本地文档和会话状态为 JSON 文件；恢复时会以文档 id 做 upsert，已存在的条目会被覆盖。</Typography.Paragraph><Space><Button type="primary" onClick={doExport}>导出备份</Button><Button onClick={doImport}>从文件恢复</Button></Space></Card>
+  </>
 }
 
 const PERMISSION_LABELS: Record<SitePermissionKind, string> = {

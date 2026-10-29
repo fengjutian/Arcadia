@@ -276,6 +276,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
                   activity={activity}
                   savedAt={item.createdAt}
                   wordCount={item.wordCount}
+                  matchReason={item.matchReason}
                   onOpen={() => openDocument(item)}
                 />
               })}
@@ -367,12 +368,13 @@ interface ResultCardProps {
   activity?: ReadingActivity
   savedAt?: string
   wordCount?: number
+  matchReason?: string
   availability?: 'snapshot' | 'visit'
   actionLabel?: string
   onOpen: () => void
 }
 
-function ResultCard({ title, titleText, url, snippet, snippetIsUrl, tags = [], activeTags = [], starred, activity, savedAt, wordCount, availability, actionLabel, onOpen }: ResultCardProps) {
+function ResultCard({ title, titleText, url, snippet, snippetIsUrl, tags = [], activeTags = [], starred, activity, savedAt, wordCount, matchReason, availability, actionLabel, onOpen }: ResultCardProps) {
   const domain = domainOf(url)
   const status = activity ? readingStatus(activity) : null
   const scroll = activity ? Math.min(100, Math.max(0, Math.round(activity.maxScrollDepth * 100))) : 0
@@ -402,6 +404,7 @@ function ResultCard({ title, titleText, url, snippet, snippetIsUrl, tags = [], a
     <p className={`result-card__snippet${snippetIsUrl ? ' is-url' : ''}`}>{snippet}</p>
     <div className="result-card__footer">
       <div className="result-card__tags">
+        {matchReason && matchReason !== 'all' && <span className={`search-match-reason is-${matchReason}`}>{matchReasonLabel(matchReason)}</span>}
         {tags.slice(0, 3).map(tag => <Tag key={tag} className={`search-tag${activeTags.includes(tag) ? ' is-active' : ''}`}>{tag}</Tag>)}
         {tags.length > 3 && <span className="search-tag search-tag--more">+{tags.length - 3}</span>}
         {tags.length === 0 && availability && <span className={`result-card__availability${availability === 'snapshot' ? ' is-snapshot' : ''}`}>
@@ -422,6 +425,10 @@ function ResultCard({ title, titleText, url, snippet, snippetIsUrl, tags = [], a
       <em>{scroll}%</em>
     </div>}
   </article>
+}
+
+function matchReasonLabel(reason: string): string {
+  return ({ title: '标题命中', tag: '标签命中', pinyin: '拼音命中', alias: '别名命中', summary: '摘要命中', content: '正文命中' } as Record<string, string>)[reason] ?? '内容命中'
 }
 
 function readingStatus(activity?: ReadingActivity): 'seen' | 'read' | 'deep' {

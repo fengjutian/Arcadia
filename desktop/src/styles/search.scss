@@ -560,6 +560,27 @@
   .ui-tag { margin-inline-end: 0; }
 }
 
+.search-match-reason {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.search-match-reason.is-pinyin,
+.search-match-reason.is-alias {
+  border-color: color-mix(in srgb, #8a63c7 28%, transparent);
+  background: color-mix(in srgb, #8a63c7 10%, transparent);
+  color: #7050aa;
+}
+
 .search-tag {
   flex: none;
   max-width: 120px;
