@@ -345,6 +345,11 @@ function SearchEngineSettings() {
   const [messageApi, contextHolder] = message.useMessage()
   const [config, setConfig] = useState(() => readSearchEngineConfig())
   const [customTemplate, setCustomTemplate] = useState(() => readSearchEngineConfig().customTemplate ?? '')
+  const engineColors: Record<string, string> = {
+    google: '#4285f4', bing: '#008373', baidu: '#2932e1', duckduckgo: '#de5833',
+    sogou: '#f45b35', so360: '#17a05d', brave: '#fb542b', startpage: '#6573ff',
+    ecosia: '#36a96b', yandex: '#fc3f1d', custom: '#8b7355',
+  }
 
   function pickPreset(presetId: string) {
     if (presetId === 'custom') {
@@ -373,16 +378,23 @@ function SearchEngineSettings() {
   return <>{contextHolder}<Card title="搜索引擎" className="settings-card search-engine-settings">
     <Typography.Title level={5}>默认搜索引擎</Typography.Title>
     <Typography.Paragraph type="secondary">地址栏中非 URL 输入会作为搜索词提交；自定义模板必须包含 <code>{'{query}'}</code> 占位符。</Typography.Paragraph>
-    <Segmented
-      block
-      className="search-engine-settings__presets"
-      value={config.presetId}
-      onChange={pickPreset}
-      options={[
-        ...SEARCH_ENGINE_PRESETS.map(item => ({ label: item.label, value: item.id })),
-        { label: '自定义', value: 'custom' },
-      ]}
-    />
+    <div className="search-engine-settings__presets" role="radiogroup" aria-label="默认搜索引擎">
+      {[...SEARCH_ENGINE_PRESETS, { id: 'custom', label: '自定义', template: '' }].map(item => {
+        const active = config.presetId === item.id
+        return <button
+          key={item.id}
+          type="button"
+          role="radio"
+          aria-checked={active}
+          className={active ? 'is-active' : ''}
+          onClick={() => pickPreset(item.id)}
+        >
+          <span className="search-engine-settings__mark" style={{ background: engineColors[item.id] }}>{item.label.slice(0, 1)}</span>
+          <span className="search-engine-settings__name">{item.label}</span>
+          {active && <CheckCircleOutlined className="search-engine-settings__check"/>}
+        </button>
+      })}
+    </div>
     {config.presetId === 'custom' && <Space.Compact block style={{ marginTop: 16 }}>
       <Input
         value={customTemplate}
