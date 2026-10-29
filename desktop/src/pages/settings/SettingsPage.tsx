@@ -375,6 +375,7 @@ function SearchEngineSettings() {
     <Typography.Paragraph type="secondary">地址栏中非 URL 输入会作为搜索词提交；自定义模板必须包含 <code>{'{query}'}</code> 占位符。</Typography.Paragraph>
     <Segmented
       block
+      className="search-engine-settings__presets"
       value={config.presetId}
       onChange={pickPreset}
       options={[

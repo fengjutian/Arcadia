@@ -1410,6 +1410,16 @@ body[data-theme='dark'] {
 
 .new-tab .quick-sites { width: 100% !important; margin-top: 22px !important; }
 
+.search-engine-settings__presets {
+  flex-wrap: wrap;
+  align-items: stretch;
+
+  button {
+    flex: 1 1 180px;
+    min-height: 42px;
+  }
+}
+
 body[data-theme='dark'] {
   .new-tab__workspace {
     border-color: #334139;

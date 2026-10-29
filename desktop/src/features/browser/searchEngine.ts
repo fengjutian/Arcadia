@@ -17,6 +17,12 @@ export const SEARCH_ENGINE_PRESETS: SearchEnginePreset[] = [
   { id: 'bing',    label: 'Bing',     template: 'https://www.bing.com/search?q={query}' },
   { id: 'baidu',   label: '百度',      template: 'https://www.baidu.com/s?wd={query}' },
   { id: 'duckduckgo', label: 'DuckDuckGo', template: 'https://duckduckgo.com/?q={query}' },
+  { id: 'sogou', label: '搜狗', template: 'https://www.sogou.com/web?query={query}' },
+  { id: 'so360', label: '360 搜索', template: 'https://www.so.com/s?q={query}' },
+  { id: 'brave', label: 'Brave', template: 'https://search.brave.com/search?q={query}' },
+  { id: 'startpage', label: 'Startpage', template: 'https://www.startpage.com/sp/search?query={query}' },
+  { id: 'ecosia', label: 'Ecosia', template: 'https://www.ecosia.org/search?q={query}' },
+  { id: 'yandex', label: 'Yandex', template: 'https://yandex.com/search/?text={query}' },
 ]
 
 export const SEARCH_ENGINE_STORAGE_KEY = 'browser.searchEngine.v1'
