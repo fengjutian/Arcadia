@@ -662,6 +662,10 @@ const MIGRATIONS: &[(i64, &str)] = &[
             tokenize='unicode61'
         );",
     ),
+    // Tokenisation changed in v28 (CJK trigrams and compact query tokens).
+    // Keep the schema migration append-only and rebuild the existing index in
+    // `run_migrations` so upgraded databases receive the new token stream.
+    (28, "SELECT 1;"),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -914,7 +918,7 @@ pub(crate) fn run_migrations(database: &mut Connection) -> Result<(), String> {
         if *version == 11 {
             migrate_legacy_browser_state(&transaction)?;
         }
-        if *version == 27 {
+        if matches!(*version, 27 | 28) {
             rebuild_cjk_search_index(&transaction)?;
         }
         transaction
@@ -1705,9 +1709,10 @@ fn is_cjk(character: char) -> bool {
 }
 
 /// Produce a compact hybrid token stream for SQLite FTS5. Latin words remain
-/// intact, while CJK runs emit both unigrams and overlapping bigrams. Bigrams
+/// intact, while CJK runs emit unigrams, overlapping bigrams and trigrams. Bigrams
 /// make two-character terms (`南京`) directly searchable inside longer text
-/// (`南京市`); unigrams preserve one-character queries and mixed phrases.
+/// (`南京市`); trigrams improve precision for place names and longer phrases;
+/// unigrams preserve one-character queries and mixed phrases.
 fn hybrid_search_tokens(text: &str) -> Vec<String> {
     fn flush_ascii(buffer: &mut String, output: &mut Vec<String>) {
         if !buffer.is_empty() {
@@ -1723,6 +1728,11 @@ fn hybrid_search_tokens(text: &str) -> Vec<String> {
             buffer
                 .windows(2)
                 .map(|pair| pair.iter().collect::<String>()),
+        );
+        output.extend(
+            buffer
+                .windows(3)
+                .map(|group| group.iter().collect::<String>()),
         );
         buffer.clear();
     }
@@ -1754,8 +1764,61 @@ fn hybrid_token_text(text: &str) -> String {
     hybrid_search_tokens(text).join(" ")
 }
 
+/// Query tokens are deliberately smaller than index tokens. A multi-character
+/// CJK run uses bigrams (plus trigrams for precision) instead of also requiring
+/// every unigram. This avoids noisy one-character matches while retaining exact
+/// substring recall. Single-character searches still use a unigram.
+fn hybrid_query_tokens(text: &str) -> Vec<String> {
+    fn flush_ascii(buffer: &mut String, output: &mut Vec<String>) {
+        if !buffer.is_empty() {
+            output.push(std::mem::take(buffer));
+        }
+    }
+    fn flush_cjk(buffer: &mut Vec<char>, output: &mut Vec<String>) {
+        match buffer.len() {
+            0 => {}
+            1 => output.push(buffer[0].to_string()),
+            _ => {
+                output.extend(
+                    buffer
+                        .windows(2)
+                        .map(|pair| pair.iter().collect::<String>()),
+                );
+                output.extend(
+                    buffer
+                        .windows(3)
+                        .map(|group| group.iter().collect::<String>()),
+                );
+            }
+        }
+        buffer.clear();
+    }
+
+    let mut tokens = Vec::new();
+    let mut ascii = String::new();
+    let mut cjk = Vec::new();
+    for character in text.chars() {
+        if is_cjk(character) {
+            flush_ascii(&mut ascii, &mut tokens);
+            cjk.push(character);
+        } else if character.is_alphanumeric() {
+            flush_cjk(&mut cjk, &mut tokens);
+            ascii.extend(character.to_lowercase());
+        } else {
+            flush_ascii(&mut ascii, &mut tokens);
+            flush_cjk(&mut cjk, &mut tokens);
+        }
+    }
+    flush_ascii(&mut ascii, &mut tokens);
+    flush_cjk(&mut cjk, &mut tokens);
+
+    let mut seen = HashSet::new();
+    tokens.retain(|token| !token.is_empty() && seen.insert(token.clone()));
+    tokens
+}
+
 fn build_hybrid_fts_query(query: &str) -> String {
-    hybrid_search_tokens(query)
+    hybrid_query_tokens(query)
         .into_iter()
         .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
         .collect::<Vec<_>>()
@@ -1862,11 +1925,18 @@ pub fn local_list_documents(
                  FROM local_documents d \
                  INNER JOIN local_documents_cjk_fts cjk ON cjk.document_id = d.id \
                  WHERE local_documents_cjk_fts MATCH ?1 \
-                 ORDER BY rank, d.starred DESC, d.created_at DESC",
+                 ORDER BY CASE \
+                            WHEN instr(lower(d.title), lower(?2)) > 0 THEN 0 \
+                            WHEN instr(lower(COALESCE(d.tags, '')), lower(?2)) > 0 \
+                              OR instr(lower(COALESCE(d.auto_tags, '')), lower(?2)) > 0 THEN 1 \
+                            WHEN instr(lower(COALESCE(d.summary, '')), lower(?2)) > 0 THEN 2 \
+                            ELSE 3 \
+                          END, \
+                          rank, d.starred DESC, d.created_at DESC",
             )
             .map_err(|error| error.to_string())?;
         let rows = statement
-            .query_map(params![hybrid_query], row_hit)
+            .query_map(params![hybrid_query, trimmed], row_hit)
             .map_err(|error| error.to_string())?;
         return rows
             .collect::<Result<Vec<_>, _>>()
@@ -4813,14 +4883,27 @@ mod tests {
     }
 
     #[test]
-    fn hybrid_tokenizer_emits_cjk_unigrams_and_bigrams() {
+    fn hybrid_tokenizer_emits_cjk_unigrams_bigrams_and_trigrams() {
         let tokens = hybrid_search_tokens("南京市 AI Search");
-        for expected in ["南", "南京", "京", "京市", "市", "ai", "search"] {
+        for expected in ["南", "南京", "京", "京市", "市", "南京市", "ai", "search"] {
             assert!(
                 tokens.iter().any(|token| token == expected),
                 "missing token {expected}"
             );
         }
+    }
+
+    #[test]
+    fn hybrid_query_avoids_unigrams_for_multi_character_terms() {
+        let tokens = hybrid_query_tokens("南京城市 AI");
+        for expected in ["南京", "京城", "城市", "南京城", "京城市", "ai"] {
+            assert!(
+                tokens.iter().any(|token| token == expected),
+                "missing token {expected}"
+            );
+        }
+        assert!(!tokens.iter().any(|token| token == "南"));
+        assert_eq!(hybrid_query_tokens("宁"), vec!["宁"]);
     }
 
     #[test]

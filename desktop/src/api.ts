@@ -8,18 +8,6 @@ import type { BrowserTab, ReadingActivity } from './types'
 
 const isTauri = () => '__TAURI_INTERNALS__' in window
 
-/**
- * True when the UI runs inside the Tauri shell, i.e. the native command layer
- * (and with it the local SQLite store) is reachable.
- *
- * There is no separate service to start: the "backend" is the Rust side of this
- * same desktop app, so a `false` result only means the page is being viewed in
- * a plain browser (Vite preview, tests, docs screenshots).
- */
-export function isDesktopRuntime(): boolean {
-  return isTauri()
-}
-
 interface LocalSearchMetadata {
   titleSnippet: string
   markdownSnippet: string

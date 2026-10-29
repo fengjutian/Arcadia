@@ -3,7 +3,7 @@ import { BookOutlined, ClockCircleOutlined, FileTextOutlined, InboxOutlined, Rig
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { deleteReadingSnapshot, isDesktopRuntime, searchDocuments, listReadingActivity, getSession, setSession, type DocumentSearchHit } from '../../api'
+import { deleteReadingSnapshot, searchDocuments, listReadingActivity, getSession, setSession, type DocumentSearchHit } from '../../api'
 import type { ReadingActivity } from '../../types'
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { renderHighlightedSnippet } from '../../features/search/renderSnippet'
@@ -236,12 +236,10 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
 
       {showEmpty && (unavailable
         ? <SearchEmpty
-            title={isDesktopRuntime() ? '本地数据库暂时不可用' : '搜索需要在桌面端运行'}
-            description={isDesktopRuntime()
-              ? '读取本机 knowledge.db 失败。内容都在这台机器上，不需要连接任何服务；可以重试，若反复失败请附上下方的错误信息。'
-              : '知识库保存在桌面端的本地 SQLite 中，纯 Web 预览模式读不到。请用 npm run tauri:dev 打开应用。'}
+            title="本地数据库暂时不可用"
+            description="读取本机 knowledge.db 失败。内容都在这台机器上，不需要连接或启动任何服务；可以先重试，若反复失败请附上下方的错误信息。"
             detail={loadError}
-            action={<Button onClick={() => setReloadToken(value => value + 1)}>{isDesktopRuntime() ? '重试' : '重新检测'}</Button>}
+            action={<Button onClick={() => setReloadToken(value => value + 1)}>重试</Button>}
           />
         : <SearchEmpty
             title={hasQuery || hasFilters ? '没有找到匹配的内容' : '还没有可搜索的内容'}
