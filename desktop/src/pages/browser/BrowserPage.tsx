@@ -1833,7 +1833,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
                 onDrop={onTabDrop(index)}
                 onDragEnd={onTabDragEnd}
                 className={`browser-tab-title${isDragging ? ' is-dragging' : ''}${isDropTarget ? ' is-drop-target' : ''}${tab.private ? ' browser-tab-title--private' : ''}`}
-              >{tab.crashed ? <WarningOutlined aria-label="标签页崩溃" className="browser-tab-crash"/> : tab.loading ? <LoadingOutlined spin/> : tab.private ? <LockOutlined /> : <TabFavicon key={tab.favicon ?? tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted ? <Tooltip title="已静音" mouseEnterDelay={0.6}><AudioMutedOutlined aria-label="已静音" className="browser-tab-audio"/></Tooltip> : tab.audible ? <Tooltip title="正在播放音频" mouseEnterDelay={0.6}><SoundOutlined aria-label="正在播放音频" className="browser-tab-audio"/></Tooltip> : null}<span>{tab.title}</span></span>
+              >{tab.crashed ? <WarningOutlined aria-label="标签页崩溃" className="browser-tab-crash"/> : tab.loading ? <span className="browser-tab-loading" role="status" aria-label="正在加载"/> : tab.private ? <LockOutlined /> : <TabFavicon key={tab.favicon ?? tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted ? <Tooltip title="已静音" mouseEnterDelay={0.6}><AudioMutedOutlined aria-label="已静音" className="browser-tab-audio"/></Tooltip> : tab.audible ? <Tooltip title="正在播放音频" mouseEnterDelay={0.6}><SoundOutlined aria-label="正在播放音频" className="browser-tab-audio"/></Tooltip> : null}<span>{tab.title}</span></span>
               </Tooltip>
             </Dropdown>,
             style: group.groupId ? ({ '--tab-group-color': groupColor } as CSSProperties) : undefined,

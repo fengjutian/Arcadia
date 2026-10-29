@@ -246,11 +246,8 @@ function WorkspacesEditor() {
 function BrowserSettings() {
   const [enabled, setEnabled] = useState<boolean>(() => getBrowserShortcutsEnabled())
   const [messageApi, contextHolder] = message.useMessage()
-  const [config, setConfig] = useState(() => readSearchEngineConfig())
-  const [customTemplate, setCustomTemplate] = useState('')
   const [overrides, setOverrides] = useState<ShortcutOverrides>(() => readShortcutOverrides())
   const [recording, setRecording] = useState<ShortcutAction | null>(null)
-  const presets = SEARCH_ENGINE_PRESETS
 
   useEffect(() => {
     function onChange(event: Event) {
@@ -307,30 +304,6 @@ function BrowserSettings() {
     setBrowserShortcutsEnabled(next)
   }
 
-  function pickPreset(presetId: string) {
-    if (presetId === 'custom') {
-      setConfig({ presetId: 'custom', customTemplate: config.customTemplate ?? '' })
-      return
-    }
-    try {
-      const next = writeSearchEngineConfig({ presetId })
-      setConfig(next)
-      messageApi.success(`搜索引擎已切换为 ${presets.find(p => p.id === presetId)?.label ?? presetId}`)
-    } catch (error) {
-      messageApi.error(String(error))
-    }
-  }
-
-  function saveCustom() {
-    try {
-      const next = writeSearchEngineConfig({ presetId: 'custom', customTemplate })
-      setConfig(next)
-      messageApi.success('自定义搜索引擎已保存')
-    } catch (error) {
-      messageApi.error(String(error))
-    }
-  }
-
   return <>{contextHolder}<Card title="浏览器" className="settings-card browser-settings-card">
     <Tabs className="browser-settings-tabs privacy-section-tabs" tabPosition="top" defaultActiveKey="shortcuts" destroyOnHidden={false} items={[
       { key: 'shortcuts', label: '键盘快捷键', children: <>
@@ -364,35 +337,62 @@ function BrowserSettings() {
     </div>
       </> },
       { key: 'workspaces', label: '工作区', children: <WorkspacesEditor/> },
-      { key: 'search', label: '搜索引擎', children: <>
+    ]}/>
+  </Card></>
+}
+
+function SearchEngineSettings() {
+  const [messageApi, contextHolder] = message.useMessage()
+  const [config, setConfig] = useState(() => readSearchEngineConfig())
+  const [customTemplate, setCustomTemplate] = useState(() => readSearchEngineConfig().customTemplate ?? '')
+
+  function pickPreset(presetId: string) {
+    if (presetId === 'custom') {
+      setConfig(current => ({ presetId: 'custom', customTemplate: current.customTemplate ?? customTemplate }))
+      return
+    }
+    try {
+      const next = writeSearchEngineConfig({ presetId })
+      setConfig(next)
+      messageApi.success(`搜索引擎已切换为 ${SEARCH_ENGINE_PRESETS.find(item => item.id === presetId)?.label ?? presetId}`)
+    } catch (error) {
+      messageApi.error(String(error))
+    }
+  }
+
+  function saveCustom() {
+    try {
+      const next = writeSearchEngineConfig({ presetId: 'custom', customTemplate })
+      setConfig(next)
+      messageApi.success('自定义搜索引擎已保存')
+    } catch (error) {
+      messageApi.error(String(error))
+    }
+  }
+
+  return <>{contextHolder}<Card title="搜索引擎" className="settings-card search-engine-settings">
     <Typography.Title level={5}>默认搜索引擎</Typography.Title>
-    <Typography.Paragraph type="secondary">地址栏中非 URL 输入会展开为搜索引擎查询；模板必须包含 <code>{'{query}'}</code> 占位符。</Typography.Paragraph>
+    <Typography.Paragraph type="secondary">地址栏中非 URL 输入会作为搜索词提交；自定义模板必须包含 <code>{'{query}'}</code> 占位符。</Typography.Paragraph>
     <Segmented
       block
       value={config.presetId}
-      onChange={value => pickPreset(value)}
+      onChange={pickPreset}
       options={[
-        ...presets.map(p => ({ label: p.label, value: p.id })),
+        ...SEARCH_ENGINE_PRESETS.map(item => ({ label: item.label, value: item.id })),
         { label: '自定义', value: 'custom' },
       ]}
     />
-    {config.presetId === 'custom' && (
-      <Space.Compact block style={{ marginTop: 12 }}>
-        <Input
-          value={customTemplate || config.customTemplate || ''}
-          placeholder="https://example.com/search?q={query}"
-          onChange={event => setCustomTemplate(event.target.value)}
-        />
-        <Button type="primary" onClick={saveCustom} disabled={!isSearchTemplateValid(customTemplate || config.customTemplate || '')}>
-          保存
-        </Button>
-      </Space.Compact>
-    )}
-    <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+    {config.presetId === 'custom' && <Space.Compact block style={{ marginTop: 16 }}>
+      <Input
+        value={customTemplate}
+        placeholder="https://example.com/search?q={query}"
+        onChange={event => setCustomTemplate(event.target.value)}
+      />
+      <Button type="primary" onClick={saveCustom} disabled={!isSearchTemplateValid(customTemplate)}>保存</Button>
+    </Space.Compact>}
+    <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
       当前模板：<Typography.Text code>{resolveActiveSearchTemplate(config)}</Typography.Text>
     </Typography.Paragraph>
-      </> },
-    ]}/>
   </Card></>
 }
 
@@ -1235,10 +1235,10 @@ function PasswordManagerSettings() {
 }
 
 export function SettingsPage() {
-  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','高级','字体'].map((label, index) => ({
+  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','高级','字体','搜索引擎'].map((label, index) => ({
     key: label,
     label,
-    children: index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <AdvancedSettingsPanel/> : <TypographySettingsPanel/>,
+    children: index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <AdvancedSettingsPanel/> : index === 9 ? <TypographySettingsPanel/> : <SearchEngineSettings/>,
   }))
   return <section className="page settings-page">
     <PageHeader eyebrow="PREFERENCES" title="设置" description="调整浏览器、隐私、AI Provider、字体与知识库工作流。"/>
