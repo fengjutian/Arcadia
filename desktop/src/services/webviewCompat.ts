@@ -38,12 +38,6 @@ export async function shellOpen(url: string): Promise<void> {
   await invoke('shell_open', { url })
 }
 
-/** Open an existing local PDF with the operating system's default reader. */
-export async function openLocalPdf(url: string): Promise<void> {
-  if (!isTauri()) throw new Error('本地 PDF 仅可在桌面应用中打开')
-  await invoke('open_local_pdf', { url })
-}
-
 /**
  * Toggle the main window's fullscreen state. Returns the *new* state so the
  * caller can update its icon. Falls back to `false` in non-Tauri contexts.

@@ -590,13 +590,31 @@ fn external_url(input: &str) -> Result<url::Url, String> {
     };
     match parsed.scheme() {
         "http" | "https" => Ok(parsed),
+        "file" => {
+            let path = parsed
+                .to_file_path()
+                .map_err(|_| "blocked-protocol:file".to_string())?;
+            let canonical = path
+                .canonicalize()
+                .map_err(|_| "blocked-protocol:file".to_string())?;
+            let is_pdf = canonical.is_file()
+                && canonical
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|value| value.eq_ignore_ascii_case("pdf"));
+            if is_pdf {
+                Ok(parsed)
+            } else {
+                Err("blocked-protocol:file".into())
+            }
+        }
         scheme if matches!(scheme, "mailto" | "tel" | "sms") => {
             Err(format!("external-protocol:{scheme}"))
         }
         scheme
             if matches!(
                 scheme,
-                "file" | "javascript" | "data" | "vbscript" | "about" | "chrome"
+                "javascript" | "data" | "vbscript" | "about" | "chrome"
             ) =>
         {
             Err(format!("blocked-protocol:{scheme}"))
@@ -2344,7 +2362,6 @@ pub fn run() {
             bookmarks::bookmark_move,
             process_memory::browser_process_memory,
             webview_compat::shell_open,
-            webview_compat::open_local_pdf,
             webview_compat::toggle_fullscreen,
             webview_compat::pick_files
         ])

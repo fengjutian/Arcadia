@@ -33,7 +33,7 @@ import { ContextMenu } from '../../features/browser/ContextMenuView'
 import type { ContextMenuAction } from '../../features/browser/contextMenu'
 import { startDownload } from '../../services/downloads'
 import { classifyDownload } from '../../features/downloads/dangerClassifier'
-import { openLocalPdf, shellOpen } from '../../services/webviewCompat'
+import { shellOpen } from '../../services/webviewCompat'
 import { classifyShellOpenUrl, describeScheme } from '../../features/browser/externalSchemes'
 import { redactUrl } from '../../features/browser/logRedaction'
 import { domainFromUrl, recordAdBlock } from '../../features/privacy/adBlockStats'
@@ -442,7 +442,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }, [sessionJson, hydrated])
 
   useEffect(() => {
-    if (!hydrated || !active.url || active.url === lastHistoryUrl.current) return
+    if (!hydrated || !/^https?:\/\//i.test(active.url) || active.url === lastHistoryUrl.current) return
     if (isPrivateTab(active)) return
     lastHistoryUrl.current = active.url
     const entry = { url: redactUrl(active.url), title: active.title, visitedAt: Date.now() }
@@ -887,19 +887,14 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }
 
   async function navigate(input: string) {
-    const resolved = resolveNavigationInput(input, { searchTemplate })
+    const trimmedInput = input.trim()
+    const normalizedInput = /^[a-z]:[\\/]/i.test(trimmedInput)
+      ? `file:///${trimmedInput.replace(/\\/g, '/')}`
+      : trimmedInput
+    const resolved = resolveNavigationInput(normalizedInput, { searchTemplate })
     if (!resolved) return
-    if (/^file:\/\//i.test(resolved)) {
-      try {
-        await openLocalPdf(resolved)
-        messageApi.success('已使用系统 PDF 阅读器打开')
-      } catch (error) {
-        messageApi.error(error instanceof Error ? error.message : String(error))
-      }
-      return
-    }
     if (comparisonRef.current?.hostTabId === active.id) closeComparison()
-    const url = trackingCleanerEnabled ? cleanTrackingParameters(resolved) : resolved
+    const url = trackingCleanerEnabled && /^https?:\/\//i.test(resolved) ? cleanTrackingParameters(resolved) : resolved
     const tabId = active.id
     if (!isNativeBrowserAvailable()) {
       window.open(url, '_blank', 'noopener,noreferrer')
