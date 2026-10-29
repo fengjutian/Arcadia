@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Avatar, Badge, Layout, Space, Tooltip, Typography } from '../components/ui'
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui/icons'
-import { Bot, BookOpen, Globe2, Minus, Search, Settings, Square, X } from 'lucide-react'
+import { BookOpen, Globe2, Minus, Search, Settings, Sparkles, Square, X } from 'lucide-react'
 import type { View } from '../types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TopBarPortalProvider } from '../app/TopBarPortal'
 
-const items = [{ key: 'browser', icon: <Globe2/>, label: '浏览器' }, { key: 'library', icon: <BookOpen/>, label: '知识库' }, { key: 'search', icon: <Search/>, label: '搜索' }, { key: 'ai', icon: <Bot/>, label: 'AI Research' }] as const
+const items = [{ key: 'browser', icon: <Globe2/>, label: '浏览器' }, { key: 'library', icon: <BookOpen/>, label: '知识库' }, { key: 'search', icon: <Search/>, label: '搜索' }, { key: 'ai', icon: <Sparkles/>, label: 'AI Research' }] as const
 
 const MIN_SIDER_WIDTH = 64
 const MAX_SIDER_WIDTH = 280

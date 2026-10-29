@@ -13,6 +13,7 @@ interface LocalSearchMetadata {
   markdownSnippet: string
   summarySnippet: string
   rank: number
+  matchReason: string
 }
 type LocalSearchHit = (Document & LocalSearchMetadata) | ({ document: Document } & LocalSearchMetadata)
 
@@ -21,15 +22,16 @@ export interface DocumentSearchHit extends Document {
   markdownSnippet?: string
   summarySnippet?: string
   rank?: number
+  matchReason?: string
 }
 
 async function localSearch(query = ''): Promise<DocumentSearchHit[]> {
   if (!isTauri()) return []
   const hits = await invoke<LocalSearchHit[]>('local_list_documents', { query })
   return hits.map(hit => {
-    const { titleSnippet, markdownSnippet, summarySnippet, rank } = hit
+    const { titleSnippet, markdownSnippet, summarySnippet, rank, matchReason } = hit
     const document = 'document' in hit ? hit.document : hit
-    return { ...document, titleSnippet: titleSnippet || undefined, markdownSnippet: markdownSnippet || undefined, summarySnippet: summarySnippet || undefined, rank }
+    return { ...document, titleSnippet: titleSnippet || undefined, markdownSnippet: markdownSnippet || undefined, summarySnippet: summarySnippet || undefined, rank, ...(matchReason ? { matchReason } : {}) }
   })
 }
 
@@ -39,7 +41,33 @@ async function localSave(document: Document): Promise<Document> {
 
 export async function listDocuments(query = ''): Promise<Document[]> {
   const hits = await localSearch(query)
-  return hits.map(({ titleSnippet: _title, markdownSnippet: _markdown, summarySnippet: _summary, rank: _rank, ...document }) => document)
+  return hits.map(({ titleSnippet: _title, markdownSnippet: _markdown, summarySnippet: _summary, rank: _rank, matchReason: _reason, ...document }) => document)
+}
+
+export interface SearchAlias { id: number; term: string; alias: string }
+export interface SearchIndexStatus { schemaVersion: number; documentCount: number; indexedDocumentCount: number }
+
+export async function listSearchAliases(): Promise<SearchAlias[]> {
+  return isTauri() ? invoke<SearchAlias[]>('local_list_search_aliases') : []
+}
+
+export async function addSearchAlias(term: string, alias: string): Promise<SearchAlias> {
+  if (!isTauri()) throw new Error('本地搜索不可用')
+  return invoke<SearchAlias>('local_add_search_alias', { term, alias })
+}
+
+export async function deleteSearchAlias(id: number): Promise<void> {
+  if (isTauri()) await invoke('local_delete_search_alias', { id })
+}
+
+export async function getSearchIndexStatus(): Promise<SearchIndexStatus> {
+  if (!isTauri()) return { schemaVersion: 0, documentCount: 0, indexedDocumentCount: 0 }
+  return invoke<SearchIndexStatus>('local_search_index_status')
+}
+
+export async function rebuildSearchIndex(): Promise<SearchIndexStatus> {
+  if (!isTauri()) throw new Error('本地搜索不可用')
+  return invoke<SearchIndexStatus>('local_rebuild_search_index')
 }
 
 export async function searchDocuments(query: string): Promise<DocumentSearchHit[]> {

@@ -30,6 +30,7 @@ thiserror = "1"
 sha2 = "0.10"
 zip = { version = "4", default-features = false, features = ["deflate"] }
 wasmtime = { version = "49", features = ["component-model", "cranelift", "runtime"], default-features = false }
+pinyin = { path = "vendor/pinyin-0.11.0", default-features = false, features = ["plain"] }
 
 [dev-dependencies]
 wit-component = "0.258"

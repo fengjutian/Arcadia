@@ -119,23 +119,27 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   }, [documents])
 
   const filtered = useMemo(() => {
-    const lower = debouncedQuery.trim().toLowerCase()
     return documents
       .filter(doc => {
         if (starredOnly && !doc.starred) return false
         if (readOnly && readingStatus(readingByUrl.get(doc.url)) === 'seen') return false
         if (!includeArchived && doc.status === 'ARCHIVED') return false
         if (tagFilter.length > 0 && !tagFilter.every(tag => doc.tags.includes(tag))) return false
-        if (!lower) return true
-        return [doc.title, doc.summary ?? '', doc.markdown ?? '', doc.tags.join(' ')].some(field => field.toLowerCase().includes(lower))
+        // The backend may return Pinyin, initials, synonym and semantic
+        // matches that do not literally contain the typed query. Do not apply
+        // a second client-side substring filter or those results disappear.
+        return true
       })
       .sort((a, b) => {
         if (sort === 'starred') return Number(b.starred) - Number(a.starred) || b.createdAt.localeCompare(a.createdAt)
         if (sort === 'oldest') return a.createdAt.localeCompare(b.createdAt)
-        if (sort === 'relevance' && a.rank !== undefined && b.rank !== undefined) return a.rank - b.rank
+        // Relevance order already includes exact-field priority, BM25, stars
+        // and recency on the Rust side. Preserve it instead of reducing the
+        // order back to the raw BM25 number in the renderer.
+        if (sort === 'relevance') return 0
         return (readingByUrl.get(b.url)?.lastVisitedAt ?? Date.parse(b.createdAt) / 1000) - (readingByUrl.get(a.url)?.lastVisitedAt ?? Date.parse(a.createdAt) / 1000)
       })
-  }, [documents, debouncedQuery, starredOnly, includeArchived, tagFilter, sort, readOnly, readingByUrl])
+  }, [documents, starredOnly, includeArchived, tagFilter, sort, readOnly, readingByUrl])
 
   const terms = useMemo(() => debouncedQuery.trim().split(/\s+/).filter(Boolean), [debouncedQuery])
   const hasQuery = debouncedQuery.trim().length > 0

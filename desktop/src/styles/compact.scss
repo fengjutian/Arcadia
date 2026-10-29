@@ -1766,7 +1766,27 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
   flex-direction: column;
   overflow: hidden;
 
-  .page-header { flex: none; margin-bottom: 16px; }
+  > .page-header {
+    flex: none;
+    margin-bottom: 10px;
+
+    .eyebrow {
+      font-size: 10px;
+      line-height: 1.2;
+      letter-spacing: 1.3px;
+    }
+
+    h1.ant-typography {
+      margin: 3px 0 1px;
+      font-size: 26px;
+      line-height: 1.18;
+    }
+
+    p {
+      font-size: 13px;
+      line-height: 1.45;
+    }
+  }
 
   .assistant-grid {
     flex: 1;

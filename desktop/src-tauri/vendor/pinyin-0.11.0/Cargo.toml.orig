@@ -1,0 +1,63 @@
+[package]
+name = "pinyin"
+version = "0.11.0"
+authors = ["mozillazg <mozillazg101@gmail.com>", "Xidorn Quan <me@upsuper.org>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/mozillazg/rust-pinyin"
+repository = "https://github.com/mozillazg/rust-pinyin"
+description = "Convert Chinese to pinyin"
+documentation = "https://docs.rs/pinyin/"
+keywords = ["pinyin", "hanzi", "Chinese"]
+include = [
+    "/build.rs",
+    "/examples/*",
+    "/pinyin-data/pinyin.txt",
+    "/src/**/*",
+    "/tests/**/*",
+    "/Cargo.toml",
+    "/LICENSE",
+    "/README.md",
+]
+edition = "2018"
+
+[workspace]
+members = ["coverage-check"]
+
+[badges]
+travis-ci = { repository = "mozillazg/rust-pinyin", branch = "master" }
+appveyor = { repository = "mozillazg/rust-pinyin", branch = "master", service = "github" }
+coveralls = { repository = "mozillazg/rust-pinyin", branch = "master" }
+
+[features]
+default = [
+    "compat",
+    "plain",
+    "with_tone",
+    "with_tone_num",
+    "with_tone_num_end",
+    "heteronym",
+]
+compat = [
+    "plain",
+    "with_tone",
+    "with_tone_num",
+    "heteronym",
+]
+plain = []
+with_tone = []
+with_tone_num = []
+with_tone_num_end = []
+heteronym = []
+
+[[example]]
+name = "basic"
+required-features = ["plain", "with_tone", "with_tone_num", "with_tone_num_end", "heteronym"]
+
+[[test]]
+name = "compat"
+required-features = ["compat"]
+
+[[test]]
+name = "special_pinyin"
+required-features = ["with_tone_num_end", "heteronym"]

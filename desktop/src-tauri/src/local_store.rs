@@ -1,3 +1,4 @@
+use pinyin::ToPinyin;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -666,6 +667,23 @@ const MIGRATIONS: &[(i64, &str)] = &[
     // Keep the schema migration append-only and rebuild the existing index in
     // `run_migrations` so upgraded databases receive the new token stream.
     (28, "SELECT 1;"),
+    // v29 adds full-pinyin and initial-letter tokens to titles and tags.
+    (29, "SELECT 1;"),
+    (
+        30,
+        "CREATE TABLE search_aliases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            term TEXT NOT NULL COLLATE NOCASE,
+            alias TEXT NOT NULL COLLATE NOCASE,
+            created_at INTEGER NOT NULL,
+            UNIQUE(term, alias),
+            CHECK(length(trim(term)) > 0 AND length(trim(alias)) > 0 AND term <> alias)
+        );
+        INSERT INTO search_aliases(term, alias, created_at) VALUES
+            ('南京', '金陵', 0),
+            ('人工智能', 'AI', 0),
+            ('数据库', 'SQLite', 0);",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -699,6 +717,23 @@ pub struct LocalSearchHit {
     pub markdown_snippet: String,
     pub summary_snippet: String,
     pub rank: f64,
+    pub match_reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchAlias {
+    id: i64,
+    term: String,
+    alias: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchIndexStatus {
+    schema_version: i64,
+    document_count: i64,
+    indexed_document_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -918,7 +953,7 @@ pub(crate) fn run_migrations(database: &mut Connection) -> Result<(), String> {
         if *version == 11 {
             migrate_legacy_browser_state(&transaction)?;
         }
-        if matches!(*version, 27 | 28) {
+        if matches!(*version, 27 | 28 | 29) {
             rebuild_cjk_search_index(&transaction)?;
         }
         transaction
@@ -1067,6 +1102,7 @@ fn row_hit(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalSearchHit> {
         markdown_snippet: row.get(14)?,
         summary_snippet: row.get(15)?,
         rank: row.get(16)?,
+        match_reason: String::from("content"),
     })
 }
 
@@ -1764,6 +1800,48 @@ fn hybrid_token_text(text: &str) -> String {
     hybrid_search_tokens(text).join(" ")
 }
 
+/// Generate searchable Pinyin forms for CJK text. Full joined Pinyin supports
+/// `nanjing`, initials support `nj`, and individual syllables support
+/// whitespace-separated queries such as `nan jing`.
+fn pinyin_search_tokens(text: &str) -> Vec<String> {
+    let mut output = Vec::new();
+    let mut syllables = Vec::new();
+    let flush = |syllables: &mut Vec<String>, output: &mut Vec<String>| {
+        if syllables.is_empty() {
+            return;
+        }
+        output.extend(syllables.iter().cloned());
+        output.push(syllables.concat());
+        output.push(
+            syllables
+                .iter()
+                .filter_map(|syllable| syllable.chars().next())
+                .collect(),
+        );
+        syllables.clear();
+    };
+
+    for character in text.chars() {
+        if let Some(pinyin) = character.to_pinyin() {
+            syllables.push(pinyin.plain().to_lowercase());
+        } else {
+            flush(&mut syllables, &mut output);
+        }
+    }
+    flush(&mut syllables, &mut output);
+    let mut seen = HashSet::new();
+    output.retain(|token| !token.is_empty() && seen.insert(token.clone()));
+    output
+}
+
+fn indexed_title_or_tags(text: &str) -> String {
+    hybrid_search_tokens(text)
+        .into_iter()
+        .chain(pinyin_search_tokens(text))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Query tokens are deliberately smaller than index tokens. A multi-character
 /// CJK run uses bigrams (plus trigrams for precision) instead of also requiring
 /// every unigram. This avoids noisy one-character matches while retaining exact
@@ -1817,12 +1895,68 @@ fn hybrid_query_tokens(text: &str) -> Vec<String> {
     tokens
 }
 
-fn build_hybrid_fts_query(query: &str) -> String {
-    hybrid_query_tokens(query)
+fn build_hybrid_fts_query(query: &str, aliases: &[(String, String)]) -> String {
+    fn clause(value: &str) -> String {
+        hybrid_query_tokens(value)
+            .into_iter()
+            .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" AND ")
+    }
+
+    let mut variants = vec![query.trim()];
+    let normalized = query.trim().to_lowercase();
+    for (left, right) in aliases {
+        if normalized == left {
+            variants.push(right);
+        } else if normalized == right {
+            variants.push(left);
+        }
+    }
+    variants
         .into_iter()
-        .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+        .map(clause)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("({value})"))
         .collect::<Vec<_>>()
-        .join(" AND ")
+        .join(" OR ")
+}
+
+fn search_alias_pairs(database: &Connection) -> Result<Vec<(String, String)>, String> {
+    let mut statement = database
+        .prepare("SELECT lower(term), lower(alias) FROM search_aliases ORDER BY id")
+        .map_err(|error| error.to_string())?;
+    statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+fn literal_highlight(text: &str, query: &str) -> String {
+    if query.is_empty() || !text.contains(query) {
+        return String::new();
+    }
+    text.replace(query, &format!("<mark>{query}</mark>"))
+}
+
+fn literal_excerpt(text: &str, query: &str, radius: usize) -> String {
+    let Some(byte_start) = text.find(query) else {
+        return String::new();
+    };
+    let char_start = text[..byte_start].chars().count();
+    let query_chars = query.chars().count();
+    let chars = text.chars().collect::<Vec<_>>();
+    let start = char_start.saturating_sub(radius);
+    let end = (char_start + query_chars + radius).min(chars.len());
+    let excerpt = chars[start..end].iter().collect::<String>();
+    let highlighted = literal_highlight(&excerpt, query);
+    format!(
+        "{}{}{}",
+        if start > 0 { "…" } else { "" },
+        highlighted,
+        if end < chars.len() { "…" } else { "" }
+    )
 }
 
 fn index_cjk_document(database: &Connection, document: &LocalDocument) -> Result<(), String> {
@@ -1844,10 +1978,10 @@ fn index_cjk_document(database: &Connection, document: &LocalDocument) -> Result
             "INSERT INTO local_documents_cjk_fts(document_id,title_tokens,markdown_tokens,summary_tokens,tag_tokens) VALUES(?1,?2,?3,?4,?5)",
             params![
                 document.id,
-                hybrid_token_text(&document.title),
+                indexed_title_or_tags(&document.title),
                 hybrid_token_text(document.markdown.as_deref().unwrap_or("")),
                 hybrid_token_text(document.summary.as_deref().unwrap_or("")),
-                hybrid_token_text(&tags),
+                indexed_title_or_tags(&tags),
             ],
         )
         .map_err(|error| error.to_string())?;
@@ -1883,6 +2017,88 @@ fn rebuild_cjk_search_index(database: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn search_hybrid_documents(
+    database: &Connection,
+    query: &str,
+) -> Result<Vec<LocalSearchHit>, String> {
+    let aliases = search_alias_pairs(database)?;
+    let hybrid_query = build_hybrid_fts_query(query, &aliases);
+    let mut statement = database
+        .prepare(
+            "SELECT d.id,d.title,d.url,d.source,d.author,d.summary,d.markdown,d.word_count,d.status,d.tags,d.auto_tags,d.created_at,d.starred, \
+                    '' AS title_snip, '' AS markdown_snip, '' AS summary_snip, \
+                    bm25(local_documents_cjk_fts, 0.0, 10.0, 1.0, 4.0, 8.0) AS rank \
+             FROM local_documents d \
+             INNER JOIN local_documents_cjk_fts cjk ON cjk.document_id = d.id \
+             WHERE local_documents_cjk_fts MATCH ?1 \
+             ORDER BY CASE \
+                        WHEN instr(lower(d.title), lower(?2)) > 0 THEN 0 \
+                        WHEN instr(lower(COALESCE(d.tags, '')), lower(?2)) > 0 \
+                          OR instr(lower(COALESCE(d.auto_tags, '')), lower(?2)) > 0 THEN 1 \
+                        WHEN instr(lower(COALESCE(d.summary, '')), lower(?2)) > 0 THEN 2 \
+                        ELSE 3 \
+                      END, \
+                      rank, d.starred DESC, d.created_at DESC",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![hybrid_query, query], row_hit)
+        .map_err(|error| error.to_string())?;
+    let mut hits = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    for hit in &mut hits {
+        hit.title_snippet = literal_highlight(&hit.document.title, query);
+        hit.summary_snippet =
+            literal_excerpt(hit.document.summary.as_deref().unwrap_or(""), query, 28);
+        hit.markdown_snippet =
+            literal_excerpt(hit.document.markdown.as_deref().unwrap_or(""), query, 48);
+        let normalized = query.to_lowercase();
+        let tags = hit
+            .document
+            .tags
+            .iter()
+            .chain(hit.document.auto_tags.iter())
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ");
+        hit.match_reason = if hit.document.title.to_lowercase().contains(&normalized) {
+            "title"
+        } else if tags.to_lowercase().contains(&normalized) {
+            "tag"
+        } else if !query.chars().any(is_cjk)
+            && (pinyin_search_tokens(&hit.document.title).contains(&normalized)
+                || pinyin_search_tokens(&tags).contains(&normalized))
+        {
+            "pinyin"
+        } else if aliases.iter().any(|(left, right)| {
+            (left == &normalized
+                && [hit.document.title.as_str(), tags.as_str()]
+                    .iter()
+                    .any(|value| value.to_lowercase().contains(right)))
+                || (right == &normalized
+                    && [hit.document.title.as_str(), tags.as_str()]
+                        .iter()
+                        .any(|value| value.to_lowercase().contains(left)))
+        }) {
+            "alias"
+        } else if hit
+            .document
+            .summary
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains(&normalized)
+        {
+            "summary"
+        } else {
+            "content"
+        }
+        .to_string();
+    }
+    Ok(hits)
+}
+
 #[tauri::command]
 pub fn local_list_documents(
     app: tauri::AppHandle,
@@ -1912,35 +2128,12 @@ pub fn local_list_documents(
                 markdown_snippet: String::new(),
                 summary_snippet: String::new(),
                 rank: 0.0,
+                match_reason: String::from("all"),
             })
             .collect());
     }
     if trimmed.chars().any(is_cjk) {
-        let hybrid_query = build_hybrid_fts_query(trimmed);
-        let mut statement = database
-            .prepare(
-                "SELECT d.id,d.title,d.url,d.source,d.author,d.summary,d.markdown,d.word_count,d.status,d.tags,d.auto_tags,d.created_at,d.starred, \
-                        '' AS title_snip, '' AS markdown_snip, '' AS summary_snip, \
-                        bm25(local_documents_cjk_fts, 0.0, 10.0, 1.0, 4.0, 8.0) AS rank \
-                 FROM local_documents d \
-                 INNER JOIN local_documents_cjk_fts cjk ON cjk.document_id = d.id \
-                 WHERE local_documents_cjk_fts MATCH ?1 \
-                 ORDER BY CASE \
-                            WHEN instr(lower(d.title), lower(?2)) > 0 THEN 0 \
-                            WHEN instr(lower(COALESCE(d.tags, '')), lower(?2)) > 0 \
-                              OR instr(lower(COALESCE(d.auto_tags, '')), lower(?2)) > 0 THEN 1 \
-                            WHEN instr(lower(COALESCE(d.summary, '')), lower(?2)) > 0 THEN 2 \
-                            ELSE 3 \
-                          END, \
-                          rank, d.starred DESC, d.created_at DESC",
-            )
-            .map_err(|error| error.to_string())?;
-        let rows = statement
-            .query_map(params![hybrid_query, trimmed], row_hit)
-            .map_err(|error| error.to_string())?;
-        return rows
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string());
+        return search_hybrid_documents(&database, trimmed);
     }
     let mut statement = database
         .prepare(
@@ -1958,8 +2151,113 @@ pub fn local_list_documents(
     let rows = statement
         .query_map(params![fts_query], row_hit)
         .map_err(|error| error.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
+    let mut hits = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    for hit in &mut hits {
+        hit.match_reason = if !hit.title_snippet.is_empty() {
+            "title"
+        } else if !hit.summary_snippet.is_empty() {
+            "summary"
+        } else {
+            "content"
+        }
+        .to_string();
+    }
+    if hits.is_empty() {
+        // A Latin query may be Pinyin (`nanjing`) or initials (`nj`). The
+        // regular FTS table cannot match those synthetic title/tag tokens, so
+        // consult the hybrid index only when the normal lexical search misses.
+        return search_hybrid_documents(&database, trimmed);
+    }
+    Ok(hits)
+}
+
+#[tauri::command]
+pub fn local_list_search_aliases(app: tauri::AppHandle) -> Result<Vec<SearchAlias>, String> {
+    let database = connection(&app)?;
+    let mut statement = database
+        .prepare("SELECT id,term,alias FROM search_aliases ORDER BY term COLLATE NOCASE, alias COLLATE NOCASE")
+        .map_err(|error| error.to_string())?;
+    statement
+        .query_map([], |row| {
+            Ok(SearchAlias {
+                id: row.get(0)?,
+                term: row.get(1)?,
+                alias: row.get(2)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_add_search_alias(
+    app: tauri::AppHandle,
+    term: String,
+    alias: String,
+) -> Result<SearchAlias, String> {
+    let term = term.trim();
+    let alias = alias.trim();
+    if term.is_empty() || alias.is_empty() {
+        return Err("term and alias are required".into());
+    }
+    if term.eq_ignore_ascii_case(alias) {
+        return Err("term and alias must be different".into());
+    }
+    if term.chars().count() > 80 || alias.chars().count() > 80 {
+        return Err("term and alias must not exceed 80 characters".into());
+    }
+    let database = connection(&app)?;
+    database
+        .execute(
+            "INSERT INTO search_aliases(term,alias,created_at) VALUES(?1,?2,?3)",
+            params![term, alias, unix_seconds()],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(SearchAlias {
+        id: database.last_insert_rowid(),
+        term: term.to_string(),
+        alias: alias.to_string(),
+    })
+}
+
+#[tauri::command]
+pub fn local_delete_search_alias(app: tauri::AppHandle, id: i64) -> Result<(), String> {
+    let database = connection(&app)?;
+    database
+        .execute("DELETE FROM search_aliases WHERE id=?1", params![id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn local_search_index_status(app: tauri::AppHandle) -> Result<SearchIndexStatus, String> {
+    let database = connection(&app)?;
+    Ok(SearchIndexStatus {
+        schema_version: database
+            .query_row("SELECT COALESCE(MAX(version),0) FROM schema_version", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?,
+        document_count: database
+            .query_row("SELECT COUNT(*) FROM local_documents", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?,
+        indexed_document_count: database
+            .query_row("SELECT COUNT(*) FROM local_documents_cjk_fts", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?,
+    })
+}
+
+#[tauri::command]
+pub fn local_rebuild_search_index(app: tauri::AppHandle) -> Result<SearchIndexStatus, String> {
+    let mut database = connection(&app)?;
+    let transaction = database.transaction().map_err(|error| error.to_string())?;
+    transaction
+        .execute("DELETE FROM local_documents_cjk_fts", [])
+        .map_err(|error| error.to_string())?;
+    rebuild_cjk_search_index(&transaction)?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    local_search_index_status(app)
 }
 
 /// Build a sanitised FTS5 MATCH expression from a free-form user query.
@@ -4907,6 +5205,37 @@ mod tests {
     }
 
     #[test]
+    fn pinyin_tokens_include_full_form_initials_and_syllables() {
+        let tokens = pinyin_search_tokens("南京");
+        for expected in ["nan", "jing", "nanjing", "nj"] {
+            assert!(
+                tokens.iter().any(|token| token == expected),
+                "missing token {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn synonym_query_expands_in_both_directions() {
+        let aliases = vec![("南京".to_string(), "金陵".to_string())];
+        let nanjing = build_hybrid_fts_query("南京", &aliases);
+        assert!(nanjing.contains("南京"));
+        assert!(nanjing.contains("金陵"));
+        let jinling = build_hybrid_fts_query("金陵", &aliases);
+        assert!(jinling.contains("金陵"));
+        assert!(jinling.contains("南京"));
+    }
+
+    #[test]
+    fn literal_highlight_marks_chinese_matches_safely() {
+        assert_eq!(
+            literal_highlight("南京市与南京大学", "南京"),
+            "<mark>南京</mark>市与<mark>南京</mark>大学"
+        );
+        assert_eq!(literal_highlight("南京", "金陵"), "");
+    }
+
+    #[test]
     fn cjk_index_matches_substring_inside_longer_chinese_text() {
         let mut database = fresh();
         run_migrations(&mut database).unwrap();
@@ -4918,7 +5247,7 @@ mod tests {
             )
             .unwrap();
         rebuild_cjk_search_index(&database).unwrap();
-        let query = build_hybrid_fts_query("南京");
+        let query = build_hybrid_fts_query("南京", &search_alias_pairs(&database).unwrap());
         let count: i64 = database
             .query_row(
                 "SELECT COUNT(*) FROM local_documents_cjk_fts WHERE local_documents_cjk_fts MATCH ?1",
@@ -4927,5 +5256,29 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn cjk_index_matches_title_by_pinyin_and_initials() {
+        let mut database = fresh();
+        run_migrations(&mut database).unwrap();
+        database
+            .execute(
+                "INSERT INTO local_documents(id,title,url,summary,markdown,word_count,status,tags,auto_tags,created_at,starred) \
+                 VALUES('pinyin-doc','南京旅游','https://example.com/travel','','',2,'READY','[]','[]','2026-01-01',0)",
+                [],
+            )
+            .unwrap();
+        rebuild_cjk_search_index(&database).unwrap();
+        for query in ["nanjing", "nj"] {
+            let count: i64 = database
+                .query_row(
+                    "SELECT COUNT(*) FROM local_documents_cjk_fts WHERE local_documents_cjk_fts MATCH ?1",
+                    params![build_hybrid_fts_query(query, &search_alias_pairs(&database).unwrap())],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 1, "query {query} should match the Chinese title");
+        }
     }
 }
