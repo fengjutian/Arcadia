@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { evaluateUrlSafety, highestLevel } from './urlSafety'
 
 describe('evaluateUrlSafety', () => {
+  it('does not treat plain unicode search terms as IDN hostnames', () => {
+    expect(evaluateUrlSafety('南京')).toEqual([])
+    expect(evaluateUrlSafety('南京 旅游')).toEqual([])
+  })
+
   it('returns no issues for benign https URLs', () => {
     expect(evaluateUrlSafety('https://example.com/path')).toEqual([])
   })

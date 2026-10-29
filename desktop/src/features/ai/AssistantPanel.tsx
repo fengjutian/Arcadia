@@ -165,15 +165,15 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
   const noTranslationSource = !(translationSource || readerArticle?.markdown || '').trim()
 
   return <>{contextHolder}<aside className="ai-panel">
-    <div className="panel-title"><Space><span className="ai-mark"><RobotOutlined/></span><b>AI Assistant</b></Space><Button type="text" icon={<CloseOutlined/>} onClick={close}/></div>
-    <Segmented block value={mode} onChange={value => setMode(value as PanelMode)} options={[
+    <div className="panel-title"><div className="ai-panel__heading"><span className="ai-mark"><RobotOutlined/></span><span><b>AI Assistant</b><small>阅读、提问与翻译</small></span></div><Button type="text" aria-label="关闭 AI 助手" icon={<CloseOutlined/>} onClick={close}/></div>
+    <Segmented className="ai-panel__modes" block value={mode} onChange={value => setMode(value as PanelMode)} options={[
       {label:'摘要',value:'summarize' as PanelMode},
       {label:'提问',value:'ask' as PanelMode},
       {label:'翻译',value:'translate' as PanelMode},
     ]}/>
     <Space wrap className="ai-panel__provider">
       <Tag icon={<RobotOutlined/>} color={currentProvider ? 'green' : 'default'}>
-        {currentProvider ? `${currentProvider.type} · ${currentProvider.model}` : '未配置 Provider'}
+        {currentProvider ? `${currentProvider.type || 'OpenAI 兼容'} · ${currentProvider.model || '未设置模型'}` : '未配置 Provider'}
       </Tag>
       {providers.length > 1 && <Select<string> size="small" value={providerId ?? undefined} onChange={setProviderId} options={providers.map(item => ({label:item.model,value:item.id}))} style={{minWidth:160}}/>}
     </Space>
@@ -185,7 +185,7 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
 
     {mode === 'summarize' && (
       <>
-        <Segmented block value={kind} onChange={value => setKind(value as SummaryKind)} options={[
+        <Segmented className="ai-panel__summary-kind" block value={kind} onChange={value => setKind(value as SummaryKind)} options={[
           {label:'一句话',value:'one-sentence'},
           {label:'简短',value:'short'},
           {label:'详细',value:'detailed'},

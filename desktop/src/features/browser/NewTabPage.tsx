@@ -40,12 +40,11 @@ function selectBackground(): Promise<string> {
   })
 }
 
-export function NewTab({ address, setAddress, navigate, openNewTab, onSearchKnowledge }: {
+export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
   address: string
   setAddress: (value: string) => void
   navigate: (input: string) => Promise<void>
-  openNewTab: (url?: string) => void
-  onSearchKnowledge?: (query: string) => void
+  onCompareSearch: (query: string, engineIds: string[], includeKnowledge: boolean) => void
 }) {
   const configuredEngine = readSearchEngineConfig().presetId
   const initialEngine = SEARCH_ENGINE_PRESETS.some(engine => engine.id === configuredEngine) ? configuredEngine : 'google'
@@ -59,10 +58,11 @@ export function NewTab({ address, setAddress, navigate, openNewTab, onSearchKnow
     const query = address.trim()
     if (!query) return
     if (classifyNavigationInput(query) !== 'search') { void navigate(query); return }
-    const urls = engines.map(id => renderSearchTemplate(templateFor(id), query))
-    if (urls[0]) void navigate(urls[0])
-    urls.slice(1).forEach(url => openNewTab(url))
-    if (searchKnowledge) onSearchKnowledge?.(query)
+    if (engines.length === 1 && !searchKnowledge) {
+      void navigate(renderSearchTemplate(templateFor(engines[0]), query))
+      return
+    }
+    onCompareSearch(query, engines, searchKnowledge)
   }
 
   async function chooseBackground() {

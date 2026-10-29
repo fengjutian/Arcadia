@@ -43,7 +43,22 @@ export async function listDocuments(query = ''): Promise<Document[]> {
 }
 
 export async function searchDocuments(query: string): Promise<DocumentSearchHit[]> {
-  return localSearch(query)
+  const exact = await localSearch(query)
+  const trimmed = query.trim()
+  if (exact.length > 0 || !trimmed || !/[^\x00-\x7F]/.test(trimmed)) return exact
+
+  // FTS5's default unicode61 tokenizer does not segment continuous CJK text.
+  // Fall back to a literal contains-match so queries such as `南京` can find
+  // `南京市` in titles or prose even when no standalone FTS token exists.
+  const terms = trimmed.toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  const all = await localSearch('')
+  return all.filter(document => {
+    const haystack = [document.title, document.summary, document.markdown, ...(document.tags ?? []), ...(document.autoTags ?? [])]
+      .filter(Boolean)
+      .join('\n')
+      .toLocaleLowerCase()
+    return terms.every(term => haystack.includes(term))
+  })
 }
 
 export async function saveDocument(input: { title: string; url: string; markdown: string; tags: string[] }): Promise<Document> {

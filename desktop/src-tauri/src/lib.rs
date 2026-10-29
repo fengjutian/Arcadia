@@ -2173,6 +2173,7 @@ pub fn run() {
             browser_diagnose_url,
             browser_restore_scroll,
             browser_toolbar_menu,
+            browser_toolbar_menu_in_page,
             browser_toolbar_panel,
             browser_page_toast,
             browser_page_toast_close,

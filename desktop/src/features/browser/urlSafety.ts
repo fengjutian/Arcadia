@@ -4,6 +4,8 @@
  * the warnings are advisory and the Rust navigation layer still rejects
  * unsafe protocols.
  */
+import { classifyNavigationInput } from './navigation'
+
 export type SafetyLevel = 'safe' | 'warn' | 'dangerous'
 
 export interface SafetyIssue {
@@ -28,10 +30,11 @@ const KEYWORD_BRAND_ALIASES: Record<string, string> = {
 
 export function evaluateUrlSafety(value: string): SafetyIssue[] {
   const issues: SafetyIssue[] = []
-  if (!value) return issues
+  const input = value.trim()
+  if (!input || classifyNavigationInput(input) === 'search') return issues
   let url: URL
   try {
-    url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`)
+    url = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`)
   } catch {
     return issues
   }

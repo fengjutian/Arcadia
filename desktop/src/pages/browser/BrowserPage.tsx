@@ -20,7 +20,7 @@ import { formatBytes as formatProcessBytes } from '../../services/processMemory'
 import { interpretShortcut, readShortcutOverrides } from '../../features/browser/shortcuts'
 import { popClosedTab, recordClosedTab, type ClosedTab } from '../../features/browser/closedTabs'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
-import { resolveNavigationInput } from '../../features/browser/navigation'
+import { renderSearchTemplate, resolveNavigationInput } from '../../features/browser/navigation'
 import { useDownloads } from '../../features/downloads/useDownloads'
 import { useDownloadQueue } from '../../features/downloads/useDownloadQueue'
 import { saveWorkspace, snapshotTabsToPayload, getWorkspace, type WorkspaceRecord } from '../../services/workspaces'
@@ -59,7 +59,7 @@ import { TopBarPortal } from '../../app/TopBarPortal'
 import { dropSessionLock, getSessionLockState, type SessionLockState } from '../../services/session'
 import { toggleFullscreen as toggleWindowFullscreen } from '../../services/webviewCompat'
 import { buildSuggestions, trimSuggestions } from '../../features/browser/suggestionProvider'
-import { readSearchEngineConfig, resolveActiveSearchTemplate } from '../../features/browser/searchEngine'
+import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS } from '../../features/browser/searchEngine'
 import { evaluateUrlSafety, highestLevel, type SafetyIssue, type SafetyLevel } from '../../features/browser/urlSafety'
 import { ADVANCED_SETTINGS_EVENT, readAdvancedSettings, type AdvancedSettings } from '../../features/settings/advanced'
 import { cleanTrackingParameters, isTrackingCleanerEnabled, TRACKING_CLEANER_EVENT } from '../../features/plugins/trackingCleaner'
@@ -72,6 +72,7 @@ import { BrowserErrorView } from '../../features/browser/BrowserErrorView'
 import { NewTab } from '../../features/browser/NewTabPage'
 import { ReaderArticleView } from '../../features/reader/ReaderArticleView'
 import { TabFavicon } from '../../features/browser/TabFavicon'
+import { SearchComparisonWorkspace, type ComparisonSource } from '../../features/browser/SearchComparisonWorkspace'
 
 const SESSION_KEY = 'browser.tabs'
 const SESSION_DEBOUNCE_MS = 500
@@ -85,6 +86,13 @@ const TOOLBAR_OVERLAY_INSET: Partial<Record<ToolbarOverlay, number>> = {}
 interface PersistedSession {
   tabs: BrowserTab[]
   activeTabId: string
+}
+
+interface ComparisonSession {
+  hostTabId: string
+  query: string
+  sources: ComparisonSource[]
+  visibleIds: string[]
 }
 
 function parsePersistedSession(raw: string | null): PersistedSession | null {
@@ -153,6 +161,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [trackingCleanerEnabled, setTrackingCleanerEnabledState] = useState(isTrackingCleanerEnabled)
   const [adBlockerEnabled, setAdBlockerEnabledState] = useState(isAdBlockerEnabled)
   const [blockedAdsByTab, setBlockedAdsByTab] = useState<Record<string, number>>({})
+  const [comparison, setComparison] = useState<ComparisonSession | null>(null)
   const [toolbarOverlay, setToolbarOverlay] = useState<ToolbarOverlay | null>(null)
   const [modalOverlayCount, setModalOverlayCount] = useState(0)
   const [sourceView, setSourceView] = useState<{ url: string; html: string } | null>(null)
@@ -169,6 +178,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const historyRef = useRef(history)
   const zoomLevelsRef = useRef(zoomLevels)
   const downloadsRef = useRef(downloads)
+  const comparisonRef = useRef<ComparisonSession | null>(null)
   const visibleRef = useRef(visible)
   // Do not let the default blank tab overwrite a crash snapshot while the
   // recovery dialog is waiting for the user's decision.
@@ -202,6 +212,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const safetyIssues = useMemo<SafetyIssue[]>(() => evaluateUrlSafety(address), [address])
   const safetyLevel: SafetyLevel = highestLevel(safetyIssues)
   const showSafety = advancedSettings.safetyWarnings && safetyLevel !== 'safe' && address.trim().length > 0
+
+  useEffect(() => { comparisonRef.current = comparison }, [comparison])
+
+  useEffect(() => {
+    if (comparison && !tabs.some(tab => tab.id === comparison.hostTabId)) closeComparison()
+  }, [comparison, tabs])
 
   function changeToolbarOverlay(kind: ToolbarOverlay, open: boolean) {
     if (open) { setToolbarOverlay(kind); return }
@@ -498,6 +514,67 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     return rect ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height } : undefined
   }
 
+  function closeComparison() {
+    const current = comparisonRef.current
+    if (current) current.sources.filter(source => source.kind === 'web').forEach(source => { void closeNativeTab(source.id) })
+    comparisonRef.current = null
+    setComparison(null)
+  }
+
+  function startComparison(query: string, engineIds: string[], includeKnowledge: boolean) {
+    closeComparison()
+    const sources: ComparisonSource[] = engineIds.flatMap(engineId => {
+      const engine = SEARCH_ENGINE_PRESETS.find(item => item.id === engineId)
+      if (!engine) return []
+      return [{ id: `compare-${crypto.randomUUID()}`, kind: 'web' as const, label: engine.label, url: renderSearchTemplate(engine.template, query) }]
+    })
+    if (includeKnowledge) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'knowledge', label: '本地知识库' })
+    if (sources.length === 0) return
+    const next = { hostTabId: activeTabIdRef.current, query, sources, visibleIds: sources.slice(0, 3).map(source => source.id) }
+    comparisonRef.current = next
+    setComparison(next)
+  }
+
+  function showComparisonSource(id: string) {
+    setComparison(current => {
+      if (!current || current.visibleIds.includes(id)) return current
+      if (current.visibleIds.length >= 3) {
+        const displacedId = current.visibleIds[2]
+        const displaced = current.sources.find(source => source.id === displacedId)
+        if (displaced?.kind === 'web') void closeNativeTab(displaced.id)
+      }
+      const visibleIds = current.visibleIds.length < 3 ? [...current.visibleIds, id] : [...current.visibleIds.slice(0, 2), id]
+      const next = { ...current, visibleIds }
+      comparisonRef.current = next
+      return next
+    })
+  }
+
+  useEffect(() => {
+    if (!comparison) return
+    let disposed = false
+    const sync = () => {
+      if (disposed) return
+      const canShow = visible && active.id === comparison.hostTabId && modalOverlayCount === 0 && toolbarOverlay !== 'tab-menu'
+      comparison.sources.filter(source => source.kind === 'web').forEach(source => {
+        const shouldShow = canShow && comparison.visibleIds.includes(source.id)
+        const element = surfaceRef.current?.querySelector<HTMLElement>(`[data-comparison-view="${source.id}"]`)
+        if (!shouldShow || !element) { void hideNativeTab(source.id); return }
+        const rect = element.getBoundingClientRect()
+        const nextBounds = { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
+        if (hasNativeTab(source.id)) {
+          void resizeNativeTab(source.id, nextBounds).then(() => showNativeTab(source.id))
+        } else if (source.url) {
+          void openNativeTab(source.id, source.url, nextBounds).then(() => showNativeTab(source.id)).catch(() => undefined)
+        }
+      })
+    }
+    const frame = requestAnimationFrame(sync)
+    const observer = new ResizeObserver(sync)
+    if (surfaceRef.current) observer.observe(surfaceRef.current)
+    return () => { disposed = true; cancelAnimationFrame(frame); observer.disconnect() }
+  }, [active.id, comparison, modalOverlayCount, toolbarOverlay, visible])
+
   useEffect(() => {
     if (previousTab.current && previousTab.current !== active.id) void hideNativeTab(previousTab.current)
     previousTab.current = active.id
@@ -572,7 +649,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     return () => observer.disconnect()
   }, [active.id, aiOpen, findOpen, modalOverlayCount, toolbarOverlay, visible])
 
-  useEffect(() => () => { tabsRef.current.forEach(tab => { void closeNativeTab(tab.id) }) }, [])
+  useEffect(() => () => {
+    tabsRef.current.forEach(tab => { void closeNativeTab(tab.id) })
+    comparisonRef.current?.sources.filter(source => source.kind === 'web').forEach(source => { void closeNativeTab(source.id) })
+  }, [])
 
   // While a page is actually on screen, messages are painted inside that page
   // (closed shadow root, `position: fixed` top-right) instead of the host layer:
@@ -809,6 +889,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   async function navigate(input: string) {
     const resolved = resolveNavigationInput(input, { searchTemplate })
     if (!resolved) return
+    if (comparisonRef.current?.hostTabId === active.id) closeComparison()
     const url = trackingCleanerEnabled ? cleanTrackingParameters(resolved) : resolved
     const tabId = active.id
     if (!isNativeBrowserAvailable()) {
@@ -989,7 +1070,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     // Native popup menus are drawn by the OS above every child WebView. Keep
     // the React dropdown closed so no hidden overlay state survives dismissal.
     setToolbarOverlay(null)
-    void setNativeToolbarMenu(active.id, true, Math.round((zoomLevels[active.id] ?? 1) * 100)).catch(() => {
+    void setNativeToolbarMenu(active.id, true, Math.round((zoomLevels[active.id] ?? 1) * 100)).catch(error => {
+      console.error('browser toolbar menu failed', error)
       messageApi.error('菜单浮层加载失败，请重启桌面应用后重试')
     })
   }
@@ -1940,7 +2022,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         </span>
       </div>
     )}
-    <div className="browser-content"><div className="web-surface" ref={surfaceRef}>{readerArticle
+    <div className="browser-content"><div className="web-surface" ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
+      ? <SearchComparisonWorkspace query={comparison.query} sources={comparison.sources} visibleIds={comparison.visibleIds} onShow={showComparisonSource} onClose={closeComparison}/>
+      : readerArticle
       ? <ReaderArticleView article={readerArticle}/>
       : active.crashed
         ? <BrowserErrorView tab={{...active, error:{kind:'load-failed',message:'此标签页的底层视图已停止响应，可点击"重新打开"恢复。'}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
@@ -1952,7 +2036,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             ? <div className="web-surface__loading"><LoadingOutlined spin/></div>
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:'当前网页需要在 Tauri 桌面应用中打开。'}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
-              : <NewTab address={address} setAddress={setAddress} navigate={navigate} openNewTab={openNewTab} onSearchKnowledge={onSearchKnowledge}/>}</div>{aiOpen&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{
