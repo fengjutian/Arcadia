@@ -3,7 +3,7 @@ import { BookOutlined, ClockCircleOutlined, FileTextOutlined, InboxOutlined, Rig
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { deleteReadingSnapshot, searchDocuments, listReadingActivity, getSession, setSession, type DocumentSearchHit } from '../../api'
+import { deleteReadingSnapshot, isDesktopRuntime, searchDocuments, listReadingActivity, getSession, setSession, type DocumentSearchHit } from '../../api'
 import type { ReadingActivity } from '../../types'
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { renderHighlightedSnippet } from '../../features/search/renderSnippet'
@@ -26,6 +26,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const [selectedReading, setSelectedReading] = useState<ReadingActivity | null>(null)
   const [loading, setLoading] = useState(true)
   const [unavailable, setUnavailable] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [tagFilter, setTagFilter] = useState<string[]>([])
   const [starredOnly, setStarredOnly] = useState(false)
   const [includeArchived, setIncludeArchived] = useState(false)
@@ -74,9 +75,21 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
         setDocuments(items)
         setReading(activity)
         setUnavailable(false)
+        setLoadError(null)
         setDurationMs(Math.round(performance.now() - startedAt))
       })
-      .catch(() => { if (current) { setDocuments([]); setReading([]); setUnavailable(true) } })
+      // The knowledge base lives in this app's own SQLite file, so a rejection
+      // here is a real command failure, not a missing network service. Keep the
+      // message: it is the only clue the user (or a bug report) gets.
+      .catch((error: unknown) => {
+        if (!current) return
+        const detail = error instanceof Error ? error.message : String(error ?? '')
+        console.error('[search] 读取本地知识库失败', error)
+        setDocuments([])
+        setReading([])
+        setUnavailable(true)
+        setLoadError(detail || '未知错误')
+      })
       .finally(() => { if (current) setLoading(false) })
     return () => { current = false }
   }, [debouncedQuery, reloadToken])
@@ -160,7 +173,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
         {loading
           ? <span>正在检索本地索引…</span>
           : unavailable
-            ? <span>本地服务未连接</span>
+            ? <span>本地数据库不可用</span>
             : <span>找到 <b>{total}</b> 条内容 · <span className="search-status__latency">{durationMs ?? '—'} ms</span></span>}
       </div>}
     />
@@ -223,9 +236,12 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
 
       {showEmpty && (unavailable
         ? <SearchEmpty
-            title="本地数据服务未连接"
-            description="请确认桌面端的数据服务已经启动，然后重新连接。"
-            action={<Button onClick={() => setReloadToken(value => value + 1)}>重新连接</Button>}
+            title={isDesktopRuntime() ? '本地数据库暂时不可用' : '搜索需要在桌面端运行'}
+            description={isDesktopRuntime()
+              ? '读取本机 knowledge.db 失败。内容都在这台机器上，不需要连接任何服务；可以重试，若反复失败请附上下方的错误信息。'
+              : '知识库保存在桌面端的本地 SQLite 中，纯 Web 预览模式读不到。请用 npm run tauri:dev 打开应用。'}
+            detail={loadError}
+            action={<Button onClick={() => setReloadToken(value => value + 1)}>{isDesktopRuntime() ? '重试' : '重新检测'}</Button>}
           />
         : <SearchEmpty
             title={hasQuery || hasFilters ? '没有找到匹配的内容' : '还没有可搜索的内容'}
@@ -327,11 +343,12 @@ function SectionHeading({ title, count, hint }: { title: string; count: number; 
   </div>
 }
 
-function SearchEmpty({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
+function SearchEmpty({ title, description, detail, action }: { title: string; description: string; detail?: string | null; action?: ReactNode }) {
   return <div className="search-empty-panel">
     <span className="search-empty-panel__icon"><SearchOutlined/></span>
     <h2>{title}</h2>
     <p>{description}</p>
+    {detail && <code className="search-empty-panel__detail" title={detail}>{detail}</code>}
     {action && <div className="search-empty-panel__actions">{action}</div>}
   </div>
 }

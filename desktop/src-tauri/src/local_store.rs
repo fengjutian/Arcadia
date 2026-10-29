@@ -1,6 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
@@ -650,6 +651,17 @@ const MIGRATIONS: &[(i64, &str)] = &[
         );
         CREATE INDEX idx_site_blacklist_events_blocked ON site_blacklist_events(blocked_at DESC);",
     ),
+    (
+        27,
+        "CREATE VIRTUAL TABLE local_documents_cjk_fts USING fts5(
+            document_id UNINDEXED,
+            title_tokens,
+            markdown_tokens,
+            summary_tokens,
+            tag_tokens,
+            tokenize='unicode61'
+        );",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -902,6 +914,9 @@ pub(crate) fn run_migrations(database: &mut Connection) -> Result<(), String> {
         if *version == 11 {
             migrate_legacy_browser_state(&transaction)?;
         }
+        if *version == 27 {
+            rebuild_cjk_search_index(&transaction)?;
+        }
         transaction
             .execute(
                 "INSERT INTO schema_version(version, applied_at) VALUES(?, ?)",
@@ -1010,9 +1025,18 @@ fn unix_seconds() -> i64 {
         .unwrap_or(0)
 }
 
+/// Map a document row for every `SELECT` in this module.
+///
+/// Column order is fixed and shared by all call sites:
+/// `id(0), title(1), url(2), source(3), author(4), summary(5), markdown(6),
+/// word_count(7), status(8), tags(9), auto_tags(10), created_at(11), starred(12)`.
+/// `auto_tags` and `created_at` sit next to each other and are both `TEXT`, so
+/// swapping their indices silently returns the tag JSON as the timestamp (and
+/// drops every auto tag) instead of failing loudly. Keep this order in sync with
+/// any new query that returns documents.
 fn row_document(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalDocument> {
     let tags: String = row.get(9)?;
-    let auto_tags: String = row.get(11)?;
+    let auto_tags: String = row.get(10)?;
     let starred: i64 = row.get(12)?;
     Ok(LocalDocument {
         id: row.get(0)?,
@@ -1026,7 +1050,7 @@ fn row_document(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalDocument> {
         status: row.get(8)?,
         tags: serde_json::from_str(&tags).unwrap_or_default(),
         auto_tags: serde_json::from_str(&auto_tags).unwrap_or_default(),
-        created_at: row.get(10)?,
+        created_at: row.get(11)?,
         starred: starred != 0,
     })
 }
@@ -1674,6 +1698,128 @@ pub fn local_update_agent_run_status(
     Ok(())
 }
 
+fn is_cjk(character: char) -> bool {
+    matches!(character as u32,
+        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF |
+        0x20000..=0x2FA1F | 0x3040..=0x30FF | 0xAC00..=0xD7AF)
+}
+
+/// Produce a compact hybrid token stream for SQLite FTS5. Latin words remain
+/// intact, while CJK runs emit both unigrams and overlapping bigrams. Bigrams
+/// make two-character terms (`南京`) directly searchable inside longer text
+/// (`南京市`); unigrams preserve one-character queries and mixed phrases.
+fn hybrid_search_tokens(text: &str) -> Vec<String> {
+    fn flush_ascii(buffer: &mut String, output: &mut Vec<String>) {
+        if !buffer.is_empty() {
+            output.push(std::mem::take(buffer));
+        }
+    }
+    fn flush_cjk(buffer: &mut Vec<char>, output: &mut Vec<String>) {
+        if buffer.is_empty() {
+            return;
+        }
+        output.extend(buffer.iter().map(char::to_string));
+        output.extend(
+            buffer
+                .windows(2)
+                .map(|pair| pair.iter().collect::<String>()),
+        );
+        buffer.clear();
+    }
+
+    let mut tokens = Vec::new();
+    let mut ascii = String::new();
+    let mut cjk = Vec::new();
+    for character in text.chars() {
+        if is_cjk(character) {
+            flush_ascii(&mut ascii, &mut tokens);
+            cjk.push(character);
+        } else if character.is_alphanumeric() {
+            flush_cjk(&mut cjk, &mut tokens);
+            ascii.extend(character.to_lowercase());
+        } else {
+            flush_ascii(&mut ascii, &mut tokens);
+            flush_cjk(&mut cjk, &mut tokens);
+        }
+    }
+    flush_ascii(&mut ascii, &mut tokens);
+    flush_cjk(&mut cjk, &mut tokens);
+
+    let mut seen = HashSet::new();
+    tokens.retain(|token| !token.is_empty() && seen.insert(token.clone()));
+    tokens
+}
+
+fn hybrid_token_text(text: &str) -> String {
+    hybrid_search_tokens(text).join(" ")
+}
+
+fn build_hybrid_fts_query(query: &str) -> String {
+    hybrid_search_tokens(query)
+        .into_iter()
+        .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" AND ")
+}
+
+fn index_cjk_document(database: &Connection, document: &LocalDocument) -> Result<(), String> {
+    database
+        .execute(
+            "DELETE FROM local_documents_cjk_fts WHERE document_id=?1",
+            params![document.id],
+        )
+        .map_err(|error| error.to_string())?;
+    let tags = document
+        .tags
+        .iter()
+        .chain(document.auto_tags.iter())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" ");
+    database
+        .execute(
+            "INSERT INTO local_documents_cjk_fts(document_id,title_tokens,markdown_tokens,summary_tokens,tag_tokens) VALUES(?1,?2,?3,?4,?5)",
+            params![
+                document.id,
+                hybrid_token_text(&document.title),
+                hybrid_token_text(document.markdown.as_deref().unwrap_or("")),
+                hybrid_token_text(document.summary.as_deref().unwrap_or("")),
+                hybrid_token_text(&tags),
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn reindex_cjk_document_by_id(database: &Connection, id: &str) -> Result<(), String> {
+    let document = database
+        .query_row(
+            "SELECT id,title,url,source,author,summary,markdown,word_count,status,tags,auto_tags,created_at,starred FROM local_documents WHERE id=?1",
+            params![id],
+            row_document,
+        )
+        .map_err(|error| error.to_string())?;
+    index_cjk_document(database, &document)
+}
+
+fn rebuild_cjk_search_index(database: &Connection) -> Result<(), String> {
+    let documents = {
+        let mut statement = database
+            .prepare("SELECT id,title,url,source,author,summary,markdown,word_count,status,tags,auto_tags,created_at,starred FROM local_documents")
+            .map_err(|error| error.to_string())?;
+        let documents = statement
+            .query_map([], row_document)
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        documents
+    };
+    for document in documents {
+        index_cjk_document(database, &document)?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn local_list_documents(
     app: tauri::AppHandle,
@@ -1705,6 +1851,26 @@ pub fn local_list_documents(
                 rank: 0.0,
             })
             .collect());
+    }
+    if trimmed.chars().any(is_cjk) {
+        let hybrid_query = build_hybrid_fts_query(trimmed);
+        let mut statement = database
+            .prepare(
+                "SELECT d.id,d.title,d.url,d.source,d.author,d.summary,d.markdown,d.word_count,d.status,d.tags,d.auto_tags,d.created_at,d.starred, \
+                        '' AS title_snip, '' AS markdown_snip, '' AS summary_snip, \
+                        bm25(local_documents_cjk_fts, 0.0, 10.0, 1.0, 4.0, 8.0) AS rank \
+                 FROM local_documents d \
+                 INNER JOIN local_documents_cjk_fts cjk ON cjk.document_id = d.id \
+                 WHERE local_documents_cjk_fts MATCH ?1 \
+                 ORDER BY rank, d.starred DESC, d.created_at DESC",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map(params![hybrid_query], row_hit)
+            .map_err(|error| error.to_string())?;
+        return rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string());
     }
     let mut statement = database
         .prepare(
@@ -1821,6 +1987,7 @@ pub(crate) fn write_document(
         params![document.id, document.title, document.url, document.source, document.author, document.summary, document.markdown, document.word_count, document.status, tags, auto_tags, document.created_at, document.starred as i64],
     )
         .map_err(|error| error.to_string())?;
+    index_cjk_document(database, document)?;
     Ok(())
 }
 
@@ -1841,7 +2008,14 @@ pub fn local_get_document(
 
 #[tauri::command]
 pub fn local_delete_document(app: tauri::AppHandle, id: String) -> Result<(), String> {
-    connection(&app)?
+    let database = connection(&app)?;
+    database
+        .execute(
+            "DELETE FROM local_documents_cjk_fts WHERE document_id=?",
+            params![id],
+        )
+        .map_err(|error| error.to_string())?;
+    database
         .execute("DELETE FROM local_documents WHERE id=?", params![id])
         .map_err(|error| error.to_string())?;
     crate::plugins::installer::dispatch_subscribed(
@@ -1896,6 +2070,7 @@ pub fn local_update_document(
         .query_row(params![id], row_document)
         .map_err(|error| error.to_string())?;
     drop(statement);
+    index_cjk_document(&database, &document)?;
     drop(database);
     crate::plugins::installer::notify_document_updated(&app, &document);
     Ok(document)
@@ -1918,6 +2093,7 @@ pub fn local_update_tags(
     if updated == 0 {
         return Err(format!("document not found: {id}"));
     }
+    reindex_cjk_document_by_id(&database, &id)?;
     Ok(())
 }
 
@@ -1938,6 +2114,7 @@ pub fn local_update_auto_tags(
     if updated == 0 {
         return Err(format!("document not found: {id}"));
     }
+    reindex_cjk_document_by_id(&database, &id)?;
     Ok(())
 }
 
@@ -4633,5 +4810,39 @@ mod tests {
             run_migrations(&mut database).unwrap();
         }
         assert_eq!(versions_of(&database), first);
+    }
+
+    #[test]
+    fn hybrid_tokenizer_emits_cjk_unigrams_and_bigrams() {
+        let tokens = hybrid_search_tokens("南京市 AI Search");
+        for expected in ["南", "南京", "京", "京市", "市", "ai", "search"] {
+            assert!(
+                tokens.iter().any(|token| token == expected),
+                "missing token {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn cjk_index_matches_substring_inside_longer_chinese_text() {
+        let mut database = fresh();
+        run_migrations(&mut database).unwrap();
+        database
+            .execute(
+                "INSERT INTO local_documents(id,title,url,summary,markdown,word_count,status,tags,auto_tags,created_at,starred) \
+                 VALUES('cjk-doc','南京市概览','https://example.com/nanjing','江苏省省会','南京市是长江下游的重要城市',10,'READY','[]','[]','2026-01-01',0)",
+                [],
+            )
+            .unwrap();
+        rebuild_cjk_search_index(&database).unwrap();
+        let query = build_hybrid_fts_query("南京");
+        let count: i64 = database
+            .query_row(
+                "SELECT COUNT(*) FROM local_documents_cjk_fts WHERE local_documents_cjk_fts MATCH ?1",
+                params![query],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
     }
 }

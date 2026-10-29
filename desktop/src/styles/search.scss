@@ -729,6 +729,26 @@
     gap: 8px;
     margin-top: 18px;
   }
+
+  // Raw error text from the failed command. Deliberately readable rather than
+  // decorative: it is the only diagnostic the user can copy into a bug report.
+  &__detail {
+    display: block;
+    max-width: 560px;
+    max-height: 84px;
+    margin: 12px 0 0;
+    padding: 7px 10px;
+    overflow: auto;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--search-strong) 6%, transparent);
+    color: var(--search-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.6;
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
 }
 
 .search-loading {

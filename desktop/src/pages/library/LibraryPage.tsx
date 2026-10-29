@@ -52,7 +52,8 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [collections, setCollections] = useState<Collection[]>([])
   const [selected, setSelected] = useState<Document | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [offline, setOffline] = useState(false)
+  const [unavailable, setUnavailable] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [downloads, setDownloads] = useState<DownloadEntry[]>([])
   const [query, setQuery] = useState('')
@@ -70,7 +71,8 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   async function reloadDocuments() {
     const result = await loadDocuments()
     setDocuments(result.items)
-    setOffline(result.offline)
+    setUnavailable(result.unavailable)
+    setLoadError(result.error)
     setLoaded(true)
   }
 
@@ -211,11 +213,15 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     </div>
     {!loaded
       ? <Skeleton active/>
-      : offline
+      : unavailable
         ? <div className="library-empty-state">
             <span className="library-empty-state__icon"><BookOutlined/></span>
-            <h3>本地数据服务未连接</h3>
-            <p>知识库数据保存在桌面端本地服务中，请确认应用已完整启动。</p>
+            <h3>本地数据库暂时不可用</h3>
+            <p>读取本机 knowledge.db 失败。内容都在这台机器上，不需要连接任何服务；可以先重试，若反复失败请附上下方的错误信息。</p>
+            {loadError && <code className="library-empty-state__detail" title={loadError}>{loadError}</code>}
+            <div className="library-empty-state__actions">
+              <Button type="primary" onClick={() => void reloadDocuments()}>重试</Button>
+            </div>
           </div>
         : documents.length === 0
           ? <div className="library-empty-state">
