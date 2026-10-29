@@ -1854,6 +1854,13 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     letter-spacing: .01em;
   }
 
+  .assistant-ui-thread {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
   .assistant-conversation {
     flex: 1;
     min-height: 0;
@@ -2403,7 +2410,9 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     }
   }
 
-  .assistant-composer .ui-textarea.assistant-composer__input {
+  .assistant-composer .ui-textarea.assistant-composer__input,
+  .assistant-composer textarea.assistant-composer__input {
+    width: 100%;
     min-height: 42px;
     max-height: 140px;
     padding: 0;
@@ -2413,6 +2422,8 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     box-shadow: none;
     resize: none;
     color: var(--assistant-text);
+    outline: none;
+    font-family: inherit;
     font-size: 14px;
     line-height: 1.6;
     field-sizing: content;
@@ -2447,11 +2458,23 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     white-space: nowrap;
   }
 
-  .assistant-composer .assistant-send.ui-button {
+  .assistant-composer .assistant-send {
     width: 34px;
+    min-width: 34px;
     min-height: 34px;
     height: 34px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
     border-radius: 50%;
+    background: var(--accent-solid);
+    color: #fff;
+    cursor: pointer;
+    transition: opacity .15s, transform .15s, background-color .15s;
+
+    &:hover:not(:disabled) { transform: translateY(-1px); }
+    &:disabled { opacity: .42; cursor: not-allowed; }
   }
 
   .assistant-composer .ui-button.ant-btn-loading { opacity: 1; }

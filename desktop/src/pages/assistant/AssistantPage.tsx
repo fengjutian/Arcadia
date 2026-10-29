@@ -4,7 +4,6 @@ import {
   Card,
   Drawer,
   Empty,
-  Input,
   List,
   message,
   Popconfirm,
@@ -28,6 +27,14 @@ import {
   WarningOutlined,
 } from '../../components/ui/icons'
 import { useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from 'react'
+import {
+  AssistantRuntimeProvider,
+  ComposerPrimitive,
+  ThreadPrimitive,
+  useExternalStoreRuntime,
+  type AppendMessage,
+  type ThreadMessageLike,
+} from '@assistant-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { PageHeader } from '../../shared/components/PageHeader'
@@ -197,6 +204,37 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
       : noProvider
         ? '请先在「设置 → AI Provider」中配置'
         : '继续追问，或换一个角度提问…'
+
+  const assistantRuntime = useExternalStoreRuntime<Turn>({
+    messages: turns,
+    isRunning: busy || agentBusy,
+    isDisabled: !conversationHydrated || noDocuments,
+    isSendDisabled: noProvider,
+    convertMessage: (turn): ThreadMessageLike => ({
+      id: turn.id,
+      role: turn.role,
+      content: turn.content,
+      ...(turn.role === 'assistant'
+        ? {
+            status: turn.pending
+              ? { type: 'running' as const }
+              : turn.error
+                ? { type: 'incomplete' as const, reason: 'error' as const, error: turn.error }
+                : turn.interrupted
+                  ? { type: 'incomplete' as const, reason: 'cancelled' as const }
+                  : { type: 'complete' as const, reason: 'stop' as const },
+          }
+        : {}),
+    }),
+    onNew: async (message: AppendMessage) => {
+      const prompt = message.content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('\n')
+        .trim()
+      if (prompt) await submitQuestion(prompt)
+    },
+  })
 
   function patchTurn(id: string, patch: AssistantPatch) {
     setTurns(current => current.map(turn => (
@@ -638,6 +676,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           />
         )}
         <div className="assistant-grid">
+          <AssistantRuntimeProvider runtime={assistantRuntime}>
           <Card
             className="assistant-chat"
             title={
@@ -673,25 +712,20 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
               </Space>
             }
           >
-            <div className="assistant-conversation" ref={listRef}>
-              {renderConversation()}
-            </div>
+            <ThreadPrimitive.Root className="assistant-ui-thread">
+              <ThreadPrimitive.Viewport className="assistant-conversation" ref={listRef} autoScroll>
+                {renderConversation()}
+              </ThreadPrimitive.Viewport>
 
-            <div className="assistant-composer">
+            <ComposerPrimitive.Root className="assistant-composer">
               <div className="assistant-composer__box">
-                <Input.TextArea
+                <ComposerPrimitive.Input
                   id="assistant-question"
                   className="assistant-composer__input"
-                  rows={2}
-                  disabled={noDocuments || !conversationHydrated}
-                  value={question}
+                  minRows={2}
+                  maxRows={6}
                   onChange={event => setQuestion(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                      event.preventDefault()
-                      if (canAsk && !busy && !agentBusy) void submitQuestion(question)
-                    }
-                  }}
+                  submitMode="enter"
                   placeholder={placeholder}
                   aria-label="向知识库提问"
                 />
@@ -711,22 +745,21 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                     >
                       深度研究
                     </Button>
-                    <Button
-                      type="primary"
-                      shape="circle"
+                    <ComposerPrimitive.Send
+                      type="submit"
                       className="assistant-send"
-                      icon={<ArrowUpOutlined />}
                       aria-label="发送"
                       title="发送"
-                      disabled={!canAsk || busy || agentBusy}
-                      loading={busy}
-                      onClick={() => void submitQuestion(question)}
-                    />
+                    >
+                      {busy ? <Spin size="small" /> : <ArrowUpOutlined />}
+                    </ComposerPrimitive.Send>
                   </Space>
                 </div>
               </div>
-            </div>
+            </ComposerPrimitive.Root>
+            </ThreadPrimitive.Root>
           </Card>
+          </AssistantRuntimeProvider>
         </div>
 
         <Drawer
