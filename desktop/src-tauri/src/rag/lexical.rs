@@ -118,7 +118,12 @@ pub fn sanitize_fts_query(query: &str) -> String {
             } else {
                 // Escape any embedded double quote by doubling it.
                 let escaped = t.replace('"', "\"\"");
-                Some(format!("\"{escaped}\""))
+                // Prefix matching is essential for scripts where unicode61
+                // keeps a whole run as one token: e.g. the query `南京`
+                // must match an indexed token such as `南京市`. Quoting keeps
+                // FTS operators inert while the trailing `*` remains an FTS5
+                // prefix operator outside the quoted token.
+                Some(format!("\"{escaped}\"*"))
             }
         })
         .collect();
@@ -338,10 +343,21 @@ mod tests {
 
     #[test]
     fn fts5_sanitizer_quotes_each_token() {
-        assert_eq!(sanitize_fts_query("hello world"), "\"hello\" \"world\"");
+        assert_eq!(sanitize_fts_query("hello world"), "\"hello\"* \"world\"*");
         assert_eq!(sanitize_fts_query(""), "__no_match__");
         // Embedded quote must be doubled.
-        assert_eq!(sanitize_fts_query("a\"b"), "\"a\"\"b\"");
+        assert_eq!(sanitize_fts_query("a\"b"), "\"a\"\"b\"*");
+    }
+
+    #[test]
+    fn cjk_prefix_query_matches_a_longer_indexed_run() {
+        let conn = empty_fts_db();
+        seed(&conn, "nanjing", "南京市", "南京市是江苏省省会", &["城市"]);
+
+        let result = retrieve(&conn, "南京", &RetrievalFilters::default(), 10).unwrap();
+
+        assert_eq!(result.hits.len(), 1);
+        assert_eq!(result.hits[0].document_id, "nanjing");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { Button, Input, message, Modal, Segmented, Skeleton, Tabs, Tag, Typography, Upload } from '../../components/ui'
-import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
+import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DocumentCard } from '../../features/documents/DocumentCard'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
@@ -61,6 +61,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [tab, setTab] = useState('documents')
   const [addOpen, setAddOpen] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const downloadCenter = useDownloadCenter()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -74,6 +75,24 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     setUnavailable(result.unavailable)
     setLoadError(result.error)
     setLoaded(true)
+  }
+
+  async function refreshLibrary() {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      await Promise.all([
+        reloadDocuments(),
+        refreshCollections(),
+        listBrowserHistory().then(setHistory),
+        downloadCenter.refresh(),
+      ])
+      messageApi.success('知识库已刷新')
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '刷新失败')
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   useEffect(() => {
@@ -363,6 +382,17 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
           className="library-tabs"
           activeKey={tab}
           onChange={setTab}
+          tabBarExtraContent={
+            <Button
+              className="library-refresh-button"
+              size="small"
+              icon={<ReloadOutlined spin={refreshing}/>}
+              disabled={refreshing}
+              onClick={() => void refreshLibrary()}
+            >
+              {refreshing ? '刷新中' : '刷新'}
+            </Button>
+          }
           items={[
             { key: 'documents', label: <TabLabel label="最近保存" count={documents.length}/>, children: documentsContent },
             { key: 'collections', label: <TabLabel label="集合" count={collections.length}/>, children: collectionContent },
