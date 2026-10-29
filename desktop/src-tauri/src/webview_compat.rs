@@ -104,6 +104,62 @@ pub fn shell_open(_app: AppHandle, url: String) -> Result<(), String> {
     }
 }
 
+/// Open a local PDF selected or explicitly entered by the user. Local file
+/// URLs are never loaded into the browser WebView; keeping this command PDF-
+/// only avoids turning the address bar into a general shell launcher.
+#[tauri::command]
+pub fn open_local_pdf(url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(&url).map_err(|error| format!("invalid file URL: {error}"))?;
+    if parsed.scheme() != "file" {
+        return Err("only file:// URLs are accepted".into());
+    }
+    let path = parsed
+        .to_file_path()
+        .map_err(|_| "file URL cannot be converted to a local path".to_string())?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|error| format!("local PDF is unavailable: {error}"))?;
+    if !canonical.is_file() {
+        return Err("local PDF path is not a file".into());
+    }
+    let is_pdf = canonical
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("pdf"));
+    if !is_pdf {
+        return Err("only local PDF files can be opened".into());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer.exe")
+            .arg(&canonical)
+            .spawn()
+            .map_err(|error| format!("failed to open PDF: {error}"))?;
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&canonical)
+            .spawn()
+            .map_err(|error| format!("failed to open PDF: {error}"))?;
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&canonical)
+            .spawn()
+            .map_err(|error| format!("failed to open PDF: {error}"))?;
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        Err("opening local PDFs is not supported on this platform".into())
+    }
+}
+
 #[tauri::command]
 pub fn toggle_fullscreen(app: AppHandle) -> Result<bool, String> {
     let window = app

@@ -33,7 +33,7 @@ import { ContextMenu } from '../../features/browser/ContextMenuView'
 import type { ContextMenuAction } from '../../features/browser/contextMenu'
 import { startDownload } from '../../services/downloads'
 import { classifyDownload } from '../../features/downloads/dangerClassifier'
-import { shellOpen } from '../../services/webviewCompat'
+import { openLocalPdf, shellOpen } from '../../services/webviewCompat'
 import { classifyShellOpenUrl, describeScheme } from '../../features/browser/externalSchemes'
 import { redactUrl } from '../../features/browser/logRedaction'
 import { domainFromUrl, recordAdBlock } from '../../features/privacy/adBlockStats'
@@ -889,6 +889,15 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   async function navigate(input: string) {
     const resolved = resolveNavigationInput(input, { searchTemplate })
     if (!resolved) return
+    if (/^file:\/\//i.test(resolved)) {
+      try {
+        await openLocalPdf(resolved)
+        messageApi.success('已使用系统 PDF 阅读器打开')
+      } catch (error) {
+        messageApi.error(error instanceof Error ? error.message : String(error))
+      }
+      return
+    }
     if (comparisonRef.current?.hostTabId === active.id) closeComparison()
     const url = trackingCleanerEnabled ? cleanTrackingParameters(resolved) : resolved
     const tabId = active.id
