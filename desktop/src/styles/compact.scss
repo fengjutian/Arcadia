@@ -1859,6 +1859,7 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   .assistant-conversation {
@@ -2478,6 +2479,125 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
   }
 
   .assistant-composer .ui-button.ant-btn-loading { opacity: 1; }
+
+  // assistant-ui workspace skin. The primitives are intentionally headless,
+  // so the product theme lives here instead of inheriting the legacy card UI.
+  .assistant-chat {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--accent) 10%, #e4ebe6);
+    border-radius: 20px;
+    background: #fbfcfb;
+    box-shadow: 0 18px 50px rgba(28, 54, 39, .07);
+  }
+
+  .assistant-chat > .ant-card-head {
+    min-height: 48px;
+    padding-inline: 18px;
+    background: rgba(251, 252, 251, .9);
+    backdrop-filter: blur(14px);
+  }
+
+  .assistant-chat > .ant-card-body {
+    padding: 0;
+    background:
+      radial-gradient(circle at 50% 0, color-mix(in srgb, var(--accent) 4%, transparent), transparent 34%),
+      #fbfcfb;
+  }
+
+  .assistant-conversation {
+    padding: 0 28px;
+  }
+
+  .assistant-thread {
+    max-width: 880px;
+    padding: 30px 0 24px;
+    gap: 30px;
+  }
+
+  .assistant-message--assistant {
+    gap: 13px;
+  }
+
+  .assistant-message--assistant .assistant-message__body {
+    max-width: min(100% - 46px, 810px);
+    gap: 8px;
+  }
+
+  .assistant-message--assistant .assistant-bubble {
+    padding: 2px 2px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 14.5px;
+    line-height: 1.85;
+  }
+
+  .assistant-avatar--bot {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    background: linear-gradient(145deg, #183c2b, #2d7652);
+    box-shadow: 0 5px 14px rgba(30, 89, 59, .16);
+  }
+
+  .assistant-message--user {
+    padding-right: 46px;
+  }
+
+  .assistant-message--user .assistant-avatar {
+    display: none;
+  }
+
+  .assistant-message--user .assistant-bubble {
+    padding: 10px 15px;
+    border: 0;
+    border-radius: 17px 17px 5px 17px;
+    background: #e6f1eb;
+    color: #264335;
+    box-shadow: inset 0 0 0 1px rgba(48, 112, 76, .09);
+  }
+
+  .assistant-citation {
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(35, 62, 46, .04);
+  }
+
+  .assistant-composer {
+    padding: 12px 28px 20px;
+    border-top: 0;
+    background: linear-gradient(to bottom, rgba(251, 252, 251, 0), #fbfcfb 24%);
+  }
+
+  .assistant-composer__box {
+    max-width: 880px;
+    padding: 13px 13px 10px 16px;
+    border-color: #d5dfd8;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 10px 30px rgba(29, 57, 40, .08), 0 2px 7px rgba(29, 57, 40, .04);
+  }
+
+  .assistant-scroll-to-bottom {
+    position: absolute;
+    right: 50%;
+    bottom: 12px;
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid #d8e1db;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .94);
+    color: var(--accent);
+    box-shadow: 0 7px 18px rgba(29, 57, 40, .12);
+    cursor: pointer;
+    transform: translateX(50%) rotate(180deg);
+
+    &[data-hidden] { display: none; }
+  }
 }
 
 @keyframes assistant-dot {

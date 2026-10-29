@@ -716,6 +716,9 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
               <ThreadPrimitive.Viewport className="assistant-conversation" ref={listRef} autoScroll>
                 {renderConversation()}
               </ThreadPrimitive.Viewport>
+              <ThreadPrimitive.ScrollToBottom className="assistant-scroll-to-bottom" aria-label="滚动到最新消息">
+                <ArrowUpOutlined />
+              </ThreadPrimitive.ScrollToBottom>
 
             <ComposerPrimitive.Root className="assistant-composer">
               <div className="assistant-composer__box">
