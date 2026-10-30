@@ -7,6 +7,7 @@ import {
   List,
   message,
   Popconfirm,
+  Select,
   Space,
   Spin,
   Tag,
@@ -17,7 +18,9 @@ import {
   BookOutlined,
   ClockCircleOutlined,
   CopyOutlined,
+  DownloadOutlined,
   FileTextOutlined,
+  PlusOutlined,
   ReloadOutlined,
   RobotOutlined,
   SearchOutlined,
@@ -41,7 +44,6 @@ import {
 } from '@assistant-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { PageHeader } from '../../shared/components/PageHeader'
 import { aiChat, aiEmbed, getSession, listAIProviders, listDocuments, ragAnswer, searchDocuments, searchSimilarEmbeddings, setSession } from '../../api'
 import type { RagQuery } from '../../api'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
@@ -90,6 +92,25 @@ type Turn = UserTurn | AssistantTurn
 type AssistantPatch = Partial<Omit<AssistantTurn, 'id' | 'role'>>
 
 const KNOWLEDGE_ATTACHMENT_ADAPTER = new KnowledgeAttachmentAdapter()
+
+function conversationAsMarkdown(turns: readonly Turn[], documentsById: ReadonlyMap<string, Document>): string {
+  const lines = ['# 知识库对话', '']
+  for (const turn of turns) {
+    if (turn.role === 'user') {
+      lines.push('## 我', '', turn.content, '')
+      continue
+    }
+    if (turn.pending) continue
+    lines.push('## 知识助手', '', stripSourceBlocks(turn.content), '')
+    const cited = (turn.documentIds ?? [])
+      .map(id => documentsById.get(id))
+      .filter((doc): doc is Document => Boolean(doc))
+    if (cited.length > 0) {
+      lines.push('引用：', ...cited.map((doc, index) => `${index + 1}. ${doc.title}${doc.url ? ` — ${doc.url}` : ''}`), '')
+    }
+  }
+  return lines.join('\n').trimEnd()
+}
 
 /** Keep in-app navigation intact: answer links open as a normal browser tab. */
 function AssistantMarkdownLink({ href, children, node: _node, onClick, ...props }: ComponentPropsWithoutRef<'a'> & { node?: unknown }) {
@@ -561,6 +582,31 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
   function clearConversation() {
     if (busyRef.current) return
     setTurns([])
+    setQuestion('')
+    window.requestAnimationFrame(() => document.getElementById('assistant-question')?.focus())
+  }
+
+  async function copyConversation() {
+    const markdown = conversationAsMarkdown(turns, documentsById)
+    if (!markdown) return
+    try {
+      await navigator.clipboard.writeText(markdown)
+      messageApi.success('已复制整段对话')
+    } catch {
+      messageApi.error('复制失败，请检查剪贴板权限')
+    }
+  }
+
+  function exportConversation() {
+    const markdown = conversationAsMarkdown(turns, documentsById)
+    if (!markdown) return
+    const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `知识库对话-${new Date().toISOString().slice(0, 10)}.md`
+    link.click()
+    URL.revokeObjectURL(url)
+    messageApi.success('对话已导出')
   }
 
   function goToProviderSettings() {
@@ -775,11 +821,6 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
     <>
       {contextHolder}
       <section className="page assistant-page">
-        <PageHeader
-          eyebrow="KNOWLEDGE ASSISTANT"
-          title="向整个知识库提问"
-          description={`基于 ${documents.length} 篇已保存资料回答问题，并标注引用来源${noProvider ? ' · 未配置 AI Provider' : ''}。`}
-        />
         {noProvider && (
           <Alert
             className="assistant-provider-alert"
@@ -806,6 +847,20 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
             }
             extra={
               <Space size={6} wrap>
+                {providers.length > 1 && (
+                  <Select
+                    size="small"
+                    className="assistant-provider-select"
+                    value={providerId}
+                    options={providers.map(provider => ({
+                      value: provider.id,
+                      label: provider.model,
+                    }))}
+                    onChange={value => setProviderId(value)}
+                    disabled={busy || agentBusy}
+                    ariaLabel="选择对话模型"
+                  />
+                )}
                 <Button
                   size="small"
                   icon={<RobotOutlined />}
@@ -818,16 +873,24 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                   {citedDocIds.size > 0 ? `引用 ${citedDocIds.size}` : `来源 ${documents.length}`}
                 </Button>
                 {turns.length > 0 && (
-                  <Popconfirm
-                    title="清空当前对话？"
-                    description="对话记录将从本机删除，且无法恢复。"
-                    okText="清空"
-                    okButtonProps={{ danger: true }}
-                    disabled={busy || agentBusy}
-                    onConfirm={clearConversation}
-                  >
-                    <Button size="small" type="text" danger disabled={busy || agentBusy}>清空</Button>
-                  </Popconfirm>
+                  <>
+                    <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => void copyConversation()}>
+                      复制对话
+                    </Button>
+                    <Button size="small" type="text" icon={<DownloadOutlined />} onClick={exportConversation}>
+                      导出
+                    </Button>
+                    <Popconfirm
+                      title="开始新对话？"
+                      description="当前对话将从本机删除；需要保留时请先导出。"
+                      okText="新建"
+                      okButtonProps={{ danger: true }}
+                      disabled={busy || agentBusy}
+                      onConfirm={clearConversation}
+                    >
+                      <Button size="small" icon={<PlusOutlined />} disabled={busy || agentBusy}>新对话</Button>
+                    </Popconfirm>
+                  </>
                 )}
               </Space>
             }
@@ -856,6 +919,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                   className="assistant-composer__input"
                   minRows={2}
                   maxRows={6}
+                  value={question}
                   onChange={event => setQuestion(event.target.value)}
                   submitMode="enter"
                   placeholder={placeholder}

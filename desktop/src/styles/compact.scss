@@ -1802,28 +1802,6 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
   flex-direction: column;
   overflow: hidden;
 
-  > .page-header {
-    flex: none;
-    margin-bottom: 10px;
-
-    .eyebrow {
-      font-size: 10px;
-      line-height: 1.2;
-      letter-spacing: 1.3px;
-    }
-
-    h1.ant-typography {
-      margin: 3px 0 1px;
-      font-size: 26px;
-      line-height: 1.18;
-    }
-
-    p {
-      font-size: 13px;
-      line-height: 1.45;
-    }
-  }
-
   .assistant-grid {
     flex: 1;
     height: auto;
@@ -1888,6 +1866,11 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     font-size: 11.5px;
     font-weight: 400;
     letter-spacing: .01em;
+  }
+
+  .assistant-provider-select {
+    width: 150px;
+    max-width: 18vw;
   }
 
   .assistant-ui-thread {
