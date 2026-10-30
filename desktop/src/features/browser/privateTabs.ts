@@ -8,10 +8,10 @@
  *  - Session list is not written (`browser.tabs` persistence filters them).
  *  - Downloads are not persisted (`useDownloadCenter` drops the v2 event).
  *  - Closed-tab stack is not appended (we'd rather lose the entry).
- *  - Site permissions for the tab's origin are force-denied at creation.
+ *  - Permission requests are denied by the native/JS guard and are never
+ *    written to the shared site-permission store.
  */
 import type { BrowserTab } from '../../types'
-import { forceAllDenyFor, resetOrigin } from './usePermissionPrompt'
 
 export const PRIVATE_TAB_BADGE = '私密'
 
@@ -37,18 +37,6 @@ export function makePrivateTab(id: string = crypto.randomUUID(), url: string = '
  */
 export function stripPrivateTabs(tabs: BrowserTab[]): BrowserTab[] {
   return tabs.filter(tab => !tab.private)
-}
-
-/**
- * After the last private tab closes we wipe the permission rules the
- * session accumulated so a fresh "open private tab" cannot piggy-back on
- * decisions the user already rejected. This is intentionally aggressive —
- * private tabs exist to leave no trace.
- */
-export function resetPrivateSessionPermissions(activeOrigins: string[]): void {
-  for (const origin of activeOrigins) resetOrigin(origin)
-  // Force-deny ensures any leftover rules are also wiped.
-  for (const origin of activeOrigins) forceAllDenyFor(origin)
 }
 
 /**

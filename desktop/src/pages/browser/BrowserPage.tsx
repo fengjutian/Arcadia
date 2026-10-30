@@ -54,9 +54,9 @@ import { BulkSummaryPalette } from '../../features/ai/BulkSummaryPalette'
 import type { BulkProgressEntry } from '../../features/ai/bulkSummary'
 import { NotesPanel } from '../../features/notes/NotesPanel'
 import { addNote as appendNoteEntry, readNotes as loadStoredNotes, removeNote as dropNoteEntry, updateNote as patchNoteEntry, writeNotes as persistNotes, type NoteEntry } from '../../features/notes/notes'
-import { isPrivateTab, makePrivateTab, stripPrivateTabs, resetPrivateSessionPermissions } from '../../features/browser/privateTabs'
+import { isPrivateTab, makePrivateTab, stripPrivateTabs } from '../../features/browser/privateTabs'
 import { readSitePermissions, writeSitePermissions } from '../../features/browser/sitePermissions'
-import { forceAllDenyFor } from '../../features/browser/usePermissionPrompt'
+import { shouldRecordHistory } from '../../features/history/historyRecording'
 import { LockOutlined } from '../../components/ui/icons'
 import { readRecoverySnapshot, restoreFromSnapshot, stripTransientTabStates, writeSnapshot, type SessionSnapshot } from '../../features/browser/sessionStore'
 import { TopBarPortal } from '../../app/TopBarPortal'
@@ -616,13 +616,23 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }, [sessionJson, hydrated])
 
   useEffect(() => {
-    if (!hydrated || !/^https?:\/\//i.test(active.url) || active.url === lastHistoryUrl.current) return
-    if (isPrivateTab(active)) return
+    const candidate = {
+      url: active.url,
+      title: active.title,
+      loading: active.loading,
+      error: active.error,
+      private: active.private === true,
+    }
+    if (!hydrated || !shouldRecordHistory(candidate, lastHistoryUrl.current)) return
     lastHistoryUrl.current = active.url
-    const entry = { url: redactUrl(active.url), title: active.title, visitedAt: Date.now() }
+    const entry = {
+      url: redactUrl(active.url),
+      title: active.title.trim() || active.url,
+      visitedAt: Date.now(),
+    }
     setHistory(current => dedupeHistory(current, entry))
     void addBrowserHistory(entry).catch(() => undefined)
-  }, [active.url, active.title, active.private, hydrated])
+  }, [active.url, active.title, active.loading, active.error, active.private, hydrated])
 
   useEffect(() => { activeTabIdRef.current = activeTabId }, [activeTabId])
   useEffect(() => {
@@ -1152,15 +1162,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       messageApi.info('网页预览模式下已使用系统浏览器打开')
       return
     }
-    // Private tabs always deny sensitive permissions for the target origin.
-    // The script-level guard enforces this at runtime; pre-denying here
-    // ensures the JS prompt is skipped too.
-    if (active.private) {
-      try {
-        const origin = new URL(url).origin
-        if (origin && origin !== 'null') forceAllDenyFor(origin)
-      } catch { /* ignore non-http inputs */ }
-    }
+    // Private tabs deny sensitive permissions inside the native/JS guard and
+    // never write to the shared site-permission store. This keeps incognito
+    // browsing from mutating the "always allow/deny" rules of normal tabs.
     setReaderArticle(null)
     setTabs(current => current.map(tab => tab.id === tabId ? { ...tab, url, title: input.trim(), loading: true, error: undefined, crashed: false } : tab))
     await new Promise(resolve => requestAnimationFrame(resolve))
@@ -1202,7 +1206,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         suspendIdle,
       })
       for (const id of plan.toClose) {
-        const tab = tabs.find(item => item.id === id)
         try {
           const state = await readNativeState(id)
           if (state) setTabs(current => current.map(item => item.id === id ? { ...item, scrollX: Math.round(state.scrollX), scrollY: Math.round(state.scrollY) } : item))
@@ -1210,12 +1213,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         const retained = await suspendNativeTab(id).catch(() => false)
         if (!retained) await closeNativeTab(id)
         setTabs(current => current.map(item => item.id === id ? { ...item, suspended: true, loading: false } : item))
-        if (!retained && tab?.url) {
-          try {
-            const origin = new URL(tab.url).origin
-            if (origin && origin !== 'null') forceAllDenyFor(origin)
-          } catch { /* ignore non-http urls */ }
-        }
       }
     } finally {
       lruSweepRunningRef.current = false
@@ -1956,17 +1953,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     }
     const closedIndex = tabs.findIndex(tab => tab.id === id)
     const remaining = tabs.filter(tab => tab.id !== id)
-    // Last private tab closed → wipe its accumulated permission rules so the
-    // session leaves no trace.
-    if (wasPrivate) {
-      const stillPrivate = remaining.filter(tab => isPrivateTab(tab))
-      if (stillPrivate.length === 0 && closing?.url) {
-        try {
-          const origin = new URL(closing.url).origin
-          resetPrivateSessionPermissions([origin])
-        } catch { /* ignore malformed urls */ }
-      }
-    }
     if (!remaining.length) {
       const replacement = newTab()
       setTabs([replacement])

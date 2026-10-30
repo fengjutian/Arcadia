@@ -21,15 +21,17 @@ export interface UsePermissionPromptResult {
 
 /**
  * Drives the address-bar permission prompt. Listens to
- * `browser://permission-request` from any child WebView, shows the most
- * recent request in the inline bar, and replies via the Rust
- * `browser_permission_respond` command. Older requests in the queue are
- * dropped (the WebView has a 15 s timeout so a stale response is harmless).
+ * `browser://permission-request` from any child WebView, queues requests and
+ * shows them one at a time in the inline bar, and replies via the Rust
+ * `browser_permission_respond` command. Requests time out after 15 s on the
+ * WebView side, so a queued prompt that is never answered is harmless.
  */
 export function usePermissionPrompt(options: PermissionPromptProps = {}): UsePermissionPromptResult {
   const { enabled = true, onDecided } = options
-  const [pending, setPending] = useState<PermissionRequest | null>(null)
-  const queueRef = useRef<PermissionRequest[]>([])
+  const [queue, dispatch] = useReducer(permissionPromptQueueReducer, [])
+  // Index 0 is the visible prompt; the rest wait their turn.
+  const pending = queue[0] ?? null
+  const handledRequestIdRef = useRef<string | null>(null)
   const onDecidedRef = useRef(onDecided)
   onDecidedRef.current = onDecided
 
@@ -39,8 +41,7 @@ export function usePermissionPrompt(options: PermissionPromptProps = {}): UsePer
     let unlisten: (() => void) | undefined
     void onPermissionRequest(request => {
       if (disposed) return
-      queueRef.current.push(request)
-      setPending(current => current ?? request)
+      dispatch({ type: 'enqueue', request })
     }).then(stop => {
       if (disposed) stop()
       else unlisten = stop
@@ -53,24 +54,17 @@ export function usePermissionPrompt(options: PermissionPromptProps = {}): UsePer
 
   const decide = useCallback(async (decision: PermissionDecision) => {
     if (!pending) return
+    // A double click can fire before React re-renders with the next prompt.
+    // Never answer the same request twice.
+    if (handledRequestIdRef.current === pending.requestId) return
+    handledRequestIdRef.current = pending.requestId
     const request = pending
-    setPending(queueRef.current.shift() ?? null)
+    dispatch({ type: 'dismiss', requestId: request.requestId })
 
-    let allow = false
-    let persistValue: SitePermissionValue | null = null
-    if (decision === 'allow-once') {
-      allow = true
-    } else if (decision === 'allow-always') {
-      allow = true
-      persistValue = 'allow'
-    } else if (decision === 'deny-once') {
-      allow = false
-    } else if (decision === 'deny-always') {
-      allow = false
-      persistValue = 'deny'
-    }
-    if (persistValue && isSitePermissionKind(request.kind)) {
-      const next = setKind(request.origin, request.kind, persistValue)
+    const allow = decision === 'allow-once' || decision === 'allow-always'
+    const persistValue = shouldPersistPermissionDecision(request, decision)
+    if (persistValue) {
+      const next = setKind(request.origin, request.kind as SitePermissionKind, persistValue)
       writeSitePermissions(next)
     }
     try {
@@ -83,6 +77,24 @@ export function usePermissionPrompt(options: PermissionPromptProps = {}): UsePer
   }, [pending])
 
   return { pending, decide }
+}
+
+/**
+ * Resolve which rule (if any) an "always" decision should persist.
+ *
+ * Private tabs deliberately never write to the shared permission store:
+ * otherwise browsing incognito would mutate (or leak) the rules used by
+ * normal tabs.
+ */
+export function shouldPersistPermissionDecision(
+  request: Pick<PermissionRequest, 'kind' | 'private'>,
+  decision: PermissionDecision,
+): SitePermissionValue | null {
+  if (request.private) return null
+  if (!isSitePermissionKind(request.kind)) return null
+  if (decision === 'allow-always') return 'allow'
+  if (decision === 'deny-always') return 'deny'
+  return null
 }
 
 /**
@@ -132,10 +144,11 @@ function isSitePermissionKind(kind: string): kind is SitePermissionKind {
 }
 
 /**
- * Force-deny helper for "private mode" / "host hidden" cases. Sets every
- * rule for the given origin to `deny` and silently responds to any
- * in-flight request. The host should call this on mount when in private
- * mode and reverse it when leaving private mode.
+ * Force-deny every kind for the given origin in the *shared* rule store.
+ *
+ * This mutates persisted user rules, so it must only be called from an
+ * explicit user action. Private tabs must never call it: doing so overwrote
+ * (and later deleted) the rules used by normal tabs.
  */
 export function forceAllDenyFor(origin: string): void {
   const all = readSitePermissions()

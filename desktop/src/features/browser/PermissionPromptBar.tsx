@@ -38,14 +38,16 @@ export function PermissionPromptBar({ prompt }: PermissionPromptBarProps) {
         >
           本次允许
         </Button>
-        <Button
-          size="small"
-          type="primary"
-          icon={<CheckCircleOutlined />}
-          onClick={() => void decide('allow-always')}
-        >
-          始终允许
-        </Button>
+        {!pending.private && (
+          <Button
+            size="small"
+            type="primary"
+            icon={<CheckCircleOutlined />}
+            onClick={() => void decide('allow-always')}
+          >
+            始终允许
+          </Button>
+        )}
         <Button
           size="small"
           danger

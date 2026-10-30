@@ -400,6 +400,8 @@ export interface PermissionRequest {
   requestId: string
   origin: string
   kind: 'camera' | 'microphone' | 'location' | 'notifications' | 'clipboard' | 'media'
+  /** True when the requesting child WebView belongs to a private tab. */
+  private?: boolean
 }
 
 export async function onPermissionRequest(handler: (request: PermissionRequest) => void): Promise<UnlistenFn> {

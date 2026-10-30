@@ -63,6 +63,9 @@ struct PermissionRequestPayload {
     request_id: String,
     origin: String,
     kind: String,
+    /// True when the requesting WebView belongs to a private tab. The host
+    /// uses this to avoid persisting "always allow/deny" rules.
+    private: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -337,7 +340,7 @@ mod context_menu_tests {
     }
 }
 
-fn permission_guard_script(rules: &[SitePermissionRule]) -> String {
+fn permission_guard_script(rules: &[SitePermissionRule], private_mode: bool) -> String {
     // WebView2 permission requests are handled by the native event guard on
     // Windows. Keeping the JavaScript shim there would display two prompts.
     if cfg!(target_os = "windows") {
@@ -348,14 +351,17 @@ fn permission_guard_script(rules: &[SitePermissionRule]) -> String {
     // rule for (origin, kind). `allow` keeps the original behaviour;
     // `deny` rejects the call; `ask` invokes `browser_permission_request`
     // which round-trips through the host UI and resolves / rejects based
-    // on the user's verdict.
+    // on the user's verdict. Private tabs deny everything in the guard
+    // itself so no prompt (and no persisted rule) is involved.
     format!(
         r#"(()=>{{
       const rules={rules};
+      const privateMode={private_mode};
       const origin=location.origin;
       const rule=rules.find(item=>item.origin===origin) || {{}};
       const denied=name=>new DOMException(name+' permission denied by Arcadia','NotAllowedError');
       const decide=(kind)=>{{
+        if(privateMode) return 'deny';
         const value=rule[kind];
         if(value==='allow') return 'allow';
         if(value==='deny') return 'deny';
@@ -732,6 +738,7 @@ async fn browser_create(
         .incognito(private_mode)
         .initialization_script(permission_guard_script(
             permissions.as_deref().unwrap_or(&[]),
+            private_mode,
         ))
         .initialization_script(context_menu_script())
         .initialization_script(audio_monitor_script(&label))
