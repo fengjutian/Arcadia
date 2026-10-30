@@ -61,4 +61,21 @@ describe('AI conversation persistence', () => {
     expect(restored[1]).toMatchObject({ content:'network down', error:'network down' })
     expect(restored[1].interrupted).toBeUndefined()
   })
+
+  it('keeps a pending background task resumable after a page reload', () => {
+    const raw = JSON.stringify([{
+      id:'a-bg',
+      role:'assistant',
+      content:'',
+      pending:true,
+      backgroundTaskId:'assistant-123',
+    }])
+    expect(restoreConversation(raw)).toEqual([{
+      id:'a-bg',
+      role:'assistant',
+      content:'',
+      pending:true,
+      backgroundTaskId:'assistant-123',
+    }])
+  })
 })
