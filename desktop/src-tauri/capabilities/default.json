@@ -3,6 +3,7 @@
   "description": "Permissions for trusted local application webviews only",
   "webviews": ["main", "ai-assistant"],
   "permissions": [
+    "allow-trusted-app-commands",
     "core:default",
     "core:window:allow-close",
     "core:window:allow-minimize",
