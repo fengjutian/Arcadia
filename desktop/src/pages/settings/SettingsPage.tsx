@@ -1,6 +1,8 @@
 import { Alert, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, List, message, Popconfirm, Segmented, Select, Space, Spin, Statistic, Switch, Tabs, Tag, Typography } from '../../components/ui'
 import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, MoonOutlined, PictureOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { getVersion } from '@tauri-apps/api/app'
+import appLogo from '../../assets/app-logo-humanist.png'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInDb, clearReadingSnapshots, deleteAIProvider, deleteMcpServer, discoverMcpServer, dispatchPluginEvent, exportBackup, getAIProvider, getBrowserShortcutsEnabled, getReadingSnapshotStats, importBackup, installPlugin, listAIProviders, listBrowserHistory, listMcpResources, listMcpServers, listMcpTools, listPluginAudit, listPlugins, privacyCapabilityReport, privacyGetStats, privacyListBlocklists, privacyListBlockEvents, privacySetBlocklistEnabled, purgeReadingSnapshots, ragCancelJob, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragRetryJob, replaceSitePermissions, saveAIProvider, saveMcpServer, aiTestProvider, setBrowserShortcutsEnabled, setPluginEnabled, setPluginPermission, uninstallPlugin, type AIProviderInput, type InstalledPlugin, type McpServer, type McpTransport, type PluginAuditEntry, type PluginPermission, type ReadingSnapshotStats } from '../../api'
 import type { AIProvider, AIProviderType } from '../../types'
@@ -42,6 +44,7 @@ import { addSearchAlias, deleteSearchAlias, getSearchIndexStatus, listSearchAlia
 import { DEFAULT_BROWSER_APPEARANCE, readBrowserAppearance, writeBrowserAppearance, type BrowserAppearanceSettings, type OptionalToolbarItem } from '../../features/settings/browserAppearance'
 import { readDownloadSettings, writeDownloadSettings, type DownloadSettings } from '../../features/settings/downloadSettings'
 import { getDefaultDownloadDirectory } from '../../services/downloads'
+import { resetBrowserPreferences } from '../../features/settings/resetSettings'
 
 const PROVIDER_OPTIONS: { label: string; value: AIProviderType }[] = [
   { label: 'OpenAI 兼容（API Key）', value: 'openai-compatible' },
@@ -554,6 +557,79 @@ function DownloadSettingsPanel() {
       <div className="browser-setting-row"><div><Typography.Text strong>下载开始时显示下载菜单</Typography.Text><Typography.Text type="secondary">新下载开始后自动展开工具栏中的下载面板</Typography.Text></div><Switch checked={settings.showPanelOnStart} onChange={value => update({ showPanelOnStart: value })}/></div>
     </div>
     <Alert type="info" showIcon message="保存位置说明" description="网页自身触发的原生下载可能由系统 WebView 决定最终位置；浏览器接管的下载会使用这里选择的位置。"/>
+  </Card></>
+}
+
+function AboutSettingsPanel() {
+  const [version, setVersion] = useState('0.5.0')
+  const [capabilities, setCapabilities] = useState<BrowserCapabilities | null>(null)
+  const [messageApi, contextHolder] = message.useMessage()
+
+  useEffect(() => {
+    if ('__TAURI_INTERNALS__' in window) void getVersion().then(setVersion).catch(() => undefined)
+    void getBrowserCapabilities().then(setCapabilities).catch(() => undefined)
+  }, [])
+
+  const diagnostic = [
+    `Arcadia ${version}`,
+    `Tauri ${capabilities?.tauriRuntimeVersion ?? '网页预览模式'}`,
+    `WebView ${capabilities?.webviewBackend ?? '不可用'}`,
+    `Platform ${navigator.platform || 'unknown'}`,
+  ].join('\n')
+
+  async function copyDiagnostic() {
+    try {
+      await navigator.clipboard.writeText(diagnostic)
+      messageApi.success('诊断信息已复制')
+    } catch { messageApi.error('无法复制诊断信息') }
+  }
+
+  return <>{contextHolder}<Card title="关于" className="settings-card about-settings-card">
+    <div className="about-product">
+      <img src={appLogo} alt="Arcadia"/>
+      <div><Typography.Title level={3}>Arcadia</Typography.Title><Typography.Paragraph type="secondary">本地优先的 AI 知识浏览器</Typography.Paragraph><Tag color="green">版本 {version}</Tag></div>
+    </div>
+    <Alert type="success" showIcon message="当前版本信息已加载" description="Arcadia 会持续改进浏览、阅读、知识管理和 AI 辅助体验。公开版本可前往项目发布页获取。"/>
+    <Descriptions className="about-runtime" size="small" bordered column={2} items={[
+      { key: 'version', label: '应用版本', children: version },
+      { key: 'identifier', label: '应用标识', children: 'com.arcadia.knowledge-browser' },
+      { key: 'runtime', label: 'Tauri', children: capabilities?.tauriRuntimeVersion ?? '网页预览模式' },
+      { key: 'webview', label: 'WebView', children: capabilities?.webviewBackend ?? '不可用' },
+    ]}/>
+    <div className="about-links">
+      <a href="https://arcadia-browser.netlify.app" target="_blank" rel="noreferrer">产品主页</a>
+      <a href="https://github.com/fengjutian/browser" target="_blank" rel="noreferrer">开源项目</a>
+      <a href="https://github.com/fengjutian/browser/releases" target="_blank" rel="noreferrer">版本发布</a>
+      <Button size="small" onClick={() => void copyDiagnostic()}>复制诊断信息</Button>
+    </div>
+    <Typography.Paragraph type="secondary" className="about-copyright">© {new Date().getFullYear()} Arcadia contributors. 基于 Tauri、系统 WebView 与开源软件构建。</Typography.Paragraph>
+  </Card></>
+}
+
+function ResetSettingsPanel() {
+  const [messageApi, contextHolder] = message.useMessage()
+  const [resetting, setResetting] = useState(false)
+
+  async function resetSettings() {
+    setResetting(true)
+    try {
+      resetBrowserPreferences()
+      setBrowserShortcutsEnabled(true)
+      await setNativeAdBlocking(true)
+      messageApi.success('设置已恢复为默认值')
+    } catch (error) {
+      messageApi.error(`部分设置未能重置：${String(error)}`)
+    } finally { setResetting(false) }
+  }
+
+  return <>{contextHolder}<Card title="重置设置" className="settings-card reset-settings-card">
+    <div className="reset-settings-hero"><ReloadOutlined/><div><Typography.Title level={4}>将设置还原为默认值</Typography.Title><Typography.Paragraph type="secondary">恢复外观、工具栏、缩放、下载、字体、搜索引擎、快捷键、系统和性能及内置插件设置。</Typography.Paragraph></div></div>
+    <Alert type="info" showIcon message="你的个人数据不会被删除" description="书签、浏览历史、下载文件、知识库文档、笔记、工作区、已保存密码、AI Provider 和 MCP 配置都会保留。"/>
+    <div className="reset-settings-actions">
+      <Popconfirm title="将所有设置恢复为默认值？" description="偏好设置将立即重置，此操作不会删除个人数据。" okText="确认重置" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={() => void resetSettings()}>
+        <Button danger loading={resetting} icon={<ReloadOutlined/>}>恢复默认设置</Button>
+      </Popconfirm>
+    </div>
   </Card></>
 }
 
@@ -1402,7 +1478,7 @@ function McpSettings() {
   </Card></>
 }
 
-function AdvancedSettingsPanel() {
+function SystemPerformanceSettingsPanel() {
   const [settings, setSettings] = useState<AdvancedSettings>(readAdvancedSettings)
   const [capabilities, setCapabilities] = useState<BrowserCapabilities | null>(null)
 
@@ -1419,14 +1495,28 @@ function AdvancedSettingsPanel() {
     writeAdvancedSettings(DEFAULT_ADVANCED_SETTINGS)
   }
 
-  return <Card title="高级设置" className="settings-card advanced-settings">
+  const systemPanel = <>
+    <Alert type="info" showIcon message="部分系统设置需要重启浏览器后完全生效"/>
+    <div className="advanced-setting-row"><div><Typography.Text strong>使用硬件加速</Typography.Text><Typography.Paragraph type="secondary">可用时使用 GPU 绘制网页和界面。关闭后可解决部分显卡驱动导致的闪烁或黑屏。</Typography.Paragraph></div><Switch checked={settings.hardwareAcceleration} onChange={value => update({ hardwareAcceleration: value })}/></div>
+    <div className="advanced-setting-row"><div><Typography.Text strong>启动增强</Typography.Text><Typography.Paragraph type="secondary">保留轻量级启动状态，以缩短下次打开浏览器的等待时间。</Typography.Paragraph></div><Switch checked={settings.startupBoost} onChange={value => update({ startupBoost: value })}/></div>
+    <div className="advanced-setting-row"><div><Typography.Text strong>使用 F12 键打开开发人员工具</Typography.Text><Typography.Paragraph type="secondary">关闭后隐藏浏览器菜单中的开发者工具入口，并忽略 F12 快捷键。</Typography.Paragraph></div><Switch checked={settings.developerToolsEnabled} onChange={value => update({ developerToolsEnabled: value })}/></div>
+    <div className="advanced-setting-row"><div><Typography.Text strong>危险地址提醒</Typography.Text><Typography.Paragraph type="secondary">在地址包含可疑协议、凭据或不安全 HTTP 时显示提醒。</Typography.Paragraph></div><Switch checked={settings.safetyWarnings} onChange={value => update({ safetyWarnings: value })}/></div>
+  </>
+
+  const performancePanel = <>
     <div className="advanced-setting-row"><div><Typography.Text strong>活动网页上限</Typography.Text><Typography.Paragraph type="secondary">超过上限的后台标签页会休眠，重新选中时自动恢复，以降低内存占用。</Typography.Paragraph></div><InputNumber min={2} max={16} value={settings.maxLiveWebviews} onChange={value => update({ maxLiveWebviews: value ?? 8 })}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>减少界面动画</Typography.Text><Typography.Paragraph type="secondary">关闭页面切换位移和侧栏动效，适合低性能设备或偏好静态界面。</Typography.Paragraph></div><Switch checked={settings.reduceMotion} onChange={value => update({ reduceMotion: value })}/></div>
-    <div className="advanced-setting-row"><div><Typography.Text strong>危险地址提醒</Typography.Text><Typography.Paragraph type="secondary">在地址包含可疑协议、凭据或不安全 HTTP 时显示提醒。</Typography.Paragraph></div><Switch checked={settings.safetyWarnings} onChange={value => update({ safetyWarnings: value })}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>空闲自动休眠</Typography.Text><Typography.Paragraph type="secondary">超过设定分钟数未访问的标签页会被列入休眠候选；固定标签、有音频、或正在下载的标签页会豁免。</Typography.Paragraph></div><InputNumber min={1} max={180} value={settings.idleSuspendMinutes} addonAfter="分钟" onChange={value => update({ idleSuspendMinutes: value ?? 30 })}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>后台标签轮询</Typography.Text><Typography.Paragraph type="secondary">关闭后非活动标签完全停止轮询，仅在切换时刷新状态；适合极低功耗设备。</Typography.Paragraph></div><Switch checked={settings.backgroundPollingEnabled} onChange={value => update({ backgroundPollingEnabled: value })}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>后台轮询频率</Typography.Text><Typography.Paragraph type="secondary">后台标签状态同步的频率，越小越实时但 CPU 越高。</Typography.Paragraph></div><InputNumber min={1000} max={15000} step={500} value={settings.backgroundPollIntervalMs} addonAfter="ms" onChange={value => update({ backgroundPollIntervalMs: value ?? 3000 })} disabled={!settings.backgroundPollingEnabled}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>下载并发上限</Typography.Text><Typography.Paragraph type="secondary">同时进行的下载超过上限时，新任务会按 FIFO 进入本地排队；任意一个任务结束自动接力下一个。</Typography.Paragraph></div><InputNumber min={1} max={8} value={settings.maxConcurrentDownloads} onChange={value => update({ maxConcurrentDownloads: value ?? 3 })}/></div>
+  </>
+
+  return <Card title="系统和性能" className="settings-card advanced-settings system-performance-settings">
+    <Tabs className="system-performance-tabs" tabPosition="top" defaultActiveKey="system" items={[
+      { key: 'system', label: '系统', children: systemPanel },
+      { key: 'performance', label: '性能', children: performancePanel },
+    ]}/>
     <Typography.Title level={5} style={{ marginTop: 26 }}>运行环境诊断</Typography.Title>
     <Descriptions size="small" bordered column={2} items={[
       { key: 'runtime', label: 'Tauri', children: capabilities?.tauriRuntimeVersion ?? '网页预览模式' },
@@ -1434,7 +1524,7 @@ function AdvancedSettingsPanel() {
       { key: 'downloads', label: '下载进度', children: capabilities?.downloadProgressBytes ? '支持' : '基础模式' },
       { key: 'permissions', label: '原生权限事件', children: capabilities?.nativePermissionEvents ? '支持' : '脚本兼容模式' },
     ]}/>
-    <Button style={{ marginTop: 18 }} onClick={reset}>恢复高级设置默认值</Button>
+    <Button style={{ marginTop: 18 }} onClick={reset}>恢复系统和性能默认值</Button>
   </Card>
 }
 
@@ -1549,10 +1639,10 @@ function PasswordManagerSettings() {
 }
 
 export function SettingsPage() {
-  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','高级','字体','搜索引擎','下载'].map((label, index) => ({
+  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','系统和性能','字体','搜索引擎','下载','重置设置','关于'].map((label, index) => ({
     key: label,
     label,
-    children: <div className="settings-pane">{index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <AdvancedSettingsPanel/> : index === 9 ? <TypographySettingsPanel/> : index === 10 ? <SearchEngineSettings/> : <DownloadSettingsPanel/>}</div>,
+    children: <div className="settings-pane">{index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <SystemPerformanceSettingsPanel/> : index === 9 ? <TypographySettingsPanel/> : index === 10 ? <SearchEngineSettings/> : index === 11 ? <DownloadSettingsPanel/> : index === 12 ? <ResetSettingsPanel/> : <AboutSettingsPanel/>}</div>,
   }))
   return <section className="page settings-page">
     <PageHeader title="设置"/>

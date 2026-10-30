@@ -813,6 +813,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     const onKeyDown = (event: KeyboardEvent) => {
       if (!visibleRef.current) return
       if (!shortcutsEnabledRef.current) return
+      if (event.key === 'F12') {
+        event.preventDefault()
+        if (readAdvancedSettings().developerToolsEnabled && hasNativeTab(activeTabIdRef.current)) void openNativeDevtools(activeTabIdRef.current)
+        return
+      }
       const action = interpretShortcut(event, readShortcutOverrides())
       if (!action) return
       event.preventDefault()
@@ -1125,7 +1130,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       case 'toggle-notes': setNotesOpen(value => !value); break
       case 'save-workspace': void saveAsWorkspace(); break
       case 'print': void printNativeTab(active.id); break
-      case 'devtools': void openNativeDevtools(active.id); break
+      case 'devtools': if (advancedSettings.developerToolsEnabled) void openNativeDevtools(active.id); break
       case 'screenshot-visible': void saveScreenshot(false); break
       case 'screenshot-full': void saveScreenshot(true); break
       case 'translate-page':
@@ -1209,7 +1214,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     { key: 'save-workspace', label: '保存当前标签为工作区', extra: 'Ctrl+Shift+W', icon: <SaveOutlined/>, disabled: tabs.length === 0, onClick: () => runBrowserMenuAction('save-workspace') },
     { key: 'translate-page', label: '翻译当前网页', icon: <TranslationOutlined/>, disabled: !active.url, onClick: () => runBrowserMenuAction('translate-page') },
     { key: 'print', label: '打印 / 保存为 PDF', icon: <PrinterOutlined/>, extra: 'Ctrl+P', disabled: !nativeMode, onClick: () => runBrowserMenuAction('print') },
-    { key: 'devtools', label: '开发者工具', extra: 'F12', disabled: !nativeMode, onClick: () => runBrowserMenuAction('devtools') },
+    { key: 'devtools', label: '开发者工具', extra: 'F12', disabled: !nativeMode || !advancedSettings.developerToolsEnabled, onClick: () => runBrowserMenuAction('devtools') },
     { key: 'screenshot-visible', label: '截取可视区域', disabled: !nativeMode, onClick: () => runBrowserMenuAction('screenshot-visible') },
     { key: 'screenshot-full', label: '截取整个网页', disabled: !nativeMode, onClick: () => runBrowserMenuAction('screenshot-full') },
     { key: 'clear-site-data', label: '清除此网站数据', disabled: !active.url || !nativeMode, onClick: () => runBrowserMenuAction('clear-site-data') },

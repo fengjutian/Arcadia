@@ -1,4 +1,7 @@
 export interface AdvancedSettings {
+  hardwareAcceleration: boolean
+  startupBoost: boolean
+  developerToolsEnabled: boolean
   maxLiveWebviews: number
   reduceMotion: boolean
   safetyWarnings: boolean
@@ -11,6 +14,9 @@ export interface AdvancedSettings {
 export const ADVANCED_SETTINGS_KEY = 'arcadia-advanced-settings.v1'
 export const ADVANCED_SETTINGS_EVENT = 'arcadia-advanced-settings-change'
 export const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = {
+  hardwareAcceleration: true,
+  startupBoost: true,
+  developerToolsEnabled: true,
   maxLiveWebviews: 8,
   reduceMotion: false,
   safetyWarnings: true,
@@ -24,6 +30,9 @@ export function readAdvancedSettings(): AdvancedSettings {
   try {
     const value = JSON.parse(localStorage.getItem(ADVANCED_SETTINGS_KEY) ?? '{}') as Partial<AdvancedSettings>
     return {
+      hardwareAcceleration: value.hardwareAcceleration !== false,
+      startupBoost: value.startupBoost !== false,
+      developerToolsEnabled: value.developerToolsEnabled !== false,
       maxLiveWebviews: Math.min(16, Math.max(2, Math.round(value.maxLiveWebviews ?? 8))),
       reduceMotion: value.reduceMotion === true,
       safetyWarnings: value.safetyWarnings !== false,
