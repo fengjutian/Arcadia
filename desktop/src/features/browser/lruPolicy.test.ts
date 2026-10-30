@@ -96,4 +96,21 @@ describe('planLruSweep', () => {
     // candidate old enough to suspend.
     expect(plan.toClose).toEqual(['stale'])
   })
+
+  it('suspends eligible idle tabs on a scheduled sweep even below the live cap', () => {
+    const plan = planLruSweep({
+      tabs,
+      liveIds: new Set(['pinned', 'recent', 'stale']),
+      lastActiveAt,
+      activeDownloads,
+      protectedId: 'recent',
+      maxLive: 8,
+      idleThresholdMs: 120_000,
+      suspendIdle: true,
+      now: NOW,
+    })
+    expect(plan.toClose).toEqual(['stale'])
+    expect(plan.toClose).not.toContain('pinned')
+    expect(plan.toClose).not.toContain('recent')
+  })
 })

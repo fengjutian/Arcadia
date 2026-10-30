@@ -195,6 +195,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const readingSecondsRef = useRef(new Map<string, number>())
   const snapshotAttemptedRef = useRef(new Set<string>())
   const lastAdBlockCountRef = useRef<Record<string, number>>({})
+  const lruSweepRunningRef = useRef(false)
   const active = tabs.find(tab => tab.id === activeTabId) ?? tabs[0]
   const nativeMode = hasNativeTab(active.id)
 
@@ -1111,39 +1112,53 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     }
   }
 
-  async function enforceLiveTabLimit(protectedId: string) {
-    const tabs = tabsRef.current
-    const liveIds = new Set(tabs.filter(tab => hasNativeTab(tab.id)).map(tab => tab.id))
-    const currentSettings = readAdvancedSettings()
-    const activeDownloads: DownloadActivity[] = downloadsRef.current
-      .filter(item => item.status === 'downloading')
-      .map(item => ({ status: 'downloading', sourceOrigin: item.sourceOrigin }))
-    const idleThresholdMs = Math.max(1, currentSettings.idleSuspendMinutes) * 60_000
-    const plan = planLruSweep({
-      tabs,
-      liveIds,
-      lastActiveAt: lastActiveAtRef.current,
-      activeDownloads,
-      protectedId,
-      maxLive: currentSettings.maxLiveWebviews,
-      idleThresholdMs,
-    })
-    for (const id of plan.toClose) {
-      const tab = tabs.find(item => item.id === id)
-      try {
-        const state = await readNativeState(id)
-        if (state) setTabs(current => current.map(item => item.id === id ? { ...item, scrollX: Math.round(state.scrollX), scrollY: Math.round(state.scrollY) } : item))
-      } catch { /* retain the last observed position */ }
-      await closeNativeTab(id)
-      setTabs(current => current.map(item => item.id === id ? { ...item, suspended: true, loading: false } : item))
-      if (tab?.url) {
+  async function enforceLiveTabLimit(protectedId: string, suspendIdle = false) {
+    if (lruSweepRunningRef.current) return
+    lruSweepRunningRef.current = true
+    try {
+      const tabs = tabsRef.current
+      const liveIds = new Set(tabs.filter(tab => hasNativeTab(tab.id)).map(tab => tab.id))
+      const currentSettings = readAdvancedSettings()
+      const activeDownloads: DownloadActivity[] = downloadsRef.current
+        .filter(item => item.status === 'downloading')
+        .map(item => ({ status: 'downloading', sourceOrigin: item.sourceOrigin }))
+      const idleThresholdMs = Math.max(1, currentSettings.idleSuspendMinutes) * 60_000
+      const plan = planLruSweep({
+        tabs,
+        liveIds,
+        lastActiveAt: lastActiveAtRef.current,
+        activeDownloads,
+        protectedId,
+        maxLive: currentSettings.maxLiveWebviews,
+        idleThresholdMs,
+        suspendIdle,
+      })
+      for (const id of plan.toClose) {
+        const tab = tabs.find(item => item.id === id)
         try {
-          const origin = new URL(tab.url).origin
-          if (origin && origin !== 'null') forceAllDenyFor(origin)
-        } catch { /* ignore non-http urls */ }
+          const state = await readNativeState(id)
+          if (state) setTabs(current => current.map(item => item.id === id ? { ...item, scrollX: Math.round(state.scrollX), scrollY: Math.round(state.scrollY) } : item))
+        } catch { /* retain the last observed position */ }
+        await closeNativeTab(id)
+        setTabs(current => current.map(item => item.id === id ? { ...item, suspended: true, loading: false } : item))
+        if (tab?.url) {
+          try {
+            const origin = new URL(tab.url).origin
+            if (origin && origin !== 'null') forceAllDenyFor(origin)
+          } catch { /* ignore non-http urls */ }
+        }
       }
+    } finally {
+      lruSweepRunningRef.current = false
     }
   }
+
+  useEffect(() => {
+    if (!isNativeBrowserAvailable()) return
+    const sweep = () => { void enforceLiveTabLimit(activeTabIdRef.current, true) }
+    const timer = window.setInterval(sweep, 60_000)
+    return () => window.clearInterval(timer)
+  }, [advancedSettings.idleSuspendMinutes, advancedSettings.maxLiveWebviews])
 
   async function resumeTab(tab: BrowserTab) {
     if (!tab.url || hasNativeTab(tab.id)) return

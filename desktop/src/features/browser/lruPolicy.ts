@@ -52,6 +52,8 @@ export interface LruCandidateInputs {
    * the planner is safe to call without explicit configuration.
    */
   idleThresholdMs?: number
+  /** Suspend every eligible idle tab, even when the hard live-count cap is not exceeded. */
+  suspendIdle?: boolean
   /** Reference timestamp for idle math (test seam). */
   now?: number
 }
@@ -73,7 +75,7 @@ export function planLruSweep(inputs: LruCandidateInputs): LruPlan {
   const { tabs, lastActiveAt, protectedId, maxLive, activeDownloads } = inputs
   const idleThresholdMs = inputs.idleThresholdMs ?? 5 * 60_000
   const now = inputs.now ?? Date.now()
-  if (inputs.liveIds.size <= maxLive) return { toClose: [], kept: [] }
+  if (inputs.liveIds.size <= maxLive && !inputs.suspendIdle) return { toClose: [], kept: [] }
 
   const candidates = tabs
     .filter(tab => inputs.liveIds.has(tab.id))
@@ -84,14 +86,16 @@ export function planLruSweep(inputs: LruCandidateInputs): LruPlan {
   const kept: string[] = []
 
   for (const tab of candidates) {
-    // Stop once the live count would drop to (or below) the cap.
-    if (inputs.liveIds.size - toClose.length <= maxLive) break
+    const overCap = inputs.liveIds.size - toClose.length > maxLive
+    if (!overCap && !inputs.suspendIdle) break
     if (shouldKeepTabLive(tab, activeDownloads, now, idleThresholdMs)) {
       kept.push(tab.id)
       continue
     }
     const last = lastActiveAt.get(tab.id) ?? 0
-    if (now - last < idleThresholdMs) {
+    const idle = now - last >= idleThresholdMs
+    if (!idle && !overCap) continue
+    if (!idle) {
       kept.push(tab.id)
       continue
     }

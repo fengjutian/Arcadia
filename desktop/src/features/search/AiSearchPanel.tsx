@@ -8,6 +8,7 @@ import type { AIProvider, ChatMessage } from '../../types'
 import { buildAiSearchRequest, citedSourceIds, sourcesFromDocuments, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
 import { compareAnswerVersions } from './aiSearchVersionDiff'
 import { evaluateAiSearchAnswer } from './aiSearchQuality'
+import { aiSearchCacheKey, readAiSearchCache, upsertAiSearchCache } from './aiSearchCache'
 import {
   answerAsMarkdown,
   extractFollowUpQuestions,
@@ -20,6 +21,7 @@ import {
 } from './aiSearchAnswer'
 
 const AI_SEARCH_SESSION_KEY = 'search.ai.conversation.v1'
+const AI_SEARCH_CACHE_KEY = 'search.ai.answer-cache.v1'
 
 interface AiSearchTurn {
   id: string
@@ -30,6 +32,7 @@ interface AiSearchTurn {
   savedDocumentId?: string
   versionCreatedAt?: string
   previousVersions?: AiSearchVersion[]
+  fromCache?: boolean
 }
 
 interface AnswerPreview { turnId: string; title: string; html: string }
@@ -121,7 +124,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     }
   }, [comparisonTarget, turns])
 
-  async function generateAnswer(prompt: string, conversationHistory: readonly ChatMessage[]) {
+  async function generateAnswer(prompt: string, conversationHistory: readonly ChatMessage[], options?: { forceRefresh?: boolean }) {
     const provider = providers.find(item => item.id === providerId)
     const baseQuery = {
       query: prompt,
@@ -143,10 +146,17 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     let sources = sourcesFromRetrieval(retrieval)
     if (sources.length === 0) sources = sourcesFromDocuments(await searchDocuments(prompt))
     if (sources.length === 0) throw new Error('本地知识库中没有找到足够证据。请先保存相关网页，或换一种问法。')
+    const cacheKey = aiSearchCacheKey({ providerId, question:prompt, history:conversationHistory, sources })
+    const cachedEntries = readAiSearchCache(await getSession(AI_SEARCH_CACHE_KEY).catch(() => null))
+    const cached = options?.forceRefresh ? undefined : cachedEntries.find(entry => entry.key === cacheKey)
+    if (cached) return { answer:cached.answer, sources:cached.sources, citedIds:cached.citedIds, fromCache:true }
     const response = await aiChat(providerId, buildAiSearchRequest(prompt, sources, conversationHistory))
     const answer = response.content.trim()
     if (!answer) throw new Error('模型返回了空答案')
-    return { answer, sources, citedIds:citedSourceIds(answer, sources) }
+    const citedIds = citedSourceIds(answer, sources)
+    const nextCache = upsertAiSearchCache(cachedEntries, { key:cacheKey, answer, sources, citedIds, createdAt:Date.now() })
+    void setSession(AI_SEARCH_CACHE_KEY, JSON.stringify(nextCache)).catch(() => undefined)
+    return { answer, sources, citedIds, fromCache:false }
   }
 
   async function submit(rawQuestion = question) {
@@ -180,7 +190,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
         { role:'user', content:item.question },
         { role:'assistant', content:item.answer },
       ]).slice(-6)
-      const generated = await generateAnswer(turn.question, priorHistory)
+      const generated = await generateAnswer(turn.question, priorHistory, { forceRefresh:true })
       const previous = versionFromTurn(turn)
       setTurns(current => current.map(item => item.id === turn.id ? {
         ...item,
@@ -208,6 +218,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
         versionCreatedAt:target.createdAt,
         previousVersions:[...(turn.previousVersions ?? []).filter(version => version.id !== versionId), currentVersion].slice(-5),
         savedDocumentId:undefined,
+        fromCache:false,
       }
     }))
     setVersionTurnId(null)
@@ -327,7 +338,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
         return <article className="ai-search-answer" key={turn.id}>
         <header>
           <span className="ai-search-answer__index">{index + 1}</span>
-          <div><small>问题</small><h2>{turn.question}</h2></div>
+          <div><small>问题 {turn.fromCache && <Tag color="green">缓存命中</Tag>}</small><h2>{turn.question}</h2></div>
           <div className="ai-search-answer__actions">
             <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>复制</Button>
             <Button size="small" type="text" icon={<ReloadOutlined/>} disabled={busy} onClick={() => void regenerateTurn(turn)}>重生成</Button>
@@ -556,6 +567,7 @@ function isStoredTurns(value: unknown): value is AiSearchTurn[] {
       && (item.savedDocumentId === undefined || typeof item.savedDocumentId === 'string')
       && (item.versionCreatedAt === undefined || typeof item.versionCreatedAt === 'string')
       && (item.previousVersions === undefined || isStoredVersions(item.previousVersions))
+      && (item.fromCache === undefined || typeof item.fromCache === 'boolean')
   })
 }
 
