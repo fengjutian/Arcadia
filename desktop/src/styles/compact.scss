@@ -3142,6 +3142,8 @@ body[data-view='browser'] {
   right: 0;
   display: flex;
   height: var(--window-control-height);
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 
   > button {
     display: grid;
@@ -3154,6 +3156,9 @@ body[data-view='browser'] {
     color: #354039;
     font: 16px/1 system-ui, sans-serif;
     cursor: default;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
+    user-select: none;
 
     > svg { display: block; }
 

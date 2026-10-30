@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useState, type PointerEvent, type ReactNode } from 'react'
 import { Avatar, Badge, Layout, Space, Tooltip, Typography } from '../components/ui'
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui/icons'
 import { BookOpen, Boxes, Globe2, Minus, Search, Settings, Sparkles, Square, X } from 'lucide-react'
@@ -57,13 +57,22 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
 }
 
 function WindowChrome() {
-  const window = getCurrentWindow()
+  const stopWindowDrag = (event: PointerEvent<HTMLButtonElement>) => event.stopPropagation()
+  const runWindowAction = (action: 'minimize' | 'maximize' | 'close') => {
+    const window = getCurrentWindow()
+    const request = action === 'minimize'
+      ? window.minimize()
+      : action === 'maximize'
+        ? window.toggleMaximize()
+        : window.close()
+    void request.catch(error => console.error(`window ${action} failed`, error))
+  }
   return <>
     <div className="window-drag-strip" data-tauri-drag-region/>
     <div className="window-controls" aria-label="窗口控制">
-      <button type="button" aria-label="最小化" title="最小化" onClick={() => void window.minimize().catch(() => undefined)}><Minus size={16} strokeWidth={1.5}/></button>
-      <button type="button" aria-label="最大化或还原" title="最大化或还原" onClick={() => void window.toggleMaximize().catch(() => undefined)}><Square size={12} strokeWidth={1.5}/></button>
-      <button type="button" className="window-controls__close" aria-label="关闭" title="关闭" onClick={() => void window.close().catch(() => undefined)}><X size={16} strokeWidth={1.5}/></button>
+      <button type="button" aria-label="最小化" title="最小化" onPointerDown={stopWindowDrag} onClick={() => runWindowAction('minimize')}><Minus size={16} strokeWidth={1.5}/></button>
+      <button type="button" aria-label="最大化或还原" title="最大化或还原" onPointerDown={stopWindowDrag} onClick={() => runWindowAction('maximize')}><Square size={12} strokeWidth={1.5}/></button>
+      <button type="button" className="window-controls__close" aria-label="关闭" title="关闭" onPointerDown={stopWindowDrag} onClick={() => runWindowAction('close')}><X size={16} strokeWidth={1.5}/></button>
     </div>
   </>
 }
