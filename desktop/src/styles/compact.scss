@@ -1533,6 +1533,18 @@ body[data-theme='dark'][data-theme-kind='image'] {
     border-radius: 9px;
   }
 
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .ant-btn:first-child {
+      color: var(--accent);
+      border-color: var(--accent-border);
+      background: var(--accent-soft);
+    }
+  }
+
   &__hint { padding: 10px 5px 1px; color: #758078; font-size: 12px; }
 }
 

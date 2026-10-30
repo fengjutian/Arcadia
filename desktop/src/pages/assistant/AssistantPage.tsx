@@ -48,7 +48,7 @@ import {
 } from '@assistant-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { aiChat, aiEmbed, getSession, listAIProviders, listDocuments, ragAnswer, searchDocuments, searchSimilarEmbeddings, setSession } from '../../api'
+import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listDocuments, ragAnswer, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse } from '../../api'
 import type { RagQuery } from '../../api'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
 import { buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
@@ -92,6 +92,7 @@ interface AssistantTurn {
   error?: string
   /** Answer came from the model's general knowledge after local retrieval missed. */
   generalKnowledge?: boolean
+  backgroundTaskId?: string
 }
 
 type Turn = UserTurn | AssistantTurn
@@ -109,7 +110,16 @@ const KNOWLEDGE_ATTACHMENT_ADAPTER = new KnowledgeAttachmentAdapter()
 function restorableTurns(turns: readonly Turn[]): Turn[] {
   return turns.map(turn => turn.role === 'user'
     ? { id: turn.id, role: 'user', content: turn.content }
-    : { ...turn, pending: false, interrupted: turn.pending || turn.interrupted })
+    : { ...turn, pending: Boolean(turn.pending && turn.backgroundTaskId), interrupted: turn.backgroundTaskId ? turn.interrupted : turn.pending || turn.interrupted })
+}
+
+async function waitForAssistantTask(taskId: string): Promise<RagAnswerResponse> {
+  for (;;) {
+    const task = await getAssistantTask(taskId)
+    if (task.status === 'completed' && task.result) return task.result
+    if (task.status === 'failed') throw new Error(task.error || '后台生成失败')
+    await new Promise(resolve => window.setTimeout(resolve, 800))
+  }
 }
 
 function conversationAsMarkdown(turns: readonly Turn[], documentsById: ReadonlyMap<string, Document>): string {
@@ -200,6 +210,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
             interrupted:turn.interrupted === true,
             error:turn.error,
             generalKnowledge:turn.generalKnowledge === true,
+            backgroundTaskId:turn.backgroundTaskId,
           }))
     }).catch(() => setTurns([])).finally(() => setConversationHydrated(true))
     void getSession(CONVERSATION_HISTORY_KEY)
@@ -227,9 +238,31 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           error:turn.error,
           generalKnowledge:turn.generalKnowledge,
           pending:turn.pending,
+          backgroundTaskId:turn.backgroundTaskId,
         })
     void setSession(CONVERSATION_KEY, JSON.stringify(stored)).catch(() => undefined)
   }, [turns, conversationHydrated])
+
+  useEffect(() => {
+    if (!conversationHydrated) return
+    const resumable = turns.filter((turn): turn is AssistantTurn => turn.role === 'assistant' && turn.pending && Boolean(turn.backgroundTaskId))
+    resumable.forEach(turn => {
+      void waitForAssistantTask(turn.backgroundTaskId!).then(rag => {
+        patchTurn(turn.id, {
+          content: rag.answer,
+          documentIds: Array.from(new Set(rag.citations.map(citation => citation.documentId).filter(Boolean))),
+          pending: false,
+          interrupted: false,
+          backgroundTaskId: undefined,
+        })
+      }).catch(caught => {
+        const error = caught instanceof Error ? caught.message : String(caught)
+        patchTurn(turn.id, { content: error, pending: false, error, backgroundTaskId: undefined })
+      })
+    })
+  // Resumption is intentionally triggered only after the initial persisted conversation is loaded.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationHydrated])
 
   useEffect(() => {
     if (!historyHydrated) return
@@ -424,7 +457,15 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
         chunkerVersion: undefined,
         dimensions: undefined,
       }
-      const rag = await ragAnswer(providerId, ragQuery, { temperature: 0.2, maxTokens: 1024 }).catch(() => null)
+      let rag: RagAnswerResponse | null = null
+      const taskId = await startAssistantTask(providerId, ragQuery, { temperature: 0.2, maxTokens: 1024 }).catch(() => null)
+      if (taskId) {
+        patchTurn(pendingId, { backgroundTaskId: taskId })
+        rag = await waitForAssistantTask(taskId)
+        patchTurn(pendingId, { backgroundTaskId: undefined })
+      } else {
+        rag = await ragAnswer(providerId, ragQuery, { temperature: 0.2, maxTokens: 1024 }).catch(() => null)
+      }
       if (rag) {
         const status = rag.citationStatus
         if (status === 'valid' || status === 'partial') {

@@ -19,8 +19,8 @@ const SORT_OPTIONS: Array<{ label: string; value: SortKey }> = [
   { label: '收藏优先', value: 'starred' },
 ]
 
-export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
-  const [searchMode, setSearchMode] = useState<'local' | 'ai'>('local')
+export function SearchPage({ initialQuery = '', initialMode = 'local', onOpenUrl }: { initialQuery?: string; initialMode?: 'local' | 'ai'; onOpenUrl?: (url: string) => void }) {
+  const [searchMode, setSearchMode] = useState<'local' | 'ai'>(initialMode)
   const [query, setQuery] = useState(initialQuery)
   const debouncedQuery = useDebouncedValue(query, 250)
   const advancedQuery = useMemo(() => parseAdvancedSearch(debouncedQuery), [debouncedQuery])
@@ -69,6 +69,10 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     if (initialQuery && initialQuery !== query) setQuery(initialQuery)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery])
+
+  useEffect(() => {
+    setSearchMode(initialMode)
+  }, [initialMode])
 
   useEffect(() => {
     let current = true

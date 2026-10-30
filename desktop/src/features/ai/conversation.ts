@@ -13,6 +13,7 @@ export interface StoredConversationTurn {
   pending?: boolean
   interrupted?: boolean
   generalKnowledge?: boolean
+  backgroundTaskId?: string
 }
 
 /** Error text written by older builds when a pending answer was reloaded. */
@@ -52,6 +53,7 @@ export function parseStoredConversation(raw: string | null): StoredConversationT
       if (turn.pending === true) clean.pending = true
       if (turn.interrupted === true) clean.interrupted = true
       if (turn.generalKnowledge === true) clean.generalKnowledge = true
+      if (typeof turn.backgroundTaskId === 'string' && turn.backgroundTaskId.length > 0) clean.backgroundTaskId = turn.backgroundTaskId
       return clean
     })
   } catch { return [] }
@@ -69,6 +71,7 @@ export function restoreConversation(raw: string | null): StoredConversationTurn[
   return parseStoredConversation(raw).map(turn => {
     if (turn.role !== 'assistant') return turn
     const wasPending = turn.pending === true
+    if (wasPending && turn.backgroundTaskId) return turn
     const legacyInterruption = isInterruptionError(turn.error)
     if (!wasPending && !legacyInterruption && turn.interrupted !== true) return turn
     return {

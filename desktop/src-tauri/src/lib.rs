@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod assistant_tasks;
 pub mod bookmarks;
 pub mod bing;
 pub mod browser;
@@ -2100,12 +2101,14 @@ async fn ai_test_provider(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(NavStacks::default())
         .manage(DownloadIndex::default())
         .manage(downloads::DownloadManager::default())
         .manage(privacy::NavBlockRegistry::default())
         .manage(privacy::runtime::PrivacyRuntimeState::new())
         .manage(AiStreamRegistry::default())
+        .manage(assistant_tasks::AssistantTaskRegistry::default())
         .manage(plugins::WasmRuntime::default())
         .manage(PermissionWaiters::default())
         .manage(session_lock::SessionBootState::default())
@@ -2325,6 +2328,8 @@ pub fn run() {
             rag::commands::rag_rebuild_index,
             rag::commands::rag_retrieve,
             rag::commands::rag_answer,
+            assistant_tasks::assistant_task_start,
+            assistant_tasks::assistant_task_get,
             agent::commands::agent_recover_interrupted,
             agent::commands::agent_start,
             agent::commands::agent_pause,

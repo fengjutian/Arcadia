@@ -20,5 +20,6 @@
     "core:webview:allow-webview-show",
     "core:webview:allow-webview-hide",
     "core:webview:allow-webview-close"
+    ,"notification:default"
   ]
 }

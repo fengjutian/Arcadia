@@ -839,6 +839,30 @@ export async function ragAnswer(providerId: string, query: RagQuery, options?: {
   })
 }
 
+export interface AssistantTaskStatus {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  result?: RagAnswerResponse | null
+  error?: string | null
+}
+
+export async function startAssistantTask(providerId: string, query: RagQuery, options?: { skipRepair?: boolean; temperature?: number; maxTokens?: number }): Promise<string | null> {
+  if (!isTauri()) return null
+  return invoke<string>('assistant_task_start', {
+    request: {
+      providerId,
+      query,
+      skipRepair: options?.skipRepair ?? false,
+      temperature: options?.temperature ?? null,
+      maxTokens: options?.maxTokens ?? null,
+    },
+  })
+}
+
+export async function getAssistantTask(taskId: string): Promise<AssistantTaskStatus> {
+  return invoke<AssistantTaskStatus>('assistant_task_get', { taskId })
+}
+
 // ---------------------------------------------------------------------------
 // Privacy API surface.
 // ---------------------------------------------------------------------------
