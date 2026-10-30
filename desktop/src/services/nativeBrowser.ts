@@ -144,8 +144,10 @@ async function openNativeTabOnce(tabId: string, url: string, bounds: BrowserBoun
   let webview = await Webview.getByLabel(label)
   if (!webview) {
     await invoke('browser_create', { label, url, bounds, permissions: readSitePermissions(), adBlockEnabled: isAdBlockerEnabled(), private: options.private === true })
-    webview = await Webview.getByLabel(label)
-    if (!webview) throw new Error('browser tab webview was not created')
+    // `browser_create` is authoritative. WebView2 child views backed by an
+    // isolated private profile are not always returned by the JS
+    // `Webview.getByLabel` registry even though Rust created and loaded them.
+    // Keeping the label lets all Rust-backed browser commands address it.
   } else {
     await invoke<string>('browser_navigate', { label, url })
     await webview.show()
@@ -162,8 +164,6 @@ async function ensureNativeTabOnce(tabId: string, url: string, bounds: BrowserBo
     await invoke<string>('browser_navigate', { label, url })
   } else {
     await invoke('browser_create', { label, url, bounds, permissions: readSitePermissions(), adBlockEnabled: isAdBlockerEnabled(), private: options.private === true })
-    const created = await Webview.getByLabel(label)
-    if (!created) throw new Error('browser tab webview was not created')
   }
   labels.set(tabId, label)
   await applyBounds(tabId, bounds)
