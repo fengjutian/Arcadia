@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Alert, Button, Empty, Input, Select, Spin, Tag } from '../../components/ui'
-import { ArrowUpOutlined, FileTextOutlined, RobotOutlined, SearchOutlined } from '../../components/ui/icons'
-import { aiChat, listAIProviders, ragRetrieve, searchDocuments, type RagRetrieveResponse } from '../../api'
+import { Alert, Button, Empty, Input, message, Select, Spin, Tag } from '../../components/ui'
+import { ArrowUpOutlined, CopyOutlined, DownloadOutlined, FileTextOutlined, PlusOutlined, RobotOutlined, SearchOutlined } from '../../components/ui/icons'
+import { aiChat, getSession, listAIProviders, ragRetrieve, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
 import type { AIProvider, ChatMessage } from '../../types'
 import { buildAiSearchRequest, citedSourceIds, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
+import { answerAsMarkdown, extractFollowUpQuestions, standaloneAnswerHtml } from './aiSearchAnswer'
+
+const AI_SEARCH_SESSION_KEY = 'search.ai.conversation.v1'
 
 interface AiSearchTurn {
   id: string
@@ -22,6 +25,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   const [turns, setTurns] = useState<AiSearchTurn[]>([])
   const [busy, setBusy] = useState(false)
   const [loadingProviders, setLoadingProviders] = useState(true)
+  const [sessionHydrated, setSessionHydrated] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -36,6 +40,22 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
       .finally(() => { if (current) setLoadingProviders(false) })
     return () => { current = false }
   }, [])
+
+  useEffect(() => {
+    void getSession(AI_SEARCH_SESSION_KEY)
+      .then(raw => {
+        if (!raw) return
+        const parsed = JSON.parse(raw) as unknown
+        if (isStoredTurns(parsed)) setTurns(parsed.slice(-12))
+      })
+      .catch(() => undefined)
+      .finally(() => setSessionHydrated(true))
+  }, [])
+
+  useEffect(() => {
+    if (!sessionHydrated) return
+    void setSession(AI_SEARCH_SESSION_KEY, JSON.stringify(turns.slice(-12))).catch(() => undefined)
+  }, [sessionHydrated, turns])
 
   useEffect(() => {
     if (initialQuery.trim() && turns.length === 0) setQuestion(initialQuery)
@@ -104,12 +124,34 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     }
   }
 
+  async function copyTurn(turn: AiSearchTurn) {
+    try {
+      await navigator.clipboard.writeText(answerAsMarkdown(turn.question, turn.answer, turn.sources))
+      message.success('答案 Markdown 已复制')
+    } catch { message.error('复制失败，请检查剪贴板权限') }
+  }
+
+  function exportTurn(turn: AiSearchTurn) {
+    const answerHtml = document.getElementById(`ai-search-answer-${turn.id}`)?.innerHTML
+    if (!answerHtml) { message.error('答案尚未渲染完成'); return }
+    const html = standaloneAnswerHtml({ question: turn.question, answerHtml, sources: turn.sources })
+    const url = URL.createObjectURL(new Blob([html], { type:'text/html;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${safeFilename(turn.question)}.html`
+    anchor.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    message.success('已导出单文件 HTML')
+  }
+
   if (loadingProviders) return <div className="ai-search-loading"><Spin/><span>正在读取模型配置…</span></div>
 
   return <div className="ai-search">
     <div className="ai-search__composer">
       <div className="ai-search__composer-head">
         <span><RobotOutlined/> 基于本地知识库生成带引用的结构化答案</span>
+        <div className="ai-search__composer-actions">
+        {turns.length > 0 && <Button size="small" icon={<PlusOutlined/>} disabled={busy} onClick={() => { setTurns([]); setQuestion(''); setError('') }}>新搜索</Button>}
         {providers.length > 0 && <Select
           className="ai-search__provider"
           ariaLabel="AI Provider"
@@ -117,6 +159,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
           options={providers.map(provider => ({ label: provider.model, value: provider.id }))}
           onChange={setProviderId}
         />}
+        </div>
       </div>
       <div className="ai-search__input-row">
         <Input.TextArea
@@ -152,12 +195,19 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     </div>}
 
     <div className="ai-search__turns">
-      {turns.map((turn, index) => <article className="ai-search-answer" key={turn.id}>
+      {turns.map((turn, index) => {
+        const generatedFollowUps = extractFollowUpQuestions(turn.answer)
+        const followUps = generatedFollowUps.length > 0 ? generatedFollowUps : ['给我一个具体实施步骤', '有哪些风险或反例？', '用表格比较关键选项']
+        return <article className="ai-search-answer" key={turn.id}>
         <header>
           <span className="ai-search-answer__index">{index + 1}</span>
           <div><small>问题</small><h2>{turn.question}</h2></div>
+          <div className="ai-search-answer__actions">
+            <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>复制</Button>
+            <Button size="small" type="text" icon={<DownloadOutlined/>} onClick={() => exportTurn(turn)}>HTML</Button>
+          </div>
         </header>
-        <div className="ai-search-answer__markdown markdown-body">
+        <div id={`ai-search-answer-${turn.id}`} className="ai-search-answer__markdown markdown-body">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.answer}</ReactMarkdown>
         </div>
         <section className="ai-search-sources" aria-label="答案来源">
@@ -171,9 +221,9 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
         </section>
         {index === turns.length - 1 && <div className="ai-search-followups">
           <span>继续追问</span>
-          {['给我一个具体实施步骤', '有哪些风险或反例？', '用表格比较关键选项'].map(item => <button key={item} type="button" disabled={busy} onClick={() => { setQuestion(item); void submit(item) }}>{item}</button>)}
+          {followUps.map(item => <button key={item} type="button" disabled={busy} onClick={() => { setQuestion(item); void submit(item) }}>{item}</button>)}
         </div>}
-      </article>)}
+      </article>})}
     </div>
     {turns.length > 0 && <div className="ai-search__footer-note">当前模型：{activeProvider?.model ?? '—'} · 新追问会重新检索本地证据</div>}
   </div>
@@ -186,4 +236,21 @@ function domainOf(url: string): string {
 
 function errorText(caught: unknown, fallback: string): string {
   return caught instanceof Error && caught.message ? caught.message : fallback
+}
+
+function safeFilename(value: string): string {
+  const safe = value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').trim().slice(0, 80)
+  return safe || 'Arcadia-AI-Search'
+}
+
+function isStoredTurns(value: unknown): value is AiSearchTurn[] {
+  return Array.isArray(value) && value.every(turn => {
+    if (!turn || typeof turn !== 'object') return false
+    const item = turn as Partial<AiSearchTurn>
+    return typeof item.id === 'string'
+      && typeof item.question === 'string'
+      && typeof item.answer === 'string'
+      && Array.isArray(item.sources)
+      && Array.isArray(item.citedIds)
+  })
 }

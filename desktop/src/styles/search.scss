@@ -110,6 +110,12 @@
   svg { color: var(--accent); }
 }
 
+.ai-search__composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .ai-search__provider { min-width: 150px; }
 
 .ai-search__input-row {
@@ -175,7 +181,14 @@
 
     small { color: var(--search-muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
     h2 { margin: 2px 0 0; color: var(--search-strong); font-size: 16px; }
+    > div:nth-child(2) { min-width: 0; flex: 1; }
   }
+}
+
+.ai-search-answer__actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
 }
 
 .ai-search-answer__index {
@@ -256,8 +269,11 @@
 
 @media (max-width: 720px) {
   .ai-search__composer-head { align-items: stretch; flex-direction: column; }
+  .ai-search__composer-actions { justify-content: space-between; }
   .ai-search__input-row { grid-template-columns: 1fr; }
   .ai-search__input-row > .ui-button { min-height: 42px; }
+  .ai-search-answer > header { align-items: flex-start; flex-wrap: wrap; }
+  .ai-search-answer__actions { width: 100%; justify-content: flex-end; }
 }
 
 .search-console {
