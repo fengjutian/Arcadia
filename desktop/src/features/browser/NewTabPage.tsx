@@ -11,10 +11,10 @@ interface WeatherState { temperature: number; weatherCode: number; place: string
 
 const copy = {
   zh: {
-    title: '今天想探索什么？', subtitle: '一次输入，同时搜索互联网与本地知识库。', placeholder: '输入搜索内容或网址', aiSearch: 'AI 搜索', search: '搜索', sources: '参与搜索', selectEngine: '选择搜索引擎', knowledge: '本地知识库', knowledgeDetail: '网页、笔记与标签', hint: '普通搜索会查询所选来源；AI 搜索会生成带引用、可继续追问的答案。', quickSites: '常用网站', tools: '微软工具', allApps: 'Microsoft 365', currentLocation: '当前位置', weatherUnavailable: '天气暂不可用', open: '打开',
+    title: '今天想探索什么？', subtitle: '一次输入，同时搜索互联网、AI 与本地知识库。', placeholder: '输入搜索内容或网址', aiSearch: 'AI 搜索', aiDetail: '生成答案并继续追问', search: '搜索', sources: '参与搜索', selectEngine: '选择搜索引擎', knowledge: '本地知识库', knowledgeDetail: '网页、笔记与标签', hint: '搜索引擎、AI 搜索与本地知识库将作为并列来源参与对比查询。', quickSites: '常用网站', tools: '微软工具', allApps: 'Microsoft 365', currentLocation: '当前位置', weatherUnavailable: '天气暂不可用', open: '打开',
   },
   en: {
-    title: 'What would you like to explore?', subtitle: 'Search the web and your local knowledge in one place.', placeholder: 'Search or enter a web address', aiSearch: 'AI Search', search: 'Search', sources: 'Search with', selectEngine: 'Choose search engines', knowledge: 'Local knowledge', knowledgeDetail: 'Pages, notes and tags', hint: 'Standard search checks selected sources; AI Search returns a cited answer you can follow up on.', quickSites: 'Quick links', tools: 'Microsoft apps', allApps: 'Microsoft 365', currentLocation: 'Current location', weatherUnavailable: 'Weather unavailable', open: 'Open',
+    title: 'What would you like to explore?', subtitle: 'Search the web, AI and your local knowledge in one place.', placeholder: 'Search or enter a web address', aiSearch: 'AI Search', aiDetail: 'Answer and follow-up chat', search: 'Search', sources: 'Search with', selectEngine: 'Choose search engines', knowledge: 'Local knowledge', knowledgeDetail: 'Pages, notes and tags', hint: 'Search engines, AI Search and local knowledge are peer sources in one comparison.', quickSites: 'Quick links', tools: 'Microsoft apps', allApps: 'Microsoft 365', currentLocation: 'Current location', weatherUnavailable: 'Weather unavailable', open: 'Open',
   },
 } as const
 
@@ -28,6 +28,18 @@ const tools = [
   { name: 'OneNote', initial: 'N', color: '#7719aa', url: 'https://www.onenote.com/notebooks' },
   { name: 'Teams', initial: 'T', color: '#5b5fc7', url: 'https://teams.microsoft.com/v2/' },
   { name: 'SharePoint', initial: 'S', color: '#03787c', url: 'https://www.office.com/launch/sharepoint' },
+  { name: 'To Do', initial: '✓', color: '#2564cf', url: 'https://to-do.office.com/tasks/' },
+  { name: 'Planner', initial: 'P', color: '#31752f', url: 'https://planner.cloud.microsoft' },
+  { name: 'Loop', initial: 'L', color: '#8230c6', url: 'https://loop.cloud.microsoft' },
+  { name: 'Forms', initial: 'F', color: '#038387', url: 'https://forms.office.com' },
+  { name: 'Whiteboard', initial: 'W', color: '#0078d4', url: 'https://whiteboard.office.com' },
+  { name: 'Lists', initial: 'L', color: '#744da9', url: 'https://lists.live.com' },
+  { name: 'Power Automate', initial: 'A', color: '#0066ff', url: 'https://make.powerautomate.com' },
+  { name: 'Power BI', initial: 'BI', color: '#e0a800', url: 'https://app.powerbi.com' },
+  { name: 'Designer', initial: 'D', color: '#7b2ff7', url: 'https://designer.microsoft.com' },
+  { name: 'Clipchamp', initial: 'C', color: '#7f28d8', url: 'https://app.clipchamp.com' },
+  { name: 'Viva Engage', initial: 'V', color: '#5b5fc7', url: 'https://web.yammer.com' },
+  { name: 'Bookings', initial: 'B', color: '#2b88d8', url: 'https://outlook.office.com/bookings/' },
 ]
 
 function weatherSymbol(code: number) {
@@ -39,17 +51,17 @@ function weatherSymbol(code: number) {
   return '⛈️'
 }
 
-export function NewTab({ address, setAddress, navigate, onCompareSearch, onAiSearch }: {
+export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
   address: string
   setAddress: (value: string) => void
   navigate: (input: string) => Promise<void>
-  onCompareSearch: (query: string, engineIds: string[], includeKnowledge: boolean) => void
-  onAiSearch: (query: string) => void
+  onCompareSearch: (query: string, engineIds: string[], includeKnowledge: boolean, includeAi: boolean) => void
 }) {
   const configuredEngine = readSearchEngineConfig().presetId
   const initialEngine = SEARCH_ENGINE_PRESETS.some(engine => engine.id === configuredEngine) ? configuredEngine : 'google'
   const [engines, setEngines] = useState<string[]>([initialEngine])
   const [searchKnowledge, setSearchKnowledge] = useState(true)
+  const [searchAi, setSearchAi] = useState(true)
   const [locale, setLocale] = useState<Locale>(() => localStorage.getItem('new-tab-locale') === 'en' ? 'en' : 'zh')
   const [toolsOpen, setToolsOpen] = useState(false)
   const [weather, setWeather] = useState<WeatherState | null>(null)
@@ -90,10 +102,9 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch, onAiSea
     const query = address.trim()
     if (!query) return
     if (classifyNavigationInput(query) !== 'search') { void navigate(query); return }
-    if (engines.length === 1 && !searchKnowledge) { void navigate(renderSearchTemplate(templateFor(engines[0]), query)); return }
-    onCompareSearch(query, engines, searchKnowledge)
+    if (engines.length === 1 && !searchKnowledge && !searchAi) { void navigate(renderSearchTemplate(templateFor(engines[0]), query)); return }
+    onCompareSearch(query, engines, searchKnowledge, searchAi)
   }
-  function submitAiSearch() { const query = address.trim(); if (query) onAiSearch(query) }
 
   return <div className="new-tab">
     <div className="new-tab__utilities">
@@ -107,8 +118,8 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch, onAiSea
     <main className="new-tab__workspace">
       <div className="new-tab__hero"><Typography.Title>{text.title}</Typography.Title><Typography.Paragraph>{text.subtitle}</Typography.Paragraph></div>
       <div className="new-tab-search">
-        <form onSubmit={event => { event.preventDefault(); submit() }}><Input size="large" autoFocus prefix={<SearchOutlined/>} value={address} onChange={event => setAddress(event.target.value)} placeholder={text.placeholder} suffix={<div className="new-tab-search__actions"><Button htmlType="button" icon={<RobotOutlined size={15}/>} onClick={submitAiSearch}>{text.aiSearch}</Button><Button type="primary" htmlType="submit" disabled={engines.length === 0 && !searchKnowledge}>{text.search}</Button></div>}/></form>
-        <div className="new-tab-search__sources"><div className="search-engine-picker"><span>{text.sources}</span><Select mode="multiple" maxTagCount="responsive" value={engines} onChange={setEngines} options={presets} placeholder={text.selectEngine}/></div><label className="knowledge-search-toggle"><Switch checked={searchKnowledge} onChange={setSearchKnowledge}/><span><b>{text.knowledge}</b><small>{text.knowledgeDetail}</small></span></label></div>
+        <form onSubmit={event => { event.preventDefault(); submit() }}><Input size="large" autoFocus prefix={<SearchOutlined/>} value={address} onChange={event => setAddress(event.target.value)} placeholder={text.placeholder} suffix={<Button type="primary" htmlType="submit" disabled={engines.length === 0 && !searchKnowledge && !searchAi}>{text.search}</Button>}/></form>
+        <div className="new-tab-search__sources"><div className="search-engine-picker"><span>{text.sources}</span><Select mode="multiple" maxTagCount="responsive" value={engines} onChange={setEngines} options={presets} placeholder={text.selectEngine}/></div><label className="knowledge-search-toggle ai-search-source-toggle"><Switch checked={searchAi} onChange={setSearchAi}/><RobotOutlined size={17}/><span><b>{text.aiSearch}</b><small>{text.aiDetail}</small></span></label><label className="knowledge-search-toggle"><Switch checked={searchKnowledge} onChange={setSearchKnowledge}/><span><b>{text.knowledge}</b><small>{text.knowledgeDetail}</small></span></label></div>
         <div className="new-tab-search__hint">{text.hint}</div>
       </div>
       <div className="quick-sites"><div className="quick-sites__label">{text.quickSites}</div><div className="quick-sites__grid">{QUICK_SITES.map(site => <button key={site.url} type="button" className="quick-site" title={site.name} aria-label={`${text.open} ${site.name}`} onClick={(event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.blur(); void navigate(site.url) }}><span className="quick-site__mark" style={{ background: site.color }}><span>{site.initial}</span><img src={site.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/></span><span className="quick-site__name">{site.name}</span></button>)}</div></div>

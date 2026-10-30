@@ -40,7 +40,7 @@ interface AiSearchTurn {
 interface AnswerPreview { turnId: string; title: string; html: string }
 interface AiSearchVersion { id: string; answer: string; sources: AiSearchSource[]; citedIds: string[]; createdAt: string }
 
-export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
+export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, autoSubmit = false, sessionKey = AI_SEARCH_SESSION_KEY, onOpenUrl }: { initialQuery?: string; initialWebEnabled?: boolean; autoSubmit?: boolean; sessionKey?: string; onOpenUrl?: (url: string) => void }) {
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [providerId, setProviderId] = useState('')
   const [question, setQuestion] = useState(initialQuery)
@@ -53,8 +53,9 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   const [versionTurnId, setVersionTurnId] = useState<string | null>(null)
   const [comparisonTarget, setComparisonTarget] = useState<{ turnId:string; versionId:string } | null>(null)
   const [qualityTurnId, setQualityTurnId] = useState<string | null>(null)
-  const [webEnabled, setWebEnabled] = useState(false)
+  const [webEnabled, setWebEnabled] = useState(initialWebEnabled)
   const previewFrameRef = useRef<HTMLIFrameElement>(null)
+  const autoSubmittedRef = useRef(false)
 
   useEffect(() => {
     let current = true
@@ -70,7 +71,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   }, [])
 
   useEffect(() => {
-    void getSession(AI_SEARCH_SESSION_KEY)
+    void getSession(sessionKey)
       .then(raw => {
         if (!raw) return
         const parsed = JSON.parse(raw) as unknown
@@ -78,16 +79,28 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
       })
       .catch(() => undefined)
       .finally(() => setSessionHydrated(true))
-  }, [])
+  }, [sessionKey])
 
   useEffect(() => {
     if (!sessionHydrated) return
-    void setSession(AI_SEARCH_SESSION_KEY, JSON.stringify(turns.slice(-12))).catch(() => undefined)
-  }, [sessionHydrated, turns])
+    void setSession(sessionKey, JSON.stringify(turns.slice(-12))).catch(() => undefined)
+  }, [sessionHydrated, sessionKey, turns])
 
   useEffect(() => {
     if (initialQuery.trim() && turns.length === 0) setQuestion(initialQuery)
   }, [initialQuery, turns.length])
+
+  useEffect(() => {
+    setWebEnabled(initialWebEnabled)
+  }, [initialWebEnabled])
+
+  useEffect(() => {
+    if (!autoSubmit || autoSubmittedRef.current || !sessionHydrated || !providerId || turns.length > 0 || !initialQuery.trim()) return
+    autoSubmittedRef.current = true
+    void submit(initialQuery)
+    // Submit once after the reusable conversation has hydrated its provider and session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSubmit, initialQuery, providerId, sessionHydrated, turns.length])
 
   useEffect(() => {
     if (!preview) return

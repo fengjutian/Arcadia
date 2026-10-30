@@ -13,7 +13,6 @@ export function AppRouter() {
   const [view, setView] = useState<View>('browser')
   const [mountedViews, setMountedViews] = useState<Set<View>>(() => new Set(['browser']))
   const [knowledgeQuery, setKnowledgeQuery] = useState('')
-  const [knowledgeSearchMode, setKnowledgeSearchMode] = useState<'local' | 'ai'>('local')
   const changeView = (next: View) => {
     setMountedViews(current => {
       if (current.has(next)) return current
@@ -25,7 +24,7 @@ export function AppRouter() {
   }
   const pages = {
     library: <LibraryPage onOpenBrowser={() => changeView('browser')} />,
-    search: <SearchPage initialQuery={knowledgeQuery} initialMode={knowledgeSearchMode} onOpenUrl={url => {
+    search: <SearchPage initialQuery={knowledgeQuery} onOpenUrl={url => {
       window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
       changeView('browser')
     }} />,
@@ -34,7 +33,7 @@ export function AppRouter() {
   }
   const secondaryViews: Exclude<View, 'browser'>[] = ['library', 'search', 'ai', 'settings']
   return <AppLayout view={view} onViewChange={changeView}><Suspense fallback={<div className="route-loading"><Spin size="large"/></div>}>
-    <div className={`route-view${view === 'browser' ? '' : ' is-hidden'}`} data-view="browser"><BrowserPage visible={view === 'browser'} onSearchKnowledge={query => { setKnowledgeSearchMode('local'); setKnowledgeQuery(query); changeView('search') }} onAiSearch={query => { setKnowledgeSearchMode('ai'); setKnowledgeQuery(query); changeView('search') }}/></div>
+    <div className={`route-view${view === 'browser' ? '' : ' is-hidden'}`} data-view="browser"><BrowserPage visible={view === 'browser'} onSearchKnowledge={query => { setKnowledgeQuery(query); changeView('search') }}/></div>
     {secondaryViews.map(pageView => mountedViews.has(pageView) && (
       <div key={pageView} className={`route-view${view === pageView ? '' : ' is-hidden'}`} data-view={pageView}>{pages[pageView]}</div>
     ))}
