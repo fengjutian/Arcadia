@@ -621,14 +621,27 @@ impl AgentTool for McpCallTool {
         if !args.is_object() {
             return Err(ToolError::SchemaMismatch("expected object".into()));
         }
-        if args.get("serverId").and_then(|v| v.as_str()).is_none_or(|value| value.trim().is_empty()) {
+        if args
+            .get("serverId")
+            .and_then(|v| v.as_str())
+            .is_none_or(|value| value.trim().is_empty())
+        {
             return Err(ToolError::SchemaMismatch("serverId missing".into()));
         }
-        if args.get("toolName").and_then(|v| v.as_str()).is_none_or(|value| value.trim().is_empty()) {
+        if args
+            .get("toolName")
+            .and_then(|v| v.as_str())
+            .is_none_or(|value| value.trim().is_empty())
+        {
             return Err(ToolError::SchemaMismatch("toolName missing".into()));
         }
-        if args.get("arguments").is_some_and(|value| !value.is_object()) {
-            return Err(ToolError::SchemaMismatch("arguments must be an object".into()));
+        if args
+            .get("arguments")
+            .is_some_and(|value| !value.is_object())
+        {
+            return Err(ToolError::SchemaMismatch(
+                "arguments must be an object".into(),
+            ));
         }
         Ok(())
     }
@@ -643,7 +656,10 @@ impl AgentTool for McpCallTool {
         }
         let server_id = args["serverId"].as_str().unwrap();
         let tool_name = args["toolName"].as_str().unwrap();
-        let arguments = args.get("arguments").cloned().unwrap_or_else(|| serde_json::json!({}));
+        let arguments = args
+            .get("arguments")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
         let output = crate::mcp::mcp_call_tool(
             self.app.clone(),
             server_id.to_string(),
