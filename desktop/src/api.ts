@@ -111,6 +111,13 @@ export async function searchDocuments(query: string): Promise<DocumentSearchHit[
   })
 }
 
+export interface WebSearchResult { title: string; url: string; snippet: string }
+
+export async function webSearch(query: string, limit = 6): Promise<WebSearchResult[]> {
+  if (!isTauri()) return []
+  return invoke<WebSearchResult[]>('web_search', { query, limit })
+}
+
 export async function saveDocument(input: { title: string; url: string; markdown: string; tags: string[] }): Promise<Document> {
   const localDocument = createDocument(input)
   const saved = await localSave(localDocument)

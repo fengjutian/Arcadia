@@ -19,6 +19,7 @@ pub mod site_blacklist;
 pub mod webview_compat;
 pub mod webview_process_guard;
 pub mod webview_suspend;
+pub mod web_search;
 
 use rusqlite::params;
 use serde::de::DeserializeOwned;
@@ -2210,6 +2211,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             bing::bing_daily_image,
+            web_search::web_search,
             browser_create,
             browser_set_ad_blocking,
             browser_set_muted,

@@ -70,6 +70,7 @@ const labels = new Map<string, string>()
 const tabOperationTails = new Map<string, Promise<void>>()
 const lastAppliedBounds = new Map<string, BrowserBounds>()
 const desiredVisibility = new Map<string, boolean>()
+const suspendedTabs = new Set<string>()
 const isTauri = () => '__TAURI_INTERNALS__' in window
 export const isNativeBrowserAvailable = (): boolean => isTauri()
 const labelFor = (tabId: string) => `browser-${tabId.replace(/[^a-zA-Z0-9-]/g, '-')}`
@@ -103,6 +104,7 @@ async function forgetNativeTab(tabId: string): Promise<void> {
   labels.delete(tabId)
   lastAppliedBounds.delete(tabId)
   desiredVisibility.delete(tabId)
+  suspendedTabs.delete(tabId)
   try { await invoke('browser_close_tab', { label }) } catch { /* already gone */ }
   try { await (await Webview.getByLabel(label))?.close() } catch { /* already gone */ }
 }
@@ -170,12 +172,20 @@ async function ensureNativeTabOnce(tabId: string, url: string, bounds: BrowserBo
 
 export async function openNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   if (!isTauri()) return false
-  return enqueueTabOperation(tabId, () => rebuildWhenViewMissing(tabId, () => openNativeTabOnce(tabId, url, bounds, options)))
+  return enqueueTabOperation(tabId, async () => {
+    const opened = await rebuildWhenViewMissing(tabId, () => openNativeTabOnce(tabId, url, bounds, options))
+    suspendedTabs.delete(tabId)
+    return opened
+  })
 }
 
 export async function ensureNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   if (!isTauri()) return false
-  return enqueueTabOperation(tabId, () => rebuildWhenViewMissing(tabId, () => ensureNativeTabOnce(tabId, url, bounds, options)))
+  return enqueueTabOperation(tabId, async () => {
+    const opened = await rebuildWhenViewMissing(tabId, () => ensureNativeTabOnce(tabId, url, bounds, options))
+    suspendedTabs.delete(tabId)
+    return opened
+  })
 }
 
 export async function showNativeTab(tabId: string): Promise<void> {
@@ -218,6 +228,28 @@ export async function closeNativeTab(tabId: string): Promise<void> {
     labels.delete(tabId)
     lastAppliedBounds.delete(tabId)
     desiredVisibility.delete(tabId)
+    suspendedTabs.delete(tabId)
+  })
+}
+export async function suspendNativeTab(tabId: string): Promise<boolean> {
+  desiredVisibility.set(tabId, false)
+  return enqueueTabOperation(tabId, async () => {
+    const label = labels.get(tabId)
+    if (!label || suspendedTabs.has(tabId)) return suspendedTabs.has(tabId)
+    await (await Webview.getByLabel(label))?.hide()
+    const suspended = await invoke<boolean>('browser_suspend', { label })
+    if (suspended) suspendedTabs.add(tabId)
+    return suspended
+  })
+}
+export async function resumeNativeTab(tabId: string): Promise<boolean> {
+  return enqueueTabOperation(tabId, async () => {
+    const label = labels.get(tabId)
+    if (!label) return false
+    if (!suspendedTabs.has(tabId)) return true
+    const resumed = await invoke<boolean>('browser_resume', { label })
+    if (resumed) suspendedTabs.delete(tabId)
+    return resumed
   })
 }
 export async function resizeNativeTab(tabId: string, bounds: BrowserBounds): Promise<void> {
@@ -279,6 +311,7 @@ export async function setNativeMuted(tabId: string, muted: boolean): Promise<voi
 export async function captureNativePage(tabId: string): Promise<NativePageSnapshot> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<NativePageSnapshot>('browser_snapshot',{label}) }
 export async function scanNativeResources(tabId: string): Promise<NativeResourceCandidate[]> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<NativeResourceCandidate[]>('browser_resource_candidates',{label}) }
 export function hasNativeTab(tabId: string): boolean { return labels.has(tabId) }
+export function isNativeTabSuspended(tabId: string): boolean { return suspendedTabs.has(tabId) }
 export async function onNativeNewTab(handler: (url: string, options: { private: boolean }) => void): Promise<UnlistenFn> {
   if (!isTauri()) return () => undefined
   return listen<NativeNewTabRequest>('browser://new-tab', event => handler(event.payload.url, { private: event.payload.private === true }))

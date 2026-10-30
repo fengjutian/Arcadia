@@ -116,6 +116,15 @@
   gap: 7px;
 }
 
+.ai-search-web-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--search-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
 .ai-search__provider { min-width: 150px; }
 
 .ai-search__input-row {

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Alert, Button, Empty, Input, message, Modal, Select, Spin, Tag } from '../../components/ui'
+import { Alert, Button, Empty, Input, message, Modal, Select, Spin, Switch, Tag } from '../../components/ui'
 import { ArrowUpOutlined, CheckCircleOutlined, ClockCircleOutlined, CopyOutlined, DownloadOutlined, ExportOutlined, FileTextOutlined, FullscreenOutlined, PlusOutlined, ReloadOutlined, RobotOutlined, SaveOutlined, SearchOutlined } from '../../components/ui/icons'
-import { aiChat, getSession, listAIProviders, ragRetrieve, saveDocument, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
+import { aiChat, getSession, listAIProviders, ragRetrieve, saveDocument, searchDocuments, setSession, webSearch, type RagRetrieveResponse } from '../../api'
 import type { AIProvider, ChatMessage } from '../../types'
-import { buildAiSearchRequest, citedSourceIds, sourcesFromDocuments, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
+import { buildAiSearchRequest, citedSourceIds, prepareAiSearchSources, sourcesFromDocuments, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
 import { compareAnswerVersions } from './aiSearchVersionDiff'
 import { evaluateAiSearchAnswer } from './aiSearchQuality'
 import { aiSearchCacheKey, readAiSearchCache, upsertAiSearchCache } from './aiSearchCache'
@@ -33,6 +33,8 @@ interface AiSearchTurn {
   versionCreatedAt?: string
   previousVersions?: AiSearchVersion[]
   fromCache?: boolean
+  webSourceCount?: number
+  webWarning?: string
 }
 
 interface AnswerPreview { turnId: string; title: string; html: string }
@@ -51,6 +53,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   const [versionTurnId, setVersionTurnId] = useState<string | null>(null)
   const [comparisonTarget, setComparisonTarget] = useState<{ turnId:string; versionId:string } | null>(null)
   const [qualityTurnId, setQualityTurnId] = useState<string | null>(null)
+  const [webEnabled, setWebEnabled] = useState(false)
   const previewFrameRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -145,18 +148,36 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     }
     let sources = sourcesFromRetrieval(retrieval)
     if (sources.length === 0) sources = sourcesFromDocuments(await searchDocuments(prompt))
-    if (sources.length === 0) throw new Error('本地知识库中没有找到足够证据。请先保存相关网页，或换一种问法。')
+    let webWarning: string | undefined
+    if (webEnabled) {
+      try {
+        const webResults = await webSearch(prompt, 6)
+        sources = prepareAiSearchSources([
+          ...sources.map(({ id: _id, ...source }) => source),
+          ...webResults.map((result, index) => ({
+            documentId:`web-${index}-${result.url}`,
+            title:result.title,
+            url:result.url,
+            excerpt:result.snippet,
+            kind:'web' as const,
+          })),
+        ], 10)
+      } catch (caught) {
+        webWarning = errorText(caught, '联网搜索失败，已仅使用本地知识库')
+      }
+    }
+    if (sources.length === 0) throw new Error('没有找到足够证据。请先保存相关网页、开启联网补充，或换一种问法。')
     const cacheKey = aiSearchCacheKey({ providerId, question:prompt, history:conversationHistory, sources })
     const cachedEntries = readAiSearchCache(await getSession(AI_SEARCH_CACHE_KEY).catch(() => null))
     const cached = options?.forceRefresh ? undefined : cachedEntries.find(entry => entry.key === cacheKey)
-    if (cached) return { answer:cached.answer, sources:cached.sources, citedIds:cached.citedIds, fromCache:true }
+    if (cached) return { answer:cached.answer, sources:cached.sources, citedIds:cached.citedIds, fromCache:true, webSourceCount:cached.sources.filter(source => source.kind === 'web').length, webWarning }
     const response = await aiChat(providerId, buildAiSearchRequest(prompt, sources, conversationHistory))
     const answer = response.content.trim()
     if (!answer) throw new Error('模型返回了空答案')
     const citedIds = citedSourceIds(answer, sources)
     const nextCache = upsertAiSearchCache(cachedEntries, { key:cacheKey, answer, sources, citedIds, createdAt:Date.now() })
     void setSession(AI_SEARCH_CACHE_KEY, JSON.stringify(nextCache)).catch(() => undefined)
-    return { answer, sources, citedIds, fromCache:false }
+    return { answer, sources, citedIds, fromCache:false, webSourceCount:sources.filter(source => source.kind === 'web').length, webWarning }
   }
 
   async function submit(rawQuestion = question) {
@@ -219,6 +240,8 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
         previousVersions:[...(turn.previousVersions ?? []).filter(version => version.id !== versionId), currentVersion].slice(-5),
         savedDocumentId:undefined,
         fromCache:false,
+        webSourceCount:target.sources.filter(source => source.kind === 'web').length,
+        webWarning:undefined,
       }
     }))
     setVersionTurnId(null)
@@ -287,6 +310,9 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
       <div className="ai-search__composer-head">
         <span><RobotOutlined/> 基于本地知识库生成带引用的结构化答案</span>
         <div className="ai-search__composer-actions">
+        <label className="ai-search-web-toggle" title="启用后会把问题发送到 Bing RSS 搜索，并将结果摘要加入证据包">
+          <Switch checked={webEnabled} onChange={setWebEnabled}/><span>联网补充</span>
+        </label>
         {turns.length > 0 && <Button size="small" icon={<PlusOutlined/>} disabled={busy} onClick={() => { setTurns([]); setQuestion(''); setError('') }}>新搜索</Button>}
         {providers.length > 0 && <Select
           className="ai-search__provider"
@@ -338,7 +364,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
         return <article className="ai-search-answer" key={turn.id}>
         <header>
           <span className="ai-search-answer__index">{index + 1}</span>
-          <div><small>问题 {turn.fromCache && <Tag color="green">缓存命中</Tag>}</small><h2>{turn.question}</h2></div>
+          <div><small>问题 {turn.fromCache && <Tag color="green">缓存命中</Tag>}{Boolean(turn.webSourceCount) && <Tag color="blue">联网 {turn.webSourceCount}</Tag>}{turn.webWarning && <Tag color="orange">联网降级</Tag>}</small><h2>{turn.question}</h2></div>
           <div className="ai-search-answer__actions">
             <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>复制</Button>
             <Button size="small" type="text" icon={<ReloadOutlined/>} disabled={busy} onClick={() => void regenerateTurn(turn)}>重生成</Button>
@@ -568,6 +594,8 @@ function isStoredTurns(value: unknown): value is AiSearchTurn[] {
       && (item.versionCreatedAt === undefined || typeof item.versionCreatedAt === 'string')
       && (item.previousVersions === undefined || isStoredVersions(item.previousVersions))
       && (item.fromCache === undefined || typeof item.fromCache === 'boolean')
+      && (item.webSourceCount === undefined || typeof item.webSourceCount === 'number')
+      && (item.webWarning === undefined || typeof item.webWarning === 'string')
   })
 }
 

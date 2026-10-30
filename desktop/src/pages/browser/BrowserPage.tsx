@@ -5,7 +5,7 @@ import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -1141,7 +1141,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     lruSweepRunningRef.current = true
     try {
       const tabs = tabsRef.current
-      const liveIds = new Set(tabs.filter(tab => hasNativeTab(tab.id)).map(tab => tab.id))
+      const liveIds = new Set(tabs.filter(tab => hasNativeTab(tab.id) && !isNativeTabSuspended(tab.id)).map(tab => tab.id))
       const currentSettings = readAdvancedSettings()
       const activeDownloads: DownloadActivity[] = downloadsRef.current
         .filter(item => item.status === 'downloading')
@@ -1163,9 +1163,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           const state = await readNativeState(id)
           if (state) setTabs(current => current.map(item => item.id === id ? { ...item, scrollX: Math.round(state.scrollX), scrollY: Math.round(state.scrollY) } : item))
         } catch { /* retain the last observed position */ }
-        await closeNativeTab(id)
+        const retained = await suspendNativeTab(id).catch(() => false)
+        if (!retained) await closeNativeTab(id)
         setTabs(current => current.map(item => item.id === id ? { ...item, suspended: true, loading: false } : item))
-        if (tab?.url) {
+        if (!retained && tab?.url) {
           try {
             const origin = new URL(tab.url).origin
             if (origin && origin !== 'null') forceAllDenyFor(origin)
@@ -1185,9 +1186,22 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }, [advancedSettings.idleSuspendMinutes, advancedSettings.maxLiveWebviews])
 
   async function resumeTab(tab: BrowserTab) {
-    if (!tab.url || hasNativeTab(tab.id)) return
+    if (!tab.url) return
     const nextBounds = bounds()
     if (!nextBounds) return
+    if (hasNativeTab(tab.id) && isNativeTabSuspended(tab.id)) {
+      const resumed = await resumeNativeTab(tab.id).catch(() => false)
+      if (resumed) {
+        await resizeNativeTab(tab.id, nextBounds)
+        if (visibleRef.current && activeTabIdRef.current === tab.id) await showNativeTab(tab.id)
+        setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, loading: false, error: undefined } : item))
+        await enforceLiveTabLimit(tab.id)
+        return
+      }
+      await closeNativeTab(tab.id)
+    } else if (hasNativeTab(tab.id)) {
+      return
+    }
     setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, loading: true, error: undefined } : item))
     try {
       tabRuntime.enqueueScroll(tab.id, { x: tab.scrollX ?? 0, y: tab.scrollY ?? 0 })
@@ -1378,7 +1392,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   )
 
   const resourceStats = useMemo(() => {
-    const liveIds = new Set(tabs.filter(tab => hasNativeTab(tab.id)).map(tab => tab.id))
+    const liveIds = new Set(tabs.filter(tab => hasNativeTab(tab.id) && !isNativeTabSuspended(tab.id)).map(tab => tab.id))
     const downloadingOrigins = new Set(downloads.filter(item => item.status === 'downloading').map(item => item.sourceOrigin).filter((value): value is string => !!value))
     return computeResourceStats({ tabs, liveIds, downloadingOrigins, lastActiveAt: lastActiveAtRef.current })
   }, [tabs, downloads])
