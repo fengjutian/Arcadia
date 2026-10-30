@@ -1444,12 +1444,17 @@ body[data-theme-kind='image'] {
     background-size: cover;
   }
 
-  .new-tab { background: linear-gradient(160deg, #f4f8f6 0%, #f8faf9 48%, #f2f6f4 100%) !important; }
+  .new-tab {
+    background-image: linear-gradient(rgba(244,248,246,.48), rgba(242,246,244,.62)), var(--app-theme-image) !important;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+  }
 }
 
 body[data-theme='dark'][data-theme-kind='image'] {
   .app-topbar { background-image: linear-gradient(rgba(9,14,12,.42), rgba(9,14,12,.64)), var(--app-theme-image); }
-  .new-tab { background: linear-gradient(160deg, #111814 0%, #151d18 55%, #101612 100%) !important; }
+  .new-tab { background-image: linear-gradient(rgba(9,14,12,.48), rgba(9,14,12,.66)), var(--app-theme-image) !important; }
 }
 
 .new-tab__workspace {

@@ -47,6 +47,7 @@ export default function App() {
       const next = (event as CustomEvent<{ kind: ThemeKind; image: ImageThemeId }>).detail
       setThemeKind(next.kind)
       setImageTheme(next.image)
+      if (next.image === 'bing') setBingImage(readCachedBingDailyImage())
     }
     window.addEventListener(APPEARANCE_CHANGE_EVENT, handleAppearance)
     window.addEventListener(VISUAL_THEME_CHANGE_EVENT, handleVisualTheme)
@@ -70,7 +71,10 @@ export default function App() {
 
   useEffect(() => {
     if (imageTheme !== 'bing') return
-    void loadBingDailyImage().then(image => { if (image) setBingImage(image) })
+    const refresh = () => void loadBingDailyImage().then(image => { if (image) setBingImage(image) })
+    refresh()
+    const timer = window.setInterval(refresh, 30 * 60 * 1000)
+    return () => window.clearInterval(timer)
   }, [imageTheme])
 
   useEffect(() => {

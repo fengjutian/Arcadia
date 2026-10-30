@@ -24,7 +24,6 @@ import { deleteBrowserPassword, listBrowserPasswords, setNativeAdBlocking, type 
 import { pickFiles } from '../../services/webviewCompat'
 import { PrivacyExportPanel } from '../../features/privacy/PrivacyExportPanel'
 import { getAdBlockStats, onAdBlockStatsChange, resetAdBlockStats, resetSessionAdBlockStats, type AdBlockStatsSnapshot } from '../../features/privacy/adBlockStats'
-import { getBrowserCapabilities, type BrowserCapabilities } from '../../services/browserCapabilities'
 import { formatStringMap, parseArguments, parseStringMap } from '../../features/mcp/config'
 import {
   bindingToDisplay,
@@ -145,6 +144,10 @@ function GeneralSettings() {
     setImageTheme(value)
     setThemeKind('image')
     writeImageTheme(value)
+    if (value !== 'bing' && bingDailyRefresh) {
+      setBingDailyRefresh(false)
+      writeBingDailyRefresh(false)
+    }
   }
 
   async function selectBingTheme(force = false) {
@@ -158,6 +161,7 @@ function GeneralSettings() {
   function changeBingDailyRefresh(enabled: boolean) {
     setBingDailyRefresh(enabled)
     writeBingDailyRefresh(enabled)
+    if (enabled) void selectBingTheme(true)
   }
 
   function restoreDefaults() {
@@ -210,25 +214,36 @@ function GeneralSettings() {
         style={{ '--theme-swatch-soft': option.swatch[0], '--theme-swatch-accent': option.swatch[1] } as CSSProperties}
       ><span/><small>{option.label}</small></button>)}
     </div> : <div className="image-theme-panel">
-      <div className="image-theme-toolbar"><span>应用的主题：<strong>{selectedImageLabel}</strong></span><label>每日刷新 <Switch checked={bingDailyRefresh} onChange={changeBingDailyRefresh}/></label></div>
-      <div className="image-theme-grid" role="radiogroup" aria-label="选择图像主题">
-      <button
-        type="button"
-        role="radio"
-        aria-checked={imageTheme === 'bing'}
-        className={`image-theme-card${imageTheme === 'bing' ? ' is-selected' : ''}`}
-        onClick={() => void selectBingTheme()}
-      >{bingImage ? <img src={bingImage.url} alt=""/> : <span className="image-theme-card__placeholder"><PictureOutlined/></span>}<span><strong>{bingLoading ? '正在获取…' : bingImage?.title ?? 'Bing 每日一图'}</strong><small>{bingImage?.copyright ?? '联网后自动获取 Bing 当日壁纸'}</small></span></button>
-      {IMAGE_THEMES.map(option => <button
-        key={option.id}
-        type="button"
-        role="radio"
-        aria-checked={imageTheme === option.id}
-        className={`image-theme-card${imageTheme === option.id ? ' is-selected' : ''}`}
-        onClick={() => changeImageTheme(option.id)}
-      ><img src={option.url} alt=""/><span><strong>{option.label}</strong><small>{option.description}</small></span></button>)}
-      </div>
-      {imageTheme === 'bing' && <Button size="small" loading={bingLoading} onClick={() => void selectBingTheme(true)}>立即刷新 Bing 图片</Button>}
+      <div className="image-theme-toolbar"><span>应用的主题：<strong>{selectedImageLabel}</strong></span></div>
+      <section className="image-theme-section image-theme-section--daily">
+        <div className="image-theme-section__heading">
+          <div><strong>每日一图</strong><small>联网获取 Bing 当日壁纸，每天自动更新。</small></div>
+          <label title="每天自动获取 Bing 当日壁纸">自动更新 <Switch checked={bingDailyRefresh} onChange={changeBingDailyRefresh}/></label>
+        </div>
+        <div className="image-theme-daily-row">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={imageTheme === 'bing'}
+            className={`image-theme-card${imageTheme === 'bing' ? ' is-selected' : ''}`}
+            onClick={() => void selectBingTheme()}
+          >{bingImage ? <img src={bingImage.url} alt=""/> : <span className="image-theme-card__placeholder"><PictureOutlined/></span>}<span><strong>{bingLoading ? '正在获取…' : bingImage?.title ?? 'Bing 每日一图'}</strong><small>{bingImage?.copyright ?? '联网后自动获取 Bing 当日壁纸'}</small></span></button>
+          <div className="image-theme-daily-copy"><span>图片来源：Bing</span><span>{bingImage?.date ? `壁纸日期：${bingImage.date}` : '尚未获取今日图片'}</span><Button size="small" loading={bingLoading} onClick={() => void selectBingTheme(true)}>立即刷新</Button></div>
+        </div>
+      </section>
+      <section className="image-theme-section">
+        <div className="image-theme-section__heading"><div><strong>默认图片</strong><small>内置于应用，不会随日期变化。</small></div></div>
+        <div className="image-theme-grid" role="radiogroup" aria-label="选择默认图片">
+          {IMAGE_THEMES.map(option => <button
+            key={option.id}
+            type="button"
+            role="radio"
+            aria-checked={imageTheme === option.id}
+            className={`image-theme-card${imageTheme === option.id ? ' is-selected' : ''}`}
+            onClick={() => changeImageTheme(option.id)}
+          ><img src={option.url} alt=""/><span><strong>{option.label}</strong><small>{option.description}</small></span></button>)}
+        </div>
+      </section>
     </div>}
 
     <div
@@ -562,18 +577,14 @@ function DownloadSettingsPanel() {
 
 function AboutSettingsPanel() {
   const [version, setVersion] = useState('0.5.0')
-  const [capabilities, setCapabilities] = useState<BrowserCapabilities | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
 
   useEffect(() => {
     if ('__TAURI_INTERNALS__' in window) void getVersion().then(setVersion).catch(() => undefined)
-    void getBrowserCapabilities().then(setCapabilities).catch(() => undefined)
   }, [])
 
   const diagnostic = [
     `Arcadia ${version}`,
-    `Tauri ${capabilities?.tauriRuntimeVersion ?? '网页预览模式'}`,
-    `WebView ${capabilities?.webviewBackend ?? '不可用'}`,
     `Platform ${navigator.platform || 'unknown'}`,
   ].join('\n')
 
@@ -593,8 +604,6 @@ function AboutSettingsPanel() {
     <Descriptions className="about-runtime" size="small" bordered column={2} items={[
       { key: 'version', label: '应用版本', children: version },
       { key: 'identifier', label: '应用标识', children: 'com.arcadia.knowledge-browser' },
-      { key: 'runtime', label: 'Tauri', children: capabilities?.tauriRuntimeVersion ?? '网页预览模式' },
-      { key: 'webview', label: 'WebView', children: capabilities?.webviewBackend ?? '不可用' },
     ]}/>
     <div className="about-links">
       <a href="https://arcadia-browser.netlify.app" target="_blank" rel="noreferrer">产品主页</a>
@@ -602,8 +611,35 @@ function AboutSettingsPanel() {
       <a href="https://github.com/fengjutian/browser/releases" target="_blank" rel="noreferrer">版本发布</a>
       <Button size="small" onClick={() => void copyDiagnostic()}>复制诊断信息</Button>
     </div>
-    <Typography.Paragraph type="secondary" className="about-copyright">© {new Date().getFullYear()} Arcadia contributors. 基于 Tauri、系统 WebView 与开源软件构建。</Typography.Paragraph>
+    <Typography.Paragraph type="secondary" className="about-copyright">© {new Date().getFullYear()} Arcadia contributors.</Typography.Paragraph>
   </Card></>
+}
+
+const OPEN_SOURCE_COMPONENTS = [
+  { name: 'Tauri', category: '桌面应用框架', description: '连接网页界面与原生系统能力。', license: 'MIT / Apache-2.0', url: 'https://tauri.app' },
+  { name: 'React', category: '用户界面', description: '构建设置、浏览器和知识管理界面。', license: 'MIT', url: 'https://react.dev' },
+  { name: 'Base UI', category: '无样式组件', description: '提供可访问的基础交互组件。', license: 'MIT', url: 'https://base-ui.com' },
+  { name: 'Lucide', category: '图标', description: '应用界面使用的开源图标库。', license: 'ISC', url: 'https://lucide.dev' },
+  { name: 'Mozilla Readability', category: '阅读模式', description: '从网页中提取适合阅读的正文内容。', license: 'Apache-2.0', url: 'https://github.com/mozilla/readability' },
+  { name: 'PDF.js', category: 'PDF 阅读', description: '解析并呈现 PDF 文档。', license: 'Apache-2.0', url: 'https://mozilla.github.io/pdf.js' },
+  { name: 'Mammoth', category: '文档解析', description: '将 DOCX 文档转换为可阅读内容。', license: 'BSD-2-Clause', url: 'https://github.com/mwilliamson/mammoth.js' },
+  { name: 'SQLite', category: '本地数据', description: '保存浏览、知识库及应用数据。', license: 'Public Domain', url: 'https://sqlite.org' },
+  { name: 'Wasmtime', category: '插件运行时', description: '为 WebAssembly 插件提供隔离运行环境。', license: 'Apache-2.0', url: 'https://wasmtime.dev' },
+  { name: 'Vite', category: '构建工具', description: '开发和构建应用前端资源。', license: 'MIT', url: 'https://vite.dev' },
+]
+
+function OpenSourceSettingsPanel() {
+  return <Card title="开源组件" className="settings-card open-source-settings-card">
+    <Typography.Paragraph type="secondary">Arcadia 基于优秀的开源项目构建。以下列出应用使用的主要开源技术。</Typography.Paragraph>
+    <div className="open-source-grid">
+      {OPEN_SOURCE_COMPONENTS.map(component => <a key={component.name} className="open-source-item" href={component.url} target="_blank" rel="noreferrer">
+        <div><strong>{component.name}</strong><Tag>{component.category}</Tag></div>
+        <p>{component.description}</p>
+        <small>{component.license}</small>
+      </a>)}
+    </div>
+    <Typography.Paragraph type="secondary" className="open-source-note">完整依赖及许可证信息以项目源代码和发行包内文件为准。</Typography.Paragraph>
+  </Card>
 }
 
 function ResetSettingsPanel() {
@@ -1480,9 +1516,6 @@ function McpSettings() {
 
 function SystemPerformanceSettingsPanel() {
   const [settings, setSettings] = useState<AdvancedSettings>(readAdvancedSettings)
-  const [capabilities, setCapabilities] = useState<BrowserCapabilities | null>(null)
-
-  useEffect(() => { void getBrowserCapabilities().then(setCapabilities) }, [])
 
   function update(patch: Partial<AdvancedSettings>) {
     const next = { ...settings, ...patch }
@@ -1516,13 +1549,6 @@ function SystemPerformanceSettingsPanel() {
     <Tabs className="system-performance-tabs" tabPosition="top" defaultActiveKey="system" items={[
       { key: 'system', label: '系统', children: systemPanel },
       { key: 'performance', label: '性能', children: performancePanel },
-    ]}/>
-    <Typography.Title level={5} style={{ marginTop: 26 }}>运行环境诊断</Typography.Title>
-    <Descriptions size="small" bordered column={2} items={[
-      { key: 'runtime', label: 'Tauri', children: capabilities?.tauriRuntimeVersion ?? '网页预览模式' },
-      { key: 'backend', label: 'WebView', children: capabilities?.webviewBackend ?? '不可用' },
-      { key: 'downloads', label: '下载进度', children: capabilities?.downloadProgressBytes ? '支持' : '基础模式' },
-      { key: 'permissions', label: '原生权限事件', children: capabilities?.nativePermissionEvents ? '支持' : '脚本兼容模式' },
     ]}/>
     <Button style={{ marginTop: 18 }} onClick={reset}>恢复系统和性能默认值</Button>
   </Card>
@@ -1639,10 +1665,27 @@ function PasswordManagerSettings() {
 }
 
 export function SettingsPage() {
-  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','系统和性能','字体','搜索引擎','下载','重置设置','关于'].map((label, index) => ({
+  const panels = [
+    ['通用', <GeneralSettings/>],
+    ['浏览器', <BrowserSettings/>],
+    ['隐私', <PrivacySettings/>],
+    ['密码管理器', <PasswordManagerSettings/>],
+    ['AI Provider', <AIProviderSettings/>],
+    ['知识库', <KnowledgeBaseSettings/>],
+    ['MCP', <McpSettings/>],
+    ['插件', <PluginSettings/>],
+    ['系统和性能', <SystemPerformanceSettingsPanel/>],
+    ['字体', <TypographySettingsPanel/>],
+    ['搜索引擎', <SearchEngineSettings/>],
+    ['下载', <DownloadSettingsPanel/>],
+    ['重置设置', <ResetSettingsPanel/>],
+    ['关于', <AboutSettingsPanel/>],
+    ['开源组件', <OpenSourceSettingsPanel/>],
+  ] as const
+  const items = panels.map(([label, panel]) => ({
     key: label,
     label,
-    children: <div className="settings-pane">{index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <SystemPerformanceSettingsPanel/> : index === 9 ? <TypographySettingsPanel/> : index === 10 ? <SearchEngineSettings/> : index === 11 ? <DownloadSettingsPanel/> : index === 12 ? <ResetSettingsPanel/> : <AboutSettingsPanel/>}</div>,
+    children: <div className="settings-pane">{panel}</div>,
   }))
   return <section className="page settings-page">
     <PageHeader title="设置"/>
