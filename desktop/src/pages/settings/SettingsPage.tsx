@@ -1210,7 +1210,7 @@ function PrivacySettings() {
   const maxSiteVisits = Math.max(1, ...visitStats.sites.map(item => item.count))
   const maxTrendVisits = Math.max(1, ...visitTrend.map(item => item.count))
   const statisticsContent = <div className="privacy-section visit-statistics">
-    <div className="visit-statistics__toolbar"><Typography.Text strong>统计时间</Typography.Text><Segmented value={visitTimeRange} onChange={value => setVisitTimeRange(value as VisitTimeRange)} options={[{label:'今天',value:'today'},{label:'最近 7 天',value:'7d'},{label:'最近 30 天',value:'30d'},{label:'全部',value:'all'}]}/></div>
+    <div className="visit-statistics__toolbar"><Typography.Text strong>统计时间</Typography.Text><Segmented size="small" value={visitTimeRange} onChange={value => setVisitTimeRange(value as VisitTimeRange)} options={[{label:'今天',value:'today'},{label:'最近 7 天',value:'7d'},{label:'最近 30 天',value:'30d'},{label:'全部',value:'all'}]}/></div>
     <div className="visit-statistics__summary">
       <div><b>{visitStats.totalVisits}</b><span>所选时间内访问</span></div>
       <div><b>{visitStats.uniqueSites}</b><span>不同网站</span></div>
@@ -1350,7 +1350,10 @@ function PrivacySettings() {
 
   return <>{contextHolder}<Card title="隐私与站点数据" className="settings-card privacy-settings-card"><Tabs className="privacy-section-tabs" tabPosition="left" defaultActiveKey="history" destroyOnHidden={false} items={[
     { key: 'private', label: '私密浏览', children: privateContent },
-    { key: 'history', label: `浏览历史 ${historyEntries.length}`, children: <div className="privacy-section privacy-history-layout">{statisticsContent}{historyContent}</div> },
+    { key: 'history', label: `浏览历史 ${historyEntries.length}`, children: <div className="privacy-section privacy-history-workspace"><Tabs className="history-data-tabs" defaultActiveKey="statistics" destroyOnHidden={false} items={[
+      { key: 'statistics', label: '统计分析', children: statisticsContent },
+      { key: 'records', label: `原始数据 ${historyTotal}`, children: historyContent },
+    ]}/></div> },
     { key: 'adblock', label: `广告拦截 ${adStats.totalBlocked}`, children: adBlockContent },
     { key: 'site-blacklist', label: '网站封杀', children: <SiteBlacklistPanel /> },
     { key: 'rules', label: `规则集 ${blocklists.length}`, children: ruleListContent },
