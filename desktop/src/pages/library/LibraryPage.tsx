@@ -3,7 +3,6 @@ import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, Fo
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DocumentCard } from '../../features/documents/DocumentCard'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { TaskPanel } from '../../features/tasks/TaskPanel'
 import { loadDocuments } from '../../features/documents/documentService'
 import {
   createCollection,
@@ -267,7 +266,6 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
                   <small>从浏览器保存，或导入本地 Markdown</small>
                 </button>}
               </div>}
-    <TaskPanel/>
   </div>
 
   const collectionContent = <div className="library-module">

@@ -8,6 +8,7 @@ import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInD
 import type { AIProvider, AIProviderType } from '../../types'
 import { normalizeOrigin, readSitePermissions, writeSitePermissions, type SitePermissionKind, type SitePermissionRule } from '../../features/browser/sitePermissions'
 import { KnowledgeBaseStatusPanel } from '../../features/settings/KnowledgeBaseStatusPanel'
+import { TaskPanel } from '../../features/tasks/TaskPanel'
 import { SiteBlacklistPanel } from '../../features/privacy/SiteBlacklistPanel'
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../features/settings/theme'
 import { IMAGE_THEMES, readAppearancePreference, readImageTheme, readThemeKind, writeAppearancePreference, writeImageTheme, writeThemeKind, type AppearancePreference, type ImageThemeId, type ThemeKind } from '../../features/settings/visualTheme'
@@ -1026,6 +1027,11 @@ function KnowledgeBaseSettings() {
               <Typography.Paragraph type="secondary">导出本地文档和会话状态为 JSON 文件；恢复时会以文档 id 做 upsert，已存在的条目会被覆盖。</Typography.Paragraph>
               <Space><Button type="primary" onClick={doExport}>导出备份</Button><Button onClick={doImport}>从文件恢复</Button></Space>
             </section>,
+          },
+          {
+            key: 'tasks',
+            label: '任务队列',
+            children: <TaskPanel/>,
           },
         ]}
       />

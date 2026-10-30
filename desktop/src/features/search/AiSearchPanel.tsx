@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Alert, Button, Empty, Input, message, Select, Spin, Tag } from '../../components/ui'
-import { ArrowUpOutlined, CopyOutlined, DownloadOutlined, FileTextOutlined, PlusOutlined, RobotOutlined, SearchOutlined } from '../../components/ui/icons'
-import { aiChat, getSession, listAIProviders, ragRetrieve, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
+import { ArrowUpOutlined, CheckCircleOutlined, CopyOutlined, DownloadOutlined, ExportOutlined, FileTextOutlined, PlusOutlined, RobotOutlined, SaveOutlined, SearchOutlined } from '../../components/ui/icons'
+import { aiChat, getSession, listAIProviders, ragRetrieve, saveDocument, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
 import type { AIProvider, ChatMessage } from '../../types'
 import { buildAiSearchRequest, citedSourceIds, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
 import {
@@ -25,6 +25,7 @@ interface AiSearchTurn {
   answer: string
   sources: AiSearchSource[]
   citedIds: string[]
+  savedDocumentId?: string
 }
 
 export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
@@ -140,6 +141,35 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     } catch { message.error('复制失败，请检查剪贴板权限') }
   }
 
+  async function saveTurn(turn: AiSearchTurn) {
+    if (turn.savedDocumentId) return
+    try {
+      const saved = await saveDocument({
+        title: `AI 搜索：${turn.question}`.slice(0, 160),
+        url: `arcadia://ai-search/${encodeURIComponent(turn.id)}`,
+        markdown: answerAsMarkdown(turn.question, turn.answer, turn.sources),
+        tags: ['AI 搜索'],
+      })
+      setTurns(current => current.map(item => item.id === turn.id ? { ...item, savedDocumentId:saved.id } : item))
+      message.success('已保存到本地知识库')
+    } catch (caught) { message.error(errorText(caught, '保存失败，请稍后重试')) }
+  }
+
+  async function shareTurn(turn: AiSearchTurn) {
+    const text = answerAsMarkdown(turn.question, turn.answer, turn.sources)
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title:`AI 搜索：${turn.question}`, text })
+        return
+      }
+      await navigator.clipboard.writeText(text)
+      message.success('当前平台不支持系统分享，已复制 Markdown')
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === 'AbortError') return
+      message.error('分享失败，请稍后重试')
+    }
+  }
+
   function exportTurn(turn: AiSearchTurn) {
     const answerHtml = document.getElementById(`ai-search-answer-${turn.id}`)?.innerHTML
     if (!answerHtml) { message.error('答案尚未渲染完成'); return }
@@ -213,6 +243,8 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
           <div><small>问题</small><h2>{turn.question}</h2></div>
           <div className="ai-search-answer__actions">
             <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>复制</Button>
+            <Button size="small" type="text" icon={turn.savedDocumentId ? <CheckCircleOutlined/> : <SaveOutlined/>} disabled={Boolean(turn.savedDocumentId)} onClick={() => void saveTurn(turn)}>{turn.savedDocumentId ? '已保存' : '保存'}</Button>
+            <Button size="small" type="text" icon={<ExportOutlined/>} onClick={() => void shareTurn(turn)}>分享</Button>
             <Button size="small" type="text" icon={<DownloadOutlined/>} onClick={() => exportTurn(turn)}>HTML</Button>
           </div>
         </header>
@@ -336,5 +368,6 @@ function isStoredTurns(value: unknown): value is AiSearchTurn[] {
       && typeof item.answer === 'string'
       && Array.isArray(item.sources)
       && Array.isArray(item.citedIds)
+      && (item.savedDocumentId === undefined || typeof item.savedDocumentId === 'string')
   })
 }
