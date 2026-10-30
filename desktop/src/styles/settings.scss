@@ -60,9 +60,10 @@
 
 .settings-pane {
   display: flex;
-  flex: 1 0 auto;
+  flex: 1 1 0;
   flex-direction: column;
   min-width: 0;
+  max-width: 100%;
 }
 
 // Every settings category reaches the bottom of the available pane. Categories
@@ -75,6 +76,7 @@
 // Settings cards fill the available pane while preserving the page inset.
 .settings-page .settings-card {
   width: 100%;
+  min-width: 0;
   max-width: none;
 }
 

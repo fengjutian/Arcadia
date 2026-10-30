@@ -48,7 +48,7 @@ import {
 } from '@assistant-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listDocuments, ragAnswer, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse } from '../../api'
+import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listDocuments, ragAnswer, saveDocument, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse } from '../../api'
 import type { RagQuery } from '../../api'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
 import { buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
@@ -93,6 +93,8 @@ interface AssistantTurn {
   /** Answer came from the model's general knowledge after local retrieval missed. */
   generalKnowledge?: boolean
   backgroundTaskId?: string
+  /** Document created when this answer is explicitly saved to the knowledge base. */
+  savedDocumentId?: string
 }
 
 type Turn = UserTurn | AssistantTurn
@@ -178,6 +180,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
   const conversationHistoryKey = sessionNamespace === 'default' ? CONVERSATION_HISTORY_KEY : `${CONVERSATION_HISTORY_KEY}:${sessionNamespace}`
   const [messageApi, contextHolder] = message.useMessage()
   const [documents, setDocuments] = useState<Document[]>([])
+  const [savingAnswerId, setSavingAnswerId] = useState<string>()
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [providerId, setProviderId] = useState<string | null>(null)
   const [question, setQuestion] = useState(initialQuestion)
@@ -778,6 +781,37 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
     onNavigate?.('settings')
   }
 
+  async function saveAnswerToKnowledge(turn: AssistantTurn, answer: string, cited: readonly Document[]) {
+    if (turn.savedDocumentId || savingAnswerId) return
+    const turnIndex = turns.findIndex(item => item.id === turn.id)
+    const question = [...turns.slice(0, turnIndex)].reverse().find(item => item.role === 'user')?.content.trim() || '知识助手回答'
+    const markdown = [
+      `# ${question}`,
+      '',
+      answer,
+      ...(cited.length > 0
+        ? ['', '## 引用', '', ...cited.map((doc, index) => `${index + 1}. [${doc.title}](${doc.url})`)]
+        : []),
+    ].join('\n')
+
+    setSavingAnswerId(turn.id)
+    try {
+      const saved = await saveDocument({
+        title: `知识助手：${question}`.slice(0, 160),
+        url: `arcadia://assistant-answer/${encodeURIComponent(turn.id)}`,
+        markdown,
+        tags: ['知识助手回答'],
+      })
+      setTurns(current => current.map(item => item.id === turn.id ? { ...item, savedDocumentId: saved.id } : item))
+      setDocuments(current => current.some(item => item.id === saved.id) ? current : [saved, ...current])
+      messageApi.success('回答已加入知识库')
+    } catch (caught) {
+      messageApi.error(caught instanceof Error ? caught.message : '加入知识库失败，请稍后重试')
+    } finally {
+      setSavingAnswerId(undefined)
+    }
+  }
+
   function renderConversation() {
     if (!conversationHydrated) {
       return <div className="assistant-thread-loading"><Spin size="small"/><span>正在恢复对话…</span></div>
@@ -849,7 +883,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                       ))}
                     </div>
                   )}
-                  <ActionBarPrimitive.Root className="assistant-response-actions assistant-response-actions--user" autohide="always">
+                  <ActionBarPrimitive.Root className="assistant-response-actions assistant-response-actions--user" autohide="never">
                     <ActionBarPrimitive.Edit title="编辑问题">编辑</ActionBarPrimitive.Edit>
                     <ActionBarPrimitive.Copy title="复制问题"><CopyOutlined />复制</ActionBarPrimitive.Copy>
                   </ActionBarPrimitive.Root>
@@ -954,7 +988,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                 )}
 
                 {!turn.pending && !turn.error && !turn.notFound && !turn.interrupted && answer && (
-                  <ActionBarPrimitive.Root className="assistant-response-actions" hideWhenRunning autohide="not-last">
+                  <ActionBarPrimitive.Root className="assistant-response-actions" hideWhenRunning autohide="never">
                     <ActionBarPrimitive.Copy title="复制回答">
                       <CopyOutlined />
                       <span>复制</span>
@@ -967,6 +1001,15 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                       <FileTextOutlined />
                       <span>导出</span>
                     </ActionBarPrimitive.ExportMarkdown>
+                    <button
+                      type="button"
+                      title={turn.savedDocumentId ? '已加入知识库' : '将回答加入知识库'}
+                      disabled={Boolean(turn.savedDocumentId) || Boolean(savingAnswerId)}
+                      onClick={() => void saveAnswerToKnowledge(turn, answer, cited)}
+                    >
+                      <BookOutlined />
+                      <span>{turn.savedDocumentId ? '已加入知识库' : savingAnswerId === turn.id ? '加入中…' : '加入知识库'}</span>
+                    </button>
                     <BranchPickerPrimitive.Root className="assistant-branch-picker" hideWhenSingleBranch>
                       <BranchPickerPrimitive.Previous title="上一个分支">‹</BranchPickerPrimitive.Previous>
                       <span><BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count /></span>

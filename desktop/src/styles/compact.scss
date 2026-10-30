@@ -391,6 +391,9 @@ body[data-theme='github'] {
 }
 
 .privacy-history-list {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   max-height: 360px;
   overflow: auto;
   padding: 0 12px;
@@ -398,17 +401,31 @@ body[data-theme='github'] {
   border-radius: 10px;
   background: rgba(255, 255, 255, .55);
 
-  .ant-list-item, .ui-list-item { padding-block: 11px; }
-  .ant-list-item-meta-title, .ui-list-meta__title { margin-bottom: 3px !important; }
+  .ant-list-item, .ui-list-item,
+  .ant-list-item-meta, .ui-list-meta,
+  .ant-list-item-meta-content, .ui-list-meta__content { min-width: 0; max-width: 100%; }
+  .ant-list-item-meta-title, .ui-list-meta__title {
+    min-width: 0;
+    max-width: 100%;
+    margin-bottom: 3px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .ant-list-item-meta-description, .ui-list-meta__description { display: flex; align-items: center; gap: 14px; min-width: 0; }
 }
 
 .privacy-history-url {
+  display: inline-flex;
+  flex: 1 1 0;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   color: var(--accent);
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  .ui-typography-copy { flex: none; }
 }
 
 .visit-statistics__toolbar { display:flex; justify-content:flex-start; align-items:center; gap:20px; margin-bottom:14px; }
@@ -1548,10 +1565,40 @@ body[data-theme-kind='image'] {
   }
 
   .new-tab {
-    background-image: linear-gradient(rgba(244,248,246,.18), rgba(242,246,244,.28)), var(--app-theme-image) !important;
+    // Match the image-theme preview: mute and darken the wallpaper so the
+    // foreground workspace remains the visual focus.
+    background-image: linear-gradient(rgba(10,18,24,.28), rgba(10,18,24,.42)), var(--app-theme-image) !important;
     background-position: center;
     background-size: cover;
     background-repeat: no-repeat;
+  }
+
+  .new-tab__workspace {
+    border-color: rgba(255,255,255,.62);
+    background: rgba(255,255,255,.74);
+    box-shadow: 0 22px 60px rgba(12,25,19,.22), inset 0 1px 0 rgba(255,255,255,.72);
+    -webkit-backdrop-filter: blur(24px) saturate(125%);
+    backdrop-filter: blur(24px) saturate(125%);
+  }
+
+  .new-tab__weather,
+  .new-tab__utility {
+    border-color: rgba(255,255,255,.62);
+    background: rgba(255,255,255,.58);
+    box-shadow: 0 8px 26px rgba(12,25,19,.14), inset 0 1px 0 rgba(255,255,255,.68);
+    -webkit-backdrop-filter: blur(18px) saturate(130%);
+    backdrop-filter: blur(18px) saturate(130%);
+  }
+
+  .new-tab__utility:hover,
+  .new-tab__utility[aria-expanded='true'] { background: rgba(255,255,255,.76); }
+
+  .new-tab .quick-site,
+  .new-tab-search form .ant-input-affix-wrapper,
+  .search-engine-picker .ui-select,
+  .knowledge-search-toggle {
+    background: rgba(255,255,255,.56) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.62);
   }
 }
 
@@ -2444,7 +2491,8 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     display: flex;
     gap: 2px;
     padding-left: 2px;
-    opacity: .72;
+    min-height: 24px;
+    opacity: 0;
     transition: opacity .15s;
 
     button {
@@ -2469,6 +2517,8 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     justify-content: flex-end;
     padding-right: 3px;
   }
+
+  .assistant-message:last-child .assistant-response-actions { opacity: .72; }
 
   .assistant-message-attachments {
     display: flex;
