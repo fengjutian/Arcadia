@@ -2326,8 +2326,22 @@ fn build_fts5_query(query: &str) -> String {
 #[tauri::command]
 pub fn local_save_document(
     app: tauri::AppHandle,
-    document: LocalDocument,
+    mut document: LocalDocument,
 ) -> Result<LocalDocument, String> {
+    // Saving the same page again updates its newest local document instead of
+    // creating another visually identical card. Preserve the user's starred
+    // state while refreshing the captured content and timestamp.
+    if !document.url.trim().is_empty() {
+        let database = connection(&app)?;
+        if let Ok((id, starred)) = database.query_row(
+            "SELECT id, starred FROM local_documents WHERE url=?1 ORDER BY created_at DESC LIMIT 1",
+            params![document.url],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+        ) {
+            document.id = id;
+            document.starred = starred != 0;
+        }
+    }
     let document = save_document_inner(&app, document)?;
     crate::plugins::installer::notify_document_saved(&app, &document);
     Ok(document)

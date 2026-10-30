@@ -28,11 +28,28 @@ export interface DocumentSearchHit extends Document {
 async function localSearch(query = ''): Promise<DocumentSearchHit[]> {
   if (!isTauri()) return []
   const hits = await invoke<LocalSearchHit[]>('local_list_documents', { query })
-  return hits.map(hit => {
+  const documents = hits.map(hit => {
     const { titleSnippet, markdownSnippet, summarySnippet, rank, matchReason } = hit
     const document = 'document' in hit ? hit.document : hit
     return { ...document, titleSnippet: titleSnippet || undefined, markdownSnippet: markdownSnippet || undefined, summarySnippet: summarySnippet || undefined, rank, ...(matchReason ? { matchReason } : {}) }
   })
+  const seen = new Set<string>()
+  return documents.filter(document => {
+    const key = normalizedDocumentUrl(document.url)
+    if (!key || seen.has(key)) return !key
+    seen.add(key)
+    return true
+  })
+}
+
+function normalizedDocumentUrl(value: string): string {
+  try {
+    const url = new URL(value)
+    url.hash = ''
+    return url.href
+  } catch {
+    return value.trim()
+  }
 }
 
 async function localSave(document: Document): Promise<Document> {

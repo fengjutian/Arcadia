@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Alert, Button, Empty, Input, message, Select, Spin, Tag } from '../../components/ui'
-import { ArrowUpOutlined, CheckCircleOutlined, CopyOutlined, DownloadOutlined, ExportOutlined, FileTextOutlined, PlusOutlined, RobotOutlined, SaveOutlined, SearchOutlined } from '../../components/ui/icons'
+import { Alert, Button, Empty, Input, message, Modal, Select, Spin, Tag } from '../../components/ui'
+import { ArrowUpOutlined, CheckCircleOutlined, CopyOutlined, DownloadOutlined, ExportOutlined, FileTextOutlined, FullscreenOutlined, PlusOutlined, RobotOutlined, SaveOutlined, SearchOutlined } from '../../components/ui/icons'
 import { aiChat, getSession, listAIProviders, ragRetrieve, saveDocument, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
 import type { AIProvider, ChatMessage } from '../../types'
 import { buildAiSearchRequest, citedSourceIds, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
@@ -28,6 +28,8 @@ interface AiSearchTurn {
   savedDocumentId?: string
 }
 
+interface AnswerPreview { turnId: string; title: string; html: string }
+
 export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [providerId, setProviderId] = useState('')
@@ -37,6 +39,8 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   const [loadingProviders, setLoadingProviders] = useState(true)
   const [sessionHydrated, setSessionHydrated] = useState(false)
   const [error, setError] = useState('')
+  const [preview, setPreview] = useState<AnswerPreview | null>(null)
+  const previewFrameRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     let current = true
@@ -70,6 +74,22 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   useEffect(() => {
     if (initialQuery.trim() && turns.length === 0) setQuestion(initialQuery)
   }, [initialQuery, turns.length])
+
+  useEffect(() => {
+    if (!preview) return
+    const receive = (event: MessageEvent<unknown>) => {
+      if (event.source !== previewFrameRef.current?.contentWindow || !isPreviewFollowUp(event.data)) return
+      const { question: askQuestion, option, comment } = event.data
+      const followUp = `关于“${askQuestion}”，我的选择是“${option}”${comment ? `，补充说明：${comment}` : ''}。请据此继续回答。`
+      setPreview(null)
+      setQuestion(followUp)
+      void submit(followUp)
+    }
+    window.addEventListener('message', receive)
+    return () => window.removeEventListener('message', receive)
+    // `submit` intentionally uses the current provider and conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview])
 
   const activeProvider = providers.find(provider => provider.id === providerId)
   const history = useMemo<ChatMessage[]>(() => turns.flatMap(turn => [
@@ -183,6 +203,12 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     message.success('已导出单文件 HTML')
   }
 
+  function previewTurn(turn: AiSearchTurn) {
+    const answerHtml = document.getElementById(`ai-search-answer-${turn.id}`)?.innerHTML
+    if (!answerHtml) { message.error('答案尚未渲染完成'); return }
+    setPreview({ turnId:turn.id, title:turn.question, html:standaloneAnswerHtml({ question:turn.question, answerHtml, sources:turn.sources }) })
+  }
+
   if (loadingProviders) return <div className="ai-search-loading"><Spin/><span>正在读取模型配置…</span></div>
 
   return <div className="ai-search">
@@ -245,6 +271,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
             <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>复制</Button>
             <Button size="small" type="text" icon={turn.savedDocumentId ? <CheckCircleOutlined/> : <SaveOutlined/>} disabled={Boolean(turn.savedDocumentId)} onClick={() => void saveTurn(turn)}>{turn.savedDocumentId ? '已保存' : '保存'}</Button>
             <Button size="small" type="text" icon={<ExportOutlined/>} onClick={() => void shareTurn(turn)}>分享</Button>
+            <Button size="small" type="text" icon={<FullscreenOutlined/>} onClick={() => previewTurn(turn)}>页面</Button>
             <Button size="small" type="text" icon={<DownloadOutlined/>} onClick={() => exportTurn(turn)}>HTML</Button>
           </div>
         </header>
@@ -267,6 +294,25 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
       </article>})}
     </div>
     {turns.length > 0 && <div className="ai-search__footer-note">当前模型：{activeProvider?.model ?? '—'} · 新追问会重新检索本地证据</div>}
+    <Modal
+      open={preview !== null}
+      title={preview?.title || 'AI 搜索答案'}
+      width="min(1100px, 96vw)"
+      className="ai-search-preview-modal"
+      styles={{ body:{ padding:0 } }}
+      footer={<Button onClick={() => setPreview(null)}>关闭</Button>}
+      onCancel={() => setPreview(null)}
+      destroyOnHidden
+    >
+      {preview && <iframe
+        ref={previewFrameRef}
+        title={`AI 搜索答案：${preview.title}`}
+        className="ai-search-preview-frame"
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        srcDoc={preview.html}
+      />}
+    </Modal>
   </div>
 }
 
@@ -286,7 +332,7 @@ function AiSearchAsk({ block, busy, onAnswer }: { block: AiSearchAskBlock; busy:
   const followUp = selected
     ? `关于“${block.question}”，我的选择是“${selected}”${comment.trim() ? `，补充说明：${comment.trim()}` : ''}。请据此继续回答。`
     : ''
-  return <section className="ai-search-ask" aria-label={block.question}>
+  return <section className="ai-search-ask" aria-label={block.question} data-ai-ask-question={block.question}>
     <div className="ai-search-ask__eyebrow"><RobotOutlined/> 需要你的选择</div>
     <h3>{block.question}</h3>
     <div className="ai-search-ask__options" role="radiogroup" aria-label={block.question}>
@@ -295,6 +341,7 @@ function AiSearchAsk({ block, busy, onAnswer }: { block: AiSearchAskBlock; busy:
         type="button"
         role="radio"
         aria-checked={selected === option}
+        data-ai-ask-option={option}
         className={selected === option ? 'is-selected' : ''}
         onClick={() => setSelected(option)}
       >
@@ -306,8 +353,9 @@ function AiSearchAsk({ block, busy, onAnswer }: { block: AiSearchAskBlock; busy:
       onChange={event => setComment(event.target.value)}
       placeholder="补充说明（可选）"
       aria-label="补充说明"
+      data-ai-ask-comment
     />
-    <Button type="primary" disabled={!selected || busy} onClick={() => onAnswer(followUp)}>按此选择继续</Button>
+    <Button type="primary" data-ai-ask-submit disabled={!selected || busy} onClick={() => onAnswer(followUp)}>按此选择继续</Button>
   </section>
 }
 
@@ -370,4 +418,13 @@ function isStoredTurns(value: unknown): value is AiSearchTurn[] {
       && Array.isArray(item.citedIds)
       && (item.savedDocumentId === undefined || typeof item.savedDocumentId === 'string')
   })
+}
+
+function isPreviewFollowUp(value: unknown): value is { type:'arcadia-ai-search-follow-up'; question:string; option:string; comment:string } {
+  if (!value || typeof value !== 'object') return false
+  const data = value as Record<string, unknown>
+  return data.type === 'arcadia-ai-search-follow-up'
+    && typeof data.question === 'string' && data.question.length > 0 && data.question.length <= 160
+    && typeof data.option === 'string' && data.option.length > 0 && data.option.length <= 160
+    && typeof data.comment === 'string' && data.comment.length <= 500
 }

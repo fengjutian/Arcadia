@@ -49,5 +49,7 @@ describe('AI search answer utilities', () => {
     expect(html).toContain('href="#"')
     expect(html).not.toContain('href="javascript:')
     expect(html).toContain('Content-Security-Policy')
+    expect(html).toContain("script-src 'nonce-arcadia-answer'")
+    expect(html).toContain('arcadia-ai-search-follow-up')
   })
 })

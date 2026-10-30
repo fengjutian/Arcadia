@@ -147,6 +147,15 @@
 
 .ai-search__footer-note { margin: 0; text-align: center; }
 
+.ai-search-preview-modal .ui-dialog__body { overflow: hidden; }
+.ai-search-preview-frame {
+  display: block;
+  width: 100%;
+  height: min(76vh, 820px);
+  border: 0;
+  background: #f5f2eb;
+}
+
 .ai-search__empty {
   display: grid;
   place-items: center;
