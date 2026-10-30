@@ -945,10 +945,6 @@ body[data-theme='github'] .search-page {
   .site-badge { border-radius: 6px; }
 }
 
-@media (max-width: 1600px) {
-  .result-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
 @media (max-width: 1180px) {
   .result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

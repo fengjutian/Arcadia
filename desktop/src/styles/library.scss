@@ -1219,10 +1219,6 @@ body[data-theme='github'] .library-page {
 }
 
 // Responsive --------------------------------------------------------------
-@media (max-width: 1600px) {
-  .library-document-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
 @media (max-width: 1280px) {
   .library-page { padding-inline: 28px; }
   .library-search { width: 240px; }
