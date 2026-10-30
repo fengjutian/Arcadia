@@ -1069,16 +1069,17 @@ async fn run_download(
         if cancel.load(Ordering::SeqCst) {
             return;
         }
-        finalize_success(
-            &app,
-            &id,
-            &url,
-            &file_name,
-            &source_tab_label,
+        finalize_success_async(
+            app.clone(),
+            id,
+            url,
+            file_name,
+            source_tab_label,
             source_origin,
             danger,
             final_path,
-        );
+        )
+        .await;
         return;
     }
 
@@ -1157,16 +1158,17 @@ async fn run_download(
         return;
     }
 
-    finalize_success(
-        &app,
-        &id,
-        &url,
-        &file_name,
-        &source_tab_label,
+    finalize_success_async(
+        app.clone(),
+        id,
+        url,
+        file_name,
+        source_tab_label,
         source_origin,
         danger,
         final_path,
-    );
+    )
+    .await;
 }
 
 async fn stream_into_file(
@@ -1354,6 +1356,34 @@ fn finalize_success(
             source_origin,
         },
     );
+}
+
+async fn finalize_success_async(
+    app: AppHandle,
+    id: String,
+    url: String,
+    file_name: String,
+    tab_label: String,
+    source_origin: Option<String>,
+    danger: DangerType,
+    final_path: PathBuf,
+) {
+    if let Err(error) = tauri::async_runtime::spawn_blocking(move || {
+        finalize_success(
+            &app,
+            &id,
+            &url,
+            &file_name,
+            &tab_label,
+            source_origin,
+            danger,
+            final_path,
+        );
+    })
+    .await
+    {
+        eprintln!("downloads: completion worker failed: {error}");
+    }
 }
 
 #[cfg(target_os = "windows")]

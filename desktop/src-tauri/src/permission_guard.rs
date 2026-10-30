@@ -134,7 +134,7 @@ mod windows_guard {
         });
     }
 
-    pub fn respond<R: Runtime>(
+    pub async fn respond<R: Runtime>(
         app: &AppHandle<R>,
         request_id: &str,
         allow: bool,
@@ -148,7 +148,7 @@ mod windows_guard {
             .get_webview(&label)
             .ok_or_else(|| "permission webview no longer exists".to_string())?;
         let response_id = request_id.to_string();
-        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let (sender, receiver) = tokio::sync::oneshot::channel();
         view.with_webview(move |_| {
             let result = PENDING
                 .with(|map| map.borrow_mut().remove(&response_id))
@@ -169,9 +169,10 @@ mod windows_guard {
             let _ = sender.send(result);
         })
         .map_err(|error| error.to_string())?;
-        receiver
-            .recv_timeout(std::time::Duration::from_secs(5))
+        tokio::time::timeout(std::time::Duration::from_secs(5), receiver)
+            .await
             .map_err(|_| "permission response timed out".to_string())?
+            .map_err(|_| "permission response callback was cancelled".to_string())?
             .map(Some)
     }
 }
@@ -195,15 +196,15 @@ pub(crate) fn attach_permission_guard<R: Runtime>(
 }
 
 #[cfg(target_os = "windows")]
-pub fn respond_native<R: Runtime>(
+pub async fn respond_native<R: Runtime>(
     app: &AppHandle<R>,
     request_id: &str,
     allow: bool,
 ) -> Result<Option<bool>, String> {
-    windows_guard::respond(app, request_id, allow)
+    windows_guard::respond(app, request_id, allow).await
 }
 #[cfg(not(target_os = "windows"))]
-pub fn respond_native<R: Runtime>(
+pub async fn respond_native<R: Runtime>(
     _app: &AppHandle<R>,
     _request_id: &str,
     _allow: bool,

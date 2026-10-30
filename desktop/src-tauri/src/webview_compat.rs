@@ -180,13 +180,13 @@ pub fn toggle_fullscreen(app: AppHandle) -> Result<bool, String> {
 /// `tauri-plugin-dialog` is wired in, and fall back to manual entry
 /// otherwise.
 #[tauri::command]
-pub fn pick_files(app: AppHandle, options: FilePickOptions) -> Result<FilePickResult, String> {
+pub async fn pick_files(app: AppHandle, options: FilePickOptions) -> Result<FilePickResult, String> {
     use tauri_plugin_dialog::DialogExt;
     let multiple = options.multiple.unwrap_or(false);
     let directory = options.directory.unwrap_or(false);
     let title = options.title.clone();
 
-    let (tx, rx) = std::sync::mpsc::channel();
+    let (tx, rx) = tokio::sync::oneshot::channel();
     let mut builder = app.dialog().file();
     if let Some(title) = title {
         builder = builder.set_title(title);
@@ -217,9 +217,10 @@ pub fn pick_files(app: AppHandle, options: FilePickOptions) -> Result<FilePickRe
         });
     }
 
-    let paths = rx
-        .recv_timeout(std::time::Duration::from_secs(300))
+    let paths = tokio::time::timeout(std::time::Duration::from_secs(300), rx)
+        .await
         .map_err(|_| "file dialog timed out".to_string())?
+        .map_err(|_| "file dialog callback was cancelled".to_string())?
         .unwrap_or_default();
     Ok(FilePickResult { paths })
 }

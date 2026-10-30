@@ -41,7 +41,7 @@ mod windows_guard {
         collections::HashMap,
         sync::{
             atomic::{AtomicU64, Ordering},
-            mpsc, Mutex, OnceLock,
+            Mutex, OnceLock,
         },
         time::Duration,
     };
@@ -151,7 +151,7 @@ mod windows_guard {
         });
     }
 
-    pub fn respond<R: Runtime>(
+    pub async fn respond<R: Runtime>(
         app: AppHandle<R>,
         request_id: String,
         allow: bool,
@@ -164,7 +164,7 @@ mod windows_guard {
         let view = app
             .get_webview(&label)
             .ok_or_else(|| "certificate webview no longer exists".to_string())?;
-        let (sender, receiver) = mpsc::sync_channel(1);
+        let (sender, receiver) = tokio::sync::oneshot::channel();
         let response_id = request_id.clone();
         view.with_webview(move |_| {
             let result = PENDING
@@ -183,9 +183,10 @@ mod windows_guard {
             let _ = sender.send(result);
         })
         .map_err(|e| e.to_string())?;
-        receiver
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| "certificate response timed out".to_string())??;
+        tokio::time::timeout(Duration::from_secs(5), receiver)
+            .await
+            .map_err(|_| "certificate response timed out".to_string())?
+            .map_err(|_| "certificate response callback was cancelled".to_string())??;
         let _ = emit_certificate_error_cleared(&app, &request_id);
         if allow {
             let delayed_app = app.clone();
@@ -220,7 +221,7 @@ pub fn attach_certificate_guard<R: Runtime>(app: &AppHandle<R>, label: &str) {
 pub fn attach_certificate_guard<R: Runtime>(_app: &AppHandle<R>, _label: &str) {}
 
 #[tauri::command]
-pub fn browser_certificate_respond<R: Runtime>(
+pub async fn browser_certificate_respond<R: Runtime>(
     app: AppHandle<R>,
     request_id: String,
     allow: bool,
@@ -230,7 +231,7 @@ pub fn browser_certificate_respond<R: Runtime>(
     }
     #[cfg(target_os = "windows")]
     {
-        windows_guard::respond(app, request_id, allow)
+        windows_guard::respond(app, request_id, allow).await
     }
     #[cfg(not(target_os = "windows"))]
     {

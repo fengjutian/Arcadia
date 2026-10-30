@@ -969,8 +969,7 @@ async fn browser_edit_action(
 }
 
 #[cfg(target_os = "windows")]
-fn clear_webview_profile_data(view: &tauri::Webview) -> Result<(), String> {
-    use std::sync::mpsc;
+async fn clear_webview_profile_data(view: &tauri::Webview) -> Result<(), String> {
     use webview2_com::ClearBrowsingDataCompletedHandler;
     use webview2_com::Microsoft::Web::WebView2::Win32::{
         ICoreWebView2Profile2, ICoreWebView2_13, COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE,
@@ -979,9 +978,11 @@ fn clear_webview_profile_data(view: &tauri::Webview) -> Result<(), String> {
     };
     use windows::core::Interface;
 
-    let (sender, receiver) = mpsc::sync_channel(1);
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let sender = std::sync::Arc::new(std::sync::Mutex::new(Some(sender)));
     view.with_webview(move |platform| {
-        let result = (|| {
+        let callback_sender = sender.clone();
+        let result: Result<(), String> = (|| {
             let core = unsafe { platform.controller().CoreWebView2() }
                 .map_err(|error| error.to_string())?;
             let core13 = core
@@ -995,21 +996,31 @@ fn clear_webview_profile_data(view: &tauri::Webview) -> Result<(), String> {
                 | COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE
                 | COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE
                 | COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS;
-            let (callback_sender, callback_receiver) = mpsc::channel();
             let callback = ClearBrowsingDataCompletedHandler::create(Box::new(move |status| {
-                let _ = callback_sender.send(status.map_err(|error| error.to_string()));
+                if let Ok(mut slot) = callback_sender.lock() {
+                    if let Some(sender) = slot.take() {
+                        let _ = sender.send(status.map_err(|error| error.to_string()));
+                    }
+                }
                 Ok(())
             }));
             unsafe { profile2.ClearBrowsingData(kinds, &callback) }
                 .map_err(|error| error.to_string())?;
-            webview2_com::wait_with_pump(callback_receiver).map_err(|error| error.to_string())?
+            Ok(())
         })();
-        let _ = sender.send(result);
+        if let Err(error) = result {
+            if let Ok(mut slot) = sender.lock() {
+                if let Some(sender) = slot.take() {
+                    let _ = sender.send(Err(error));
+                }
+            }
+        }
     })
     .map_err(|error| error.to_string())?;
-    receiver
-        .recv_timeout(Duration::from_secs(30))
+    tokio::time::timeout(Duration::from_secs(30), receiver)
+        .await
         .map_err(|_| "清理 Cookie 与磁盘缓存超时".to_string())?
+        .map_err(|_| "清理 Cookie 与磁盘缓存回调已取消".to_string())?
 }
 
 #[tauri::command]
@@ -1019,7 +1030,7 @@ async fn browser_clear_page_data(app: tauri::AppHandle, label: String) -> Result
         .get_webview(&label)
         .ok_or_else(|| "browser tab webview not found".to_string())?;
     #[cfg(target_os = "windows")]
-    clear_webview_profile_data(&view)?;
+    clear_webview_profile_data(&view).await?;
     // Clear origin-bound DOM databases as well. The native profile call above
     // removes HTTP-only cookies and disk/cache storage that JavaScript cannot see.
     view.eval("(()=>{try{localStorage.clear()}catch{}try{sessionStorage.clear()}catch{}try{caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k))))}catch{}try{indexedDB.databases?.().then(dbs=>dbs.forEach(db=>db.name&&indexedDB.deleteDatabase(db.name)))}catch{}})()")
@@ -2527,12 +2538,12 @@ async fn browser_permission_request(
 }
 
 #[tauri::command]
-fn browser_permission_respond(
+async fn browser_permission_respond(
     app: tauri::AppHandle,
     request_id: String,
     allow: bool,
 ) -> Result<bool, String> {
-    if let Some(resolved) = permission_guard::respond_native(&app, &request_id, allow)? {
+    if let Some(resolved) = permission_guard::respond_native(&app, &request_id, allow).await? {
         return Ok(resolved);
     }
     let waiters = app.state::<PermissionWaiters>();
