@@ -7,16 +7,37 @@ export interface AiSearchAskBlock {
   suggested?: string
 }
 
-export type AiSearchAnswerSegment = { kind: 'markdown'; content: string } | AiSearchAskBlock
+export interface AiSearchFlowBlock {
+  kind: 'flow'
+  edges: Array<{ from: string; to: string; label?: string }>
+}
+
+export interface AiSearchTimelineBlock {
+  kind: 'timeline'
+  items: Array<{ date: string; title: string; description?: string }>
+}
+
+export interface AiSearchChartBlock {
+  kind: 'chart'
+  title?: string
+  items: Array<{ label: string; value: number }>
+}
+
+export type AiSearchAnswerSegment =
+  | { kind: 'markdown'; content: string }
+  | AiSearchAskBlock
+  | AiSearchFlowBlock
+  | AiSearchTimelineBlock
+  | AiSearchChartBlock
 
 export function parseAnswerSegments(markdown: string): AiSearchAnswerSegment[] {
   const segments: AiSearchAnswerSegment[] = []
-  const pattern = /```ask\s*\n([\s\S]*?)```/gi
+  const pattern = /```(ask|flow|timeline|chart)\s*\n([\s\S]*?)```/gi
   let cursor = 0
   for (const match of markdown.matchAll(pattern)) {
     const index = match.index ?? 0
     pushMarkdown(segments, markdown.slice(cursor, index))
-    const block = parseAskBlock(match[1])
+    const block = parseDslBlock(match[1].toLowerCase(), match[2])
     if (block) segments.push(block)
     else pushMarkdown(segments, match[0])
     cursor = index + match[0].length
@@ -75,6 +96,62 @@ function parseAskBlock(body: string): AiSearchAskBlock | null {
     .slice(0, 6)
   if (!question || options.length < 2) return null
   return { kind:'ask', question, options, suggested:options.includes(suggested) ? suggested : undefined }
+}
+
+function parseDslBlock(kind: string, body: string): AiSearchAnswerSegment | null {
+  if (kind === 'ask') return parseAskBlock(body)
+  if (kind === 'flow') return parseFlowBlock(body)
+  if (kind === 'timeline') return parseTimelineBlock(body)
+  if (kind === 'chart') return parseChartBlock(body)
+  return null
+}
+
+function parseFlowBlock(body: string): AiSearchFlowBlock | null {
+  const edges: AiSearchFlowBlock['edges'] = []
+  for (const line of body.split(/\r?\n/)) {
+    const match = line.trim().match(/^(.+?)\s*->\s*(.+?)(?:\s*:\s*(.+))?$/)
+    if (!match) continue
+    const from = cleanDslText(match[1], 60)
+    const to = cleanDslText(match[2], 60)
+    const label = cleanDslText(match[3] ?? '', 100)
+    if (from && to) edges.push({ from, to, label:label || undefined })
+    if (edges.length >= 12) break
+  }
+  return edges.length > 0 ? { kind:'flow', edges } : null
+}
+
+function parseTimelineBlock(body: string): AiSearchTimelineBlock | null {
+  const items: AiSearchTimelineBlock['items'] = []
+  for (const line of body.split(/\r?\n/)) {
+    const [rawDate, rawTitle, ...rest] = line.split('|')
+    const date = cleanDslText(rawDate ?? '', 40)
+    const title = cleanDslText(rawTitle ?? '', 100)
+    const description = cleanDslText(rest.join('|'), 240)
+    if (date && title) items.push({ date, title, description:description || undefined })
+    if (items.length >= 12) break
+  }
+  return items.length >= 2 ? { kind:'timeline', items } : null
+}
+
+function parseChartBlock(body: string): AiSearchChartBlock | null {
+  let title: string | undefined
+  const items: Array<{ label:string; value:number }> = []
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    const titleMatch = line.match(/^title\s*:\s*(.+)$/i)
+    if (titleMatch) { title = cleanDslText(titleMatch[1], 100) || undefined; continue }
+    const separator = line.lastIndexOf('|')
+    if (separator < 1) continue
+    const label = cleanDslText(line.slice(0, separator), 80)
+    const value = Number(line.slice(separator + 1).trim())
+    if (label && Number.isFinite(value)) items.push({ label, value })
+    if (items.length >= 10) break
+  }
+  return items.length >= 2 ? { kind:'chart', title, items } : null
+}
+
+function cleanDslText(value: string, max: number): string {
+  return value.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
 function pushMarkdown(segments: AiSearchAnswerSegment[], content: string) {

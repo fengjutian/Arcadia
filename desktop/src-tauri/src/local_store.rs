@@ -3618,23 +3618,6 @@ pub fn browser_password_list(app: tauri::AppHandle) -> Result<Vec<SavedCredentia
         .map_err(|e| e.to_string())
 }
 
-pub(crate) fn password_for_origin(
-    app: &tauri::AppHandle,
-    origin: &str,
-) -> Result<Option<AutofillCredential>, String> {
-    validate_credential_origin(origin)?;
-    let database = connection(app)?;
-    let row: Option<(String, String)> = database.query_row("SELECT id,username FROM saved_credentials WHERE origin=? ORDER BY updated_at DESC LIMIT 1", [origin], |row| Ok((row.get(0)?, row.get(1)?))).optional().map_err(|e| e.to_string())?;
-    let Some((id, username)) = row else {
-        return Ok(None);
-    };
-    let password = keyring::Entry::new(KEYRING_SERVICE, &credential_key(&id))
-        .map_err(|e| e.to_string())?
-        .get_password()
-        .map_err(|e| e.to_string())?;
-    Ok(Some(AutofillCredential { username, password }))
-}
-
 pub(crate) fn password_for_origin_by_id(
     app: &tauri::AppHandle,
     origin: &str,

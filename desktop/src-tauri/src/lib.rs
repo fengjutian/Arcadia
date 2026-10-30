@@ -2193,7 +2193,6 @@ pub fn run() {
             capabilities::browser_capabilities,
             browser_permission_request,
             browser_permission_respond,
-            browser_password_autofill,
             browser_password_fill,
             browser_password_candidate,
             browser_close_tab,
@@ -2431,16 +2430,6 @@ fn validate_password_origin(
         return Err("credential origin does not match the requesting page".into());
     }
     Ok(())
-}
-
-#[tauri::command]
-fn browser_password_autofill(
-    app: tauri::AppHandle,
-    label: String,
-    origin: String,
-) -> Result<Option<local_store::AutofillCredential>, String> {
-    validate_password_origin(&app, &label, &origin)?;
-    local_store::password_for_origin(&app, &origin)
 }
 
 #[tauri::command]

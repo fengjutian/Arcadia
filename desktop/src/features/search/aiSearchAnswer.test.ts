@@ -21,6 +21,24 @@ describe('AI search answer utilities', () => {
     expect(segment.kind).toBe('markdown')
   })
 
+  it('parses flow, timeline and chart blocks with bounded data', () => {
+    const segments = parseAnswerSegments([
+      '```flow', '检索 -> 证据: 去重', '证据 -> 答案: 生成', '```',
+      '```timeline', '2024 | 原型 | 验证需求', '2025 | 发布 | 正式上线', '```',
+      '```chart', 'title: 命中率', '关键词 | 72', '混合检索 | 91.5', '```',
+    ].join('\n'))
+    expect(segments).toEqual([
+      { kind:'flow', edges:[{ from:'检索', to:'证据', label:'去重' }, { from:'证据', to:'答案', label:'生成' }] },
+      { kind:'timeline', items:[{ date:'2024', title:'原型', description:'验证需求' }, { date:'2025', title:'发布', description:'正式上线' }] },
+      { kind:'chart', title:'命中率', items:[{ label:'关键词', value:72 }, { label:'混合检索', value:91.5 }] },
+    ])
+  })
+
+  it('keeps incomplete visual blocks inert', () => {
+    expect(parseAnswerSegments('```timeline\n2026 | 只有一项\n```')[0].kind).toBe('markdown')
+    expect(parseAnswerSegments('```chart\n只有一个 | 1\n```')[0].kind).toBe('markdown')
+  })
+
   it('builds portable markdown with sources', () => {
     expect(answerAsMarkdown('问题', '答案 [S1]', sources)).toContain('- [S1] [来源一](https://example.com/a?x=1&y=2)')
   })

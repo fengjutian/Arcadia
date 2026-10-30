@@ -199,6 +199,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const nativeMode = hasNativeTab(active.id)
 
   useEffect(() => {
+    setPasswordCandidate(null)
+    setPasswordFillRequest(null)
+  }, [active.id, active.url])
+
+  useEffect(() => {
     const onAppearanceChange = (event: Event) => setBrowserAppearance((event as CustomEvent<BrowserAppearanceSettings>).detail ?? readBrowserAppearance())
     window.addEventListener(BROWSER_APPEARANCE_EVENT, onAppearanceChange)
     return () => window.removeEventListener(BROWSER_APPEARANCE_EVENT, onAppearanceChange)

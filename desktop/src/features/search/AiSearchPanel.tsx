@@ -6,7 +6,16 @@ import { ArrowUpOutlined, CopyOutlined, DownloadOutlined, FileTextOutlined, Plus
 import { aiChat, getSession, listAIProviders, ragRetrieve, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
 import type { AIProvider, ChatMessage } from '../../types'
 import { buildAiSearchRequest, citedSourceIds, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
-import { answerAsMarkdown, extractFollowUpQuestions, parseAnswerSegments, standaloneAnswerHtml, type AiSearchAskBlock } from './aiSearchAnswer'
+import {
+  answerAsMarkdown,
+  extractFollowUpQuestions,
+  parseAnswerSegments,
+  standaloneAnswerHtml,
+  type AiSearchAskBlock,
+  type AiSearchChartBlock,
+  type AiSearchFlowBlock,
+  type AiSearchTimelineBlock,
+} from './aiSearchAnswer'
 
 const AI_SEARCH_SESSION_KEY = 'search.ai.conversation.v1'
 
@@ -230,9 +239,13 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
 }
 
 function AiSearchAnswerContent({ answer, busy, onAnswer }: { answer: string; busy: boolean; onAnswer: (value: string) => void }) {
-  return <>{parseAnswerSegments(answer).map((segment, index) => segment.kind === 'markdown'
-    ? <ReactMarkdown key={`markdown-${index}`} remarkPlugins={[remarkGfm]}>{segment.content}</ReactMarkdown>
-    : <AiSearchAsk key={`ask-${index}`} block={segment} busy={busy} onAnswer={onAnswer}/>)}</>
+  return <>{parseAnswerSegments(answer).map((segment, index) => {
+    if (segment.kind === 'markdown') return <ReactMarkdown key={`markdown-${index}`} remarkPlugins={[remarkGfm]}>{segment.content}</ReactMarkdown>
+    if (segment.kind === 'ask') return <AiSearchAsk key={`ask-${index}`} block={segment} busy={busy} onAnswer={onAnswer}/>
+    if (segment.kind === 'flow') return <AiSearchFlow key={`flow-${index}`} block={segment}/>
+    if (segment.kind === 'timeline') return <AiSearchTimeline key={`timeline-${index}`} block={segment}/>
+    return <AiSearchChart key={`chart-${index}`} block={segment}/>
+  })}</>
 }
 
 function AiSearchAsk({ block, busy, onAnswer }: { block: AiSearchAskBlock; busy: boolean; onAnswer: (value: string) => void }) {
@@ -264,6 +277,40 @@ function AiSearchAsk({ block, busy, onAnswer }: { block: AiSearchAskBlock; busy:
     />
     <Button type="primary" disabled={!selected || busy} onClick={() => onAnswer(followUp)}>按此选择继续</Button>
   </section>
+}
+
+function AiSearchFlow({ block }: { block: AiSearchFlowBlock }) {
+  return <figure className="ai-search-visual ai-search-flow" aria-label="流程图">
+    <figcaption>流程</figcaption>
+    <div className="ai-search-flow__edges">
+      {block.edges.map((edge, index) => <div className="ai-search-flow__edge" key={`${edge.from}-${edge.to}-${index}`}>
+        <span className="ai-search-flow__node">{edge.from}</span>
+        <span className="ai-search-flow__arrow"><i/>{edge.label && <em>{edge.label}</em>}</span>
+        <span className="ai-search-flow__node">{edge.to}</span>
+      </div>)}
+    </div>
+  </figure>
+}
+
+function AiSearchTimeline({ block }: { block: AiSearchTimelineBlock }) {
+  return <figure className="ai-search-visual ai-search-timeline" aria-label="时间线">
+    <figcaption>时间线</figcaption>
+    <ol>{block.items.map((item, index) => <li key={`${item.date}-${item.title}-${index}`}>
+      <time>{item.date}</time><span aria-hidden="true"/><div><b>{item.title}</b>{item.description && <p>{item.description}</p>}</div>
+    </li>)}</ol>
+  </figure>
+}
+
+function AiSearchChart({ block }: { block: AiSearchChartBlock }) {
+  const maximum = Math.max(...block.items.map(item => Math.abs(item.value)), 1)
+  return <figure className="ai-search-visual ai-search-chart" aria-label={block.title || '数据图表'}>
+    <figcaption>{block.title || '数据对比'}</figcaption>
+    <div className="ai-search-chart__rows">{block.items.map((item, index) => <div className="ai-search-chart__row" key={`${item.label}-${index}`}>
+      <span title={item.label}>{item.label}</span>
+      <i><b className={item.value < 0 ? 'is-negative' : ''} style={{ width:`${Math.max(2, Math.abs(item.value) / maximum * 100)}%` }}/></i>
+      <strong>{item.value.toLocaleString('zh-CN')}</strong>
+    </div>)}</div>
+  </figure>
 }
 
 function domainOf(url: string): string {
