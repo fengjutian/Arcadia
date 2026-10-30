@@ -214,7 +214,7 @@ fn context_menu_script() -> String {
         try {
           const internals = window.__TAURI_INTERNALS__;
           if (internals && typeof internals.invoke === 'function') {
-            internals.invoke('tauri://emit', { event: 'browser://context-menu', payload }).catch(() => undefined);
+            internals.invoke('browser_emit_event', { event: 'browser://context-menu', payload }).catch(() => undefined);
           }
         } catch (error) { /* ignore */ }
       };
@@ -290,7 +290,7 @@ fn ad_blocker_script(label: &str, enabled: bool) -> String {
         try {{
           const internals = window.__TAURI_INTERNALS__;
           if (internals && typeof internals.invoke === 'function')
-            internals.invoke('tauri://emit', {{ event: 'browser://ad-block-update', payload: {{ version: 1, tabLabel, blockedCount }} }}).catch(() => undefined);
+            internals.invoke('browser_emit_event', {{ event: 'browser://ad-block-update', payload: {{ version: 1, tabLabel, blockedCount }} }}).catch(() => undefined);
         }} catch (_) {{}}
       }};
       const isBlockedUrl = value => {{
@@ -583,6 +583,16 @@ struct PageSnapshot {
     html: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserResourceCandidate {
+    url: String,
+    initiator_type: Option<String>,
+    transfer_size: Option<u64>,
+    decoded_body_size: Option<u64>,
+    source: String,
+}
+
 fn external_url(input: &str) -> Result<url::Url, String> {
     let parsed = if let Ok(explicit) = url::Url::parse(input.trim()) {
         explicit
@@ -649,7 +659,7 @@ fn audio_monitor_script(label: &str) -> String {
         const audible=!muted&&media().some(node=>!node.paused&&!node.ended&&node.volume>0&&!node.muted);
         const signature=`${{audible}}:${{muted}}`;
         if(signature===last)return;last=signature;
-        window.__TAURI_INTERNALS__?.invoke('tauri://emit',{{event:'browser://audio-state',payload:{{version:1,tabLabel:'{label}',audible,muted}}}}).catch(()=>undefined);
+        window.__TAURI_INTERNALS__?.invoke('browser_emit_event',{{event:'browser://audio-state',payload:{{version:1,tabLabel:'{label}',audible,muted}}}}).catch(()=>undefined);
       }};
       const bind=node=>{{if(!(node instanceof HTMLMediaElement)||node.dataset.arcadiaAudioBound)return;node.dataset.arcadiaAudioBound='1';if(muted)node.muted=true;for(const event of ['play','playing','pause','ended','volumechange','emptied'])node.addEventListener(event,emit)}};
       const scan=()=>{{media().forEach(bind);emit()}};
@@ -673,7 +683,7 @@ fn password_manager_script(label: &str, private_mode: bool) -> String {
         if(!event.isTrusted||location.protocol!=='https:')return;
         const input=event.target;
         if(!(input instanceof HTMLInputElement)||input.type!=='password')return;
-        window.__TAURI_INTERNALS__?.invoke('tauri://emit',{{event:'browser://password-fill-request',payload:{{tabLabel:label,origin:location.origin}}}}).catch(()=>undefined);
+        window.__TAURI_INTERNALS__?.invoke('browser_emit_event',{{event:'browser://password-fill-request',payload:{{tabLabel:label,origin:location.origin}}}}).catch(()=>undefined);
       }},true);
       document.addEventListener('submit',event=>{{
         if(location.protocol!=='https:')return;
@@ -1245,7 +1255,7 @@ fn browser_toolbar_menu_in_page(
           const host = document.createElement('div');
           host.id = '__arcadia-toolbar-menu';
           const shadow = host.attachShadow({{mode:'closed'}});
-          const emit = action => window.__TAURI_INTERNALS__?.invoke('tauri://emit', {{event:'browser://toolbar-menu-action', payload:{{version:1,tabLabel:'{label}',action}}}}).catch(()=>undefined);
+          const emit = action => window.__TAURI_INTERNALS__?.invoke('browser_emit_event', {{event:'browser://toolbar-menu-action', payload:{{version:1,tabLabel:'{label}',action}}}}).catch(()=>undefined);
           const close = (notify=true) => {{ document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', keydown, true); host.remove(); delete window.__arcadiaToolbarMenu; if(notify) emit('__dismiss__'); }};
           const outside = event => {{ if(!event.composedPath().includes(host)) close(); }};
           const keydown = event => {{ if(event.key === 'Escape') close(); }};
@@ -1375,7 +1385,7 @@ fn browser_toolbar_panel(
       const kind={kind_js}, data={data_js};
       const host=document.createElement('div'); host.id='__arcadia-toolbar-panel';
       const shadow=host.attachShadow({{mode:'closed'}});
-      const emit=(action,value)=>window.__TAURI_INTERNALS__?.invoke('tauri://emit',{{event:'browser://toolbar-menu-action',payload:{{version:1,tabLabel:'{label}',action,value}}}}).catch(()=>undefined);
+      const emit=(action,value)=>window.__TAURI_INTERNALS__?.invoke('browser_emit_event',{{event:'browser://toolbar-menu-action',payload:{{version:1,tabLabel:'{label}',action,value}}}}).catch(()=>undefined);
       const close=(notify=true)=>{{document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',keydown,true);host.remove();delete window.__arcadiaToolbarMenu;if(notify)emit('__dismiss__')}};
       const outside=event=>{{if(!event.composedPath().includes(host))close()}};
       const keydown=event=>{{if(event.key==='Escape')close()}};
@@ -1471,6 +1481,35 @@ async fn browser_snapshot(app: tauri::AppHandle, label: String) -> Result<PageSn
         return Err("page snapshot exceeds 8 MiB limit".into());
     }
     Ok(snapshot)
+}
+
+#[tauri::command]
+async fn browser_resource_candidates(
+    app: tauri::AppHandle,
+    label: String,
+) -> Result<Vec<BrowserResourceCandidate>, String> {
+    validate_browser_label(&label)?;
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    eval_json(
+        webview,
+        r#"(() => {
+          const rows=[];
+          const add=(url,initiatorType,transferSize,decodedBodySize,source)=>{
+            try { const parsed=new URL(url,location.href); if(!/^https?:$/.test(parsed.protocol))return;
+              rows.push({url:parsed.href,initiatorType:initiatorType||null,transferSize:Number(transferSize)||null,decodedBodySize:Number(decodedBodySize)||null,source});
+            } catch {}
+          };
+          for(const entry of performance.getEntriesByType('resource')) add(entry.name,entry.initiatorType,entry.transferSize,entry.decodedBodySize,'performance');
+          for(const node of document.querySelectorAll('video,audio,source,track,embed,object,a[href]')) {
+            const raw=node.currentSrc||node.src||node.href||node.data;
+            if(raw) add(raw,node.tagName.toLowerCase(),null,null,'dom');
+          }
+          return rows.slice(-1000);
+        })()"#,
+    )
+    .await
 }
 
 fn source_origin_from_url(url: &str) -> Option<String> {
@@ -2192,7 +2231,9 @@ pub fn run() {
             browser_page_toast,
             browser_page_toast_close,
             browser_snapshot,
+            browser_resource_candidates,
             capabilities::browser_capabilities,
+            browser_emit_event,
             browser_permission_request,
             browser_permission_respond,
             browser_password_fill,
@@ -2368,8 +2409,37 @@ pub fn run() {
 }
 
 #[tauri::command]
+fn browser_emit_event(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    event: String,
+    mut payload: serde_json::Value,
+) -> Result<(), String> {
+    let label = webview.label().to_string();
+    validate_browser_label(&label)?;
+    if !matches!(
+        event.as_str(),
+        "browser://context-menu"
+            | "browser://ad-block-update"
+            | "browser://audio-state"
+            | "browser://password-fill-request"
+            | "browser://toolbar-menu-action"
+    ) {
+        return Err("browser page event is not allowlisted".into());
+    }
+    let object = payload
+        .as_object_mut()
+        .ok_or_else(|| "browser page event payload must be an object".to_string())?;
+    // Never trust a page-supplied label: bind the event to its actual caller.
+    object.insert("tabLabel".into(), serde_json::Value::String(label));
+    app.emit_to("main", &event, payload)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn browser_permission_request(
     app: tauri::AppHandle,
+    webview: tauri::Webview,
     request_id: String,
     origin: String,
     kind: String,
@@ -2377,6 +2447,18 @@ async fn browser_permission_request(
 ) -> Result<bool, String> {
     if request_id.is_empty() || origin.is_empty() || kind.is_empty() {
         return Err("request_id, origin and kind are required".into());
+    }
+    validate_browser_label(webview.label())?;
+    if !matches!(kind.as_str(), "camera" | "microphone" | "location" | "notifications" | "clipboard" | "media") {
+        return Err("unsupported permission kind".into());
+    }
+    let current_origin = webview
+        .url()
+        .map_err(|error| error.to_string())?
+        .origin()
+        .ascii_serialization();
+    if current_origin != origin {
+        return Err("permission origin does not match the calling page".into());
     }
     let waiters = app.state::<PermissionWaiters>();
     let receiver = waiters.register(request_id.clone());
@@ -2390,7 +2472,7 @@ async fn browser_permission_request(
             kind: kind.clone(),
         },
     );
-    let timeout = Duration::from_millis(timeout_ms.unwrap_or(15_000));
+    let timeout = Duration::from_millis(timeout_ms.unwrap_or(15_000).clamp(1_000, 30_000));
     let verdict = match tokio::time::timeout(timeout, receiver).await {
         Ok(Ok(allow)) => allow,
         _ => {
@@ -2461,11 +2543,16 @@ fn browser_password_fill(
 #[tauri::command]
 fn browser_password_candidate(
     app: tauri::AppHandle,
+    webview: tauri::Webview,
     label: String,
     origin: String,
     username: String,
     password: String,
 ) -> Result<(), String> {
+    validate_browser_label(webview.label())?;
+    if webview.label() != label {
+        return Err("credential label does not match the calling page".into());
+    }
     validate_password_origin(&app, &label, &origin)?;
     if username.is_empty() || password.is_empty() || username.len() > 320 || password.len() > 4096 {
         return Err("invalid credential candidate".into());

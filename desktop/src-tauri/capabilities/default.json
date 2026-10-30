@@ -1,7 +1,7 @@
 {
   "identifier": "default",
-  "description": "Permissions for the trusted application UI",
-  "windows": ["main", "ai-assistant"],
+  "description": "Permissions for trusted local application webviews only",
+  "webviews": ["main", "ai-assistant"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

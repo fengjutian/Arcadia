@@ -1,0 +1,12 @@
+{
+  "identifier": "browser-events",
+  "description": "Minimal event bridge for untrusted remote browsing webviews",
+  "local": false,
+  "remote": {
+    "urls": ["http://*/*", "https://*/*"]
+  },
+  "webviews": ["browser-*"],
+  "permissions": [
+    "allow-browser-page-bridge"
+  ]
+}

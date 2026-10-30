@@ -1,0 +1,8 @@
+[[permission]]
+identifier = "allow-browser-page-bridge"
+description = "Allows remote browser pages to report allowlisted UI events and request guarded permissions/password capture."
+commands.allow = [
+  "browser_emit_event",
+  "browser_permission_request",
+  "browser_password_candidate"
+]
