@@ -72,9 +72,12 @@
   flex: 1 0 auto;
 }
 
-// Settings cards fill the pane and keep the same 20px inset as the page.
+// Keep settings content readable on wide windows instead of stretching every
+// control and chart all the way to the right edge.
 .settings-page .settings-card {
-  max-width: none;
+  width: 100%;
+  max-width: 1200px;
+  align-self: flex-start;
 }
 
 .browser-appearance-settings { max-width: 780px; }

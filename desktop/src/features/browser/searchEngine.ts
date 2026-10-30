@@ -14,16 +14,16 @@ export interface SearchEnginePreset {
 }
 
 export const SEARCH_ENGINE_PRESETS: SearchEnginePreset[] = [
-  { id: 'google', label: 'Google', template: 'https://www.google.com/search?q={query}', iconUrl: 'https://www.google.com/favicon.ico' },
-  { id: 'bing', label: 'Bing', template: 'https://www.bing.com/search?q={query}', iconUrl: 'https://www.bing.com/favicon.ico' },
-  { id: 'baidu', label: '百度', template: 'https://www.baidu.com/s?wd={query}', iconUrl: 'https://www.baidu.com/favicon.ico' },
-  { id: 'duckduckgo', label: 'DuckDuckGo', template: 'https://duckduckgo.com/?q={query}', iconUrl: 'https://duckduckgo.com/favicon.ico' },
-  { id: 'sogou', label: '搜狗', template: 'https://www.sogou.com/web?query={query}', iconUrl: 'https://www.sogou.com/favicon.ico' },
-  { id: 'so360', label: '360 搜索', template: 'https://www.so.com/s?q={query}', iconUrl: 'https://www.so.com/favicon.ico' },
-  { id: 'brave', label: 'Brave', template: 'https://search.brave.com/search?q={query}', iconUrl: 'https://search.brave.com/favicon.ico' },
-  { id: 'startpage', label: 'Startpage', template: 'https://www.startpage.com/sp/search?query={query}', iconUrl: 'https://www.startpage.com/favicon.ico' },
-  { id: 'ecosia', label: 'Ecosia', template: 'https://www.ecosia.org/search?q={query}', iconUrl: 'https://www.ecosia.org/favicon.ico' },
-  { id: 'yandex', label: 'Yandex', template: 'https://yandex.com/search/?text={query}', iconUrl: 'https://yandex.com/favicon.ico' },
+  { id: 'google', label: 'Google', template: 'https://www.google.com/search?q={query}', iconUrl: '/icons/search-engines/google.ico' },
+  { id: 'bing', label: 'Bing', template: 'https://www.bing.com/search?q={query}', iconUrl: '/icons/search-engines/bing.ico' },
+  { id: 'baidu', label: '百度', template: 'https://www.baidu.com/s?wd={query}', iconUrl: '/icons/search-engines/baidu.ico' },
+  { id: 'duckduckgo', label: 'DuckDuckGo', template: 'https://duckduckgo.com/?q={query}', iconUrl: '/icons/search-engines/duckduckgo.ico' },
+  { id: 'sogou', label: '搜狗', template: 'https://www.sogou.com/web?query={query}', iconUrl: '/icons/search-engines/sogou.ico' },
+  { id: 'so360', label: '360 搜索', template: 'https://www.so.com/s?q={query}', iconUrl: '/icons/search-engines/so360.ico' },
+  { id: 'brave', label: 'Brave', template: 'https://search.brave.com/search?q={query}', iconUrl: '/icons/search-engines/brave.svg' },
+  { id: 'startpage', label: 'Startpage', template: 'https://www.startpage.com/sp/search?query={query}', iconUrl: '/icons/search-engines/startpage.ico' },
+  { id: 'ecosia', label: 'Ecosia', template: 'https://www.ecosia.org/search?q={query}', iconUrl: '/icons/search-engines/ecosia.svg' },
+  { id: 'yandex', label: 'Yandex', template: 'https://yandex.com/search/?text={query}', iconUrl: '/icons/search-engines/yandex.ico' },
 ]
 
 export const SEARCH_ENGINE_STORAGE_KEY = 'browser.searchEngine.v1'

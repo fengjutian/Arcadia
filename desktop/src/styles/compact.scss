@@ -195,8 +195,9 @@ body[data-theme='dark'] .browser-content > .ai-panel { border-color: #354139; ba
 body[data-theme='dark'] .browser-content > .ai-panel .context-card,
 body[data-theme='dark'] .browser-content > .ai-panel .ai-result { border-color: #3a463f; background: rgba(31,42,36,.82); }
 
-// The navigation rail is user-resizable; these late overrides replace the
-// fixed widths in the base density rules without changing the visual spacing.
+// Keep the navigation rail at the compact default width.
+.app-layout { --sider-width: 64px; }
+
 .app-sider.ant-layout-sider {
   position: relative;
   flex: 0 0 var(--sider-width) !important;
@@ -206,28 +207,6 @@ body[data-theme='dark'] .browser-content > .ai-panel .ai-result { border-color: 
 
   .ant-layout-sider-children { min-width: 0; }
   .ant-menu { min-width: 0; }
-}
-
-.sider-resizer {
-  position: absolute;
-  z-index: 20;
-  top: 0;
-  right: -4px;
-  width: 8px;
-  height: 100%;
-  cursor: col-resize;
-  touch-action: none;
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0 auto 0 3px;
-    width: 2px;
-    background: transparent;
-    transition: background .15s;
-  }
-
-  &:hover::after { background: #65c98b; }
 }
 
 .app-sider--collapsed {
@@ -409,6 +388,34 @@ body[data-theme='github'] {
 
   > .ui-alert { margin-bottom: 14px; }
   > p.ant-typography:first-child { margin-bottom: 18px; }
+}
+
+.privacy-history-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-width: 0;
+  overflow: auto;
+  padding-right: 6px;
+
+  > .privacy-section {
+    flex: none;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  > .privacy-section + .privacy-section {
+    padding-top: 24px;
+    border-top: 1px solid var(--accent-border);
+  }
+
+  .visit-statistics__charts {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, .72fr);
+  }
+
+  .visit-chart--trend {
+    grid-column: 1 / -1;
+  }
 }
 
 .privacy-history-list {

@@ -1305,12 +1305,11 @@ function PrivacySettings() {
 
   return <>{contextHolder}<Card title="隐私与站点数据" className="settings-card privacy-settings-card"><Tabs className="privacy-section-tabs" tabPosition="left" defaultActiveKey="history" destroyOnHidden={false} items={[
     { key: 'private', label: '私密浏览', children: privateContent },
-    { key: 'history', label: `浏览历史 ${historyEntries.length}`, children: historyContent },
+    { key: 'history', label: `浏览历史 ${historyEntries.length}`, children: <div className="privacy-section privacy-history-layout">{statisticsContent}{historyContent}</div> },
     { key: 'adblock', label: `广告拦截 ${adStats.totalBlocked}`, children: adBlockContent },
     { key: 'site-blacklist', label: '网站封杀', children: <SiteBlacklistPanel /> },
     { key: 'rules', label: `规则集 ${blocklists.length}`, children: ruleListContent },
     { key: 'blocks', label: `最近拦截 ${recentBlocks.length}`, children: recentBlocksContent },
-    { key: 'statistics', label: '访问统计', children: statisticsContent },
     { key: 'cleanup', label: '数据清理', children: cleanupContent },
     { key: 'knowledge-base', label: '知识库', children: <KnowledgeBaseStatusPanel /> },
     { key: 'snapshots', label: `阅读快照 ${snapshotStats.count}`, children: snapshotContent },
