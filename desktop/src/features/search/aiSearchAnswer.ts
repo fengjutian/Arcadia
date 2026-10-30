@@ -1,5 +1,30 @@
 import type { AiSearchSource } from './aiSearchPrompt'
 
+export interface AiSearchAskBlock {
+  kind: 'ask'
+  question: string
+  options: string[]
+  suggested?: string
+}
+
+export type AiSearchAnswerSegment = { kind: 'markdown'; content: string } | AiSearchAskBlock
+
+export function parseAnswerSegments(markdown: string): AiSearchAnswerSegment[] {
+  const segments: AiSearchAnswerSegment[] = []
+  const pattern = /```ask\s*\n([\s\S]*?)```/gi
+  let cursor = 0
+  for (const match of markdown.matchAll(pattern)) {
+    const index = match.index ?? 0
+    pushMarkdown(segments, markdown.slice(cursor, index))
+    const block = parseAskBlock(match[1])
+    if (block) segments.push(block)
+    else pushMarkdown(segments, match[0])
+    cursor = index + match[0].length
+  }
+  pushMarkdown(segments, markdown.slice(cursor))
+  return segments.length > 0 ? segments : [{ kind:'markdown', content:markdown }]
+}
+
 export function extractFollowUpQuestions(markdown: string): string[] {
   const section = markdown.match(/(?:^|\n)#{1,4}\s*(?:下一步|继续追问|你还可以问)[^\n]*\n([\s\S]*?)(?=\n#{1,4}\s|$)/i)?.[1] ?? ''
   return Array.from(section.matchAll(/^\s*(?:[-*+] |\d+[.)]\s+)(.+)$/gm), match => cleanQuestion(match[1]))
@@ -39,6 +64,21 @@ export function standaloneAnswerHtml(input: {
 
 function cleanQuestion(value: string): string {
   return value.replace(/^\s*[*_`]+|[*_`]+\s*$/g, '').replace(/^['“”]|['“”]$/g, '').trim().slice(0, 160)
+}
+
+function parseAskBlock(body: string): AiSearchAskBlock | null {
+  const question = cleanQuestion(body.match(/^\s*question\s*:\s*(.+)$/im)?.[1] ?? '')
+  const suggested = cleanQuestion(body.match(/^\s*suggested\s*:\s*(.+)$/im)?.[1] ?? '')
+  const options = Array.from(body.matchAll(/^\s*[-*+]\s+(.+)$/gm), match => cleanQuestion(match[1]))
+    .filter(value => value.length > 0)
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .slice(0, 6)
+  if (!question || options.length < 2) return null
+  return { kind:'ask', question, options, suggested:options.includes(suggested) ? suggested : undefined }
+}
+
+function pushMarkdown(segments: AiSearchAnswerSegment[], content: string) {
+  if (content.trim()) segments.push({ kind:'markdown', content:content.trim() })
 }
 
 function safeUrl(value: string): string {

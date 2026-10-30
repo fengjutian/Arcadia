@@ -667,18 +667,13 @@ fn password_manager_script(label: &str, private_mode: bool) -> String {
     format!(
         r#"(() => {{
       const label={label};
-      const fields=()=>Array.from(document.querySelectorAll('input'));
-      const fill=async()=>{{
-        if(location.protocol!=='https:')return;
-        try{{
-          const item=await window.__TAURI_INTERNALS__.invoke('browser_password_autofill',{{label,origin:location.origin}});
-          if(!item)return;
-          const password=fields().find(input=>input.type==='password'&&!input.value);
-          const username=fields().find(input=>!input.value&&(input.autocomplete==='username'||input.type==='email'||input.name?.toLowerCase().includes('user')));
-          const set=(input,value)=>{{if(!input)return;const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;setter?.call(input,value);input.dispatchEvent(new Event('input',{{bubbles:true}}));input.dispatchEvent(new Event('change',{{bubbles:true}}));}};
-          set(username,item.username);set(password,item.password);
-        }}catch{{}}
-      }};
+      if(window.top!==window)return;
+      document.addEventListener('pointerdown',event=>{{
+        if(!event.isTrusted||location.protocol!=='https:')return;
+        const input=event.target;
+        if(!(input instanceof HTMLInputElement)||input.type!=='password')return;
+        window.__TAURI_INTERNALS__?.invoke('tauri://emit',{{event:'browser://password-fill-request',payload:{{tabLabel:label,origin:location.origin}}}}).catch(()=>undefined);
+      }},true);
       document.addEventListener('submit',event=>{{
         if(location.protocol!=='https:')return;
         const form=event.target; if(!(form instanceof HTMLFormElement))return;
@@ -687,9 +682,6 @@ fn password_manager_script(label: &str, private_mode: bool) -> String {
         const username=inputs.find(input=>input.autocomplete==='username'||input.type==='email'||input.name?.toLowerCase().includes('user'));
         if(password&&username?.value)window.__TAURI_INTERNALS__.invoke('browser_password_candidate',{{label,origin:location.origin,username:username.value,password:password.value}}).catch(()=>undefined);
       }},true);
-      let fillTimer=0;const scheduleFill=()=>{{clearTimeout(fillTimer);fillTimer=setTimeout(fill,250)}};
-      new MutationObserver(scheduleFill).observe(document.documentElement,{{subtree:true,childList:true}});
-      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scheduleFill,{{once:true}});else scheduleFill();
     }})()"#
     )
 }
@@ -2202,6 +2194,7 @@ pub fn run() {
             browser_permission_request,
             browser_permission_respond,
             browser_password_autofill,
+            browser_password_fill,
             browser_password_candidate,
             browser_close_tab,
             local_store::browser_password_save,
@@ -2448,6 +2441,30 @@ fn browser_password_autofill(
 ) -> Result<Option<local_store::AutofillCredential>, String> {
     validate_password_origin(&app, &label, &origin)?;
     local_store::password_for_origin(&app, &origin)
+}
+
+#[tauri::command]
+fn browser_password_fill(
+    app: tauri::AppHandle,
+    label: String,
+    credential_id: String,
+) -> Result<(), String> {
+    validate_browser_label(&label)?;
+    let view = app.get_webview(&label).ok_or_else(|| "browser tab webview not found".to_string())?;
+    let current = view.url().map_err(|error| error.to_string())?;
+    let origin = current.origin().ascii_serialization();
+    validate_password_origin(&app, &label, &origin)?;
+    let item = local_store::password_for_origin_by_id(&app, &origin, &credential_id)?;
+    let username = serde_json::to_string(&item.username).map_err(|error| error.to_string())?;
+    let password = serde_json::to_string(&item.password).map_err(|error| error.to_string())?;
+    view.eval(&format!(r#"(() => {{
+      const passwordInput=document.activeElement instanceof HTMLInputElement&&document.activeElement.type==='password'?document.activeElement:Array.from(document.querySelectorAll('input[type=password]')).find(input=>!input.value);
+      if(!passwordInput)return;
+      const inputs=Array.from((passwordInput.form||document).querySelectorAll('input'));
+      const usernameInput=inputs.find(input=>input!==passwordInput&&(input.autocomplete==='username'||input.type==='email'||/user|login|email/i.test(input.name||'')));
+      const set=(input,value)=>{{if(!input)return;const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;setter?.call(input,value);input.dispatchEvent(new Event('input',{{bubbles:true}}));input.dispatchEvent(new Event('change',{{bubbles:true}}));}};
+      set(usernameInput,{username});set(passwordInput,{password});
+    }})()"#)).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

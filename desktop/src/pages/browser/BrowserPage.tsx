@@ -5,7 +5,7 @@ import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -174,7 +174,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [modalOverlayCount, setModalOverlayCount] = useState(0)
   const [sourceView, setSourceView] = useState<{ url: string; html: string } | null>(null)
   const [clearSiteDataOpen, setClearSiteDataOpen] = useState(false)
-  const [passwordCandidate, setPasswordCandidate] = useState<PasswordCandidate | null>(null)
+  const [passwordCandidate, setPasswordCandidate] = useState<(PasswordCandidate & { existingId?: string }) | null>(null)
+  const [passwordFillRequest, setPasswordFillRequest] = useState<{ tabLabel: string; origin: string; credentials: SavedCredential[] } | null>(null)
   const [blacklistVersion, setBlacklistVersion] = useState(0)
   const [blockPrompt, setBlockPrompt] = useState<{ url: string; host: string } | null>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
@@ -808,7 +809,29 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   useEffect(() => {
     let disposed = false
     let unlisten: (() => void) | undefined
-    void onPasswordCandidate(candidate => { if (!disposed) setPasswordCandidate(candidate) }).then(stop => {
+    void onPasswordCandidate(candidate => {
+      void listBrowserPasswords().then(credentials => {
+        if (disposed) return
+        const existingId = credentials.find(item => item.origin === candidate.origin && item.username === candidate.username)?.id
+        setPasswordCandidate({ ...candidate, existingId })
+      })
+    }).then(stop => {
+      if (disposed) stop()
+      else unlisten = stop
+    })
+    return () => { disposed = true; unlisten?.() }
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    void onPasswordFillRequest(request => {
+      void listBrowserPasswords().then(credentials => {
+        if (disposed) return
+        const matches = credentials.filter(item => item.origin === request.origin)
+        if (matches.length) setPasswordFillRequest({ ...request, credentials: matches })
+      })
+    }).then(stop => {
       if (disposed) stop()
       else unlisten = stop
     })
@@ -2161,9 +2184,29 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       <Typography.Text code>{blockPrompt?.url}</Typography.Text>
     </Modal>
     <Modal
+      open={passwordFillRequest !== null}
+      title="选择要填充的账号"
+      footer={null}
+      onCancel={() => setPasswordFillRequest(null)}
+      destroyOnHidden
+    >
+      {passwordFillRequest && <Space direction="vertical" style={{width:'100%'}}>
+        <Typography.Text type="secondary">仅在你选择账号后才会向当前 HTTPS 页面填入密码。</Typography.Text>
+        <Typography.Text code>{passwordFillRequest.origin}</Typography.Text>
+        {passwordFillRequest.credentials.map(credential => <Button key={credential.id} block onClick={async () => {
+          const request = passwordFillRequest
+          setPasswordFillRequest(null)
+          try {
+            await fillBrowserPassword(request.tabLabel, credential.id)
+            messageApi.success(`已填充账号 ${credential.username}`)
+          } catch (error) { messageApi.error(`填充失败：${String(error)}`) }
+        }}>{credential.username}</Button>)}
+      </Space>}
+    </Modal>
+    <Modal
       open={passwordCandidate !== null}
-      title="保存密码"
-      okText="保存到系统密码库"
+      title={passwordCandidate?.existingId ? '更新密码' : '保存密码'}
+      okText={passwordCandidate?.existingId ? '更新系统密码库' : '保存到系统密码库'}
       cancelText="暂不保存"
       onCancel={() => setPasswordCandidate(null)}
       onOk={async () => {
@@ -2171,8 +2214,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         try {
           await saveBrowserPassword(passwordCandidate)
           setPasswordCandidate(null)
-          messageApi.success('密码已安全保存，之后访问该网站会自动填充')
-        } catch (error) { messageApi.error(`保存密码失败：${String(error)}`) }
+          messageApi.success(passwordCandidate.existingId ? '密码已安全更新' : '密码已安全保存，点击密码框即可选择填充')
+        } catch (error) {
+          setPasswordCandidate(null)
+          messageApi.error(`保存密码失败：${String(error)}`)
+        }
       }}
     >
       {passwordCandidate && <Space direction="vertical" style={{width:'100%'}}>

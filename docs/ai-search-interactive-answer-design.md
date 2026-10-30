@@ -81,7 +81,8 @@ AI 搜索结果包含：
 - 将模型生成的“下一步”转换为可点击追问；（已完成）
 - 本地恢复最近 AI 搜索会话；（已完成）
 - 复制 Markdown 与导出带 CSP 的单文件 HTML；（已完成）
-- 支持 `flow`、`timeline`、`chart`、`ask` 等受控 DSL；
+- 支持 `ask` 受控 DSL，包含建议选项、补充说明与继续回答；（已完成）
+- 支持 `flow`、`timeline`、`chart` 等只读受控 DSL；
 - 将可信渲染器打包进桌面端；
 - 沙箱 iframe 展示和 `postMessage` 交互；
 - 保存、分享和导出单文件 HTML。

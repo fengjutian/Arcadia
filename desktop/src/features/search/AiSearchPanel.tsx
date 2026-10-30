@@ -6,7 +6,7 @@ import { ArrowUpOutlined, CopyOutlined, DownloadOutlined, FileTextOutlined, Plus
 import { aiChat, getSession, listAIProviders, ragRetrieve, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
 import type { AIProvider, ChatMessage } from '../../types'
 import { buildAiSearchRequest, citedSourceIds, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
-import { answerAsMarkdown, extractFollowUpQuestions, standaloneAnswerHtml } from './aiSearchAnswer'
+import { answerAsMarkdown, extractFollowUpQuestions, parseAnswerSegments, standaloneAnswerHtml, type AiSearchAskBlock } from './aiSearchAnswer'
 
 const AI_SEARCH_SESSION_KEY = 'search.ai.conversation.v1'
 
@@ -208,7 +208,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
           </div>
         </header>
         <div id={`ai-search-answer-${turn.id}`} className="ai-search-answer__markdown markdown-body">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.answer}</ReactMarkdown>
+          <AiSearchAnswerContent answer={turn.answer} busy={busy} onAnswer={value => void submit(value)}/>
         </div>
         <section className="ai-search-sources" aria-label="答案来源">
           <h3><FileTextOutlined/> 来源</h3>
@@ -227,6 +227,43 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     </div>
     {turns.length > 0 && <div className="ai-search__footer-note">当前模型：{activeProvider?.model ?? '—'} · 新追问会重新检索本地证据</div>}
   </div>
+}
+
+function AiSearchAnswerContent({ answer, busy, onAnswer }: { answer: string; busy: boolean; onAnswer: (value: string) => void }) {
+  return <>{parseAnswerSegments(answer).map((segment, index) => segment.kind === 'markdown'
+    ? <ReactMarkdown key={`markdown-${index}`} remarkPlugins={[remarkGfm]}>{segment.content}</ReactMarkdown>
+    : <AiSearchAsk key={`ask-${index}`} block={segment} busy={busy} onAnswer={onAnswer}/>)}</>
+}
+
+function AiSearchAsk({ block, busy, onAnswer }: { block: AiSearchAskBlock; busy: boolean; onAnswer: (value: string) => void }) {
+  const [selected, setSelected] = useState('')
+  const [comment, setComment] = useState('')
+  const followUp = selected
+    ? `关于“${block.question}”，我的选择是“${selected}”${comment.trim() ? `，补充说明：${comment.trim()}` : ''}。请据此继续回答。`
+    : ''
+  return <section className="ai-search-ask" aria-label={block.question}>
+    <div className="ai-search-ask__eyebrow"><RobotOutlined/> 需要你的选择</div>
+    <h3>{block.question}</h3>
+    <div className="ai-search-ask__options" role="radiogroup" aria-label={block.question}>
+      {block.options.map(option => <button
+        key={option}
+        type="button"
+        role="radio"
+        aria-checked={selected === option}
+        className={selected === option ? 'is-selected' : ''}
+        onClick={() => setSelected(option)}
+      >
+        <span aria-hidden="true"/>{option}{block.suggested === option && <Tag color="green">建议</Tag>}
+      </button>)}
+    </div>
+    <Input
+      value={comment}
+      onChange={event => setComment(event.target.value)}
+      placeholder="补充说明（可选）"
+      aria-label="补充说明"
+    />
+    <Button type="primary" disabled={!selected || busy} onClick={() => onAnswer(followUp)}>按此选择继续</Button>
+  </section>
 }
 
 function domainOf(url: string): string {

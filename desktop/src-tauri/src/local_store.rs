@@ -841,8 +841,8 @@ pub struct SavedCredential {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AutofillCredential {
-    username: String,
-    password: String,
+    pub(crate) username: String,
+    pub(crate) password: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3633,6 +3633,29 @@ pub(crate) fn password_for_origin(
         .get_password()
         .map_err(|e| e.to_string())?;
     Ok(Some(AutofillCredential { username, password }))
+}
+
+pub(crate) fn password_for_origin_by_id(
+    app: &tauri::AppHandle,
+    origin: &str,
+    id: &str,
+) -> Result<AutofillCredential, String> {
+    validate_credential_origin(origin)?;
+    let database = connection(app)?;
+    let username: Option<String> = database
+        .query_row(
+            "SELECT username FROM saved_credentials WHERE id=?1 AND origin=?2",
+            params![id, origin],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    let username = username.ok_or_else(|| "credential does not belong to the current origin".to_string())?;
+    let password = keyring::Entry::new(KEYRING_SERVICE, &credential_key(id))
+        .map_err(|error| error.to_string())?
+        .get_password()
+        .map_err(|error| error.to_string())?;
+    Ok(AutofillCredential { username, password })
 }
 
 #[tauri::command]
