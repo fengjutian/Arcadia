@@ -3,7 +3,7 @@ import { Menu } from '@base-ui/react/menu'
 import type { ReactElement, ReactNode } from 'react'
 import { splitPlacement, type Placement } from './floating'
 
-export type MenuItem = { key?: string; label?: ReactNode; icon?: ReactNode; disabled?: boolean; danger?: boolean; onClick?: () => void; type?: 'divider' }
+export type MenuItem = { key?: string; label?: ReactNode; icon?: ReactNode; extra?: ReactNode; disabled?: boolean; danger?: boolean; onClick?: () => void; type?: 'divider' }
 export interface MenuProps { items?: Array<MenuItem | null> }
 export interface DropdownProps {
   children: ReactElement
@@ -18,7 +18,7 @@ function MenuRows({ items }: { items?: Array<MenuItem | null> }) {
   return <>{items?.map((item, index) => !item ? null : item.type === 'divider'
     ? <Menu.Separator className="ui-dropdown__separator" key={item.key ?? `divider-${index}`}/>
     : <Menu.Item className={`ui-dropdown__item ${item.danger ? 'is-danger' : ''}`} key={item.key ?? index} disabled={item.disabled} onClick={() => item.onClick?.()}>
-        {item.icon && <span className="ui-dropdown__icon">{item.icon}</span>}<span>{item.label}</span>
+        {item.icon && <span className="ui-dropdown__icon">{item.icon}</span>}<span>{item.label}</span>{item.extra != null && <span className="ui-dropdown__extra">{item.extra}</span>}
       </Menu.Item>)}</>
 }
 
@@ -26,7 +26,7 @@ function ContextRows({ items }: { items?: Array<MenuItem | null> }) {
   return <>{items?.map((item, index) => !item ? null : item.type === 'divider'
     ? <ContextMenu.Separator className="ui-dropdown__separator" key={item.key ?? `divider-${index}`}/>
     : <ContextMenu.Item className={`ui-dropdown__item ${item.danger ? 'is-danger' : ''}`} key={item.key ?? index} disabled={item.disabled} onClick={() => item.onClick?.()}>
-        {item.icon && <span className="ui-dropdown__icon">{item.icon}</span>}<span>{item.label}</span>
+        {item.icon && <span className="ui-dropdown__icon">{item.icon}</span>}<span>{item.label}</span>{item.extra != null && <span className="ui-dropdown__extra">{item.extra}</span>}
       </ContextMenu.Item>)}</>
 }
 

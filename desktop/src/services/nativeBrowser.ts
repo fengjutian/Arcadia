@@ -272,8 +272,8 @@ export async function editNativePage(tabId: string, action: 'cut'|'paste'|'selec
 export async function clearNativePageData(tabId: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_clear_page_data',{label}) }
 export async function findInNativeTab(tabId: string, query: string, backwards = false): Promise<boolean> { const label=labels.get(tabId);return label ? invoke<boolean>('browser_find',{label,query,backwards}) : false }
 export async function zoomNativeTab(tabId: string, scale: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_zoom',{label,scale}) }
-export async function printNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_print',{label}) }
-export async function openNativeDevtools(tabId: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_open_devtools',{label}) }
+export async function printNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');await invoke('browser_print',{label}) }
+export async function openNativeDevtools(tabId: string): Promise<void> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');await invoke('browser_open_devtools',{label}) }
 export async function captureNativeScreenshot(tabId:string, fullPage:boolean, clip?:{x:number;y:number;width:number;height:number}): Promise<string> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<string>('browser_capture_screenshot',{label,fullPage,clip:clip??null}) }
 export async function navigateHistory(tabId: string, delta: -1|1): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_history',{label,delta}) }
 export async function readNativeState(tabId: string): Promise<NativeBrowserState | null> { const label=labels.get(tabId);return label ? invoke<NativeBrowserState>('browser_state',{label}) : null }

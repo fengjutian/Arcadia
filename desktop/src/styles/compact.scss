@@ -3132,6 +3132,14 @@ body[data-view='browser'] {
   --browser-chrome-extra: var(--browser-toolbar-height);
 }
 
+.ui-dropdown__extra {
+  margin-left: auto;
+  padding-left: 18px;
+  color: #87918b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .window-drag-strip {
   position: fixed;
   z-index: 2000;

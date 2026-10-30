@@ -5,7 +5,7 @@ import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -332,7 +332,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       void hideNativeTab(active.id)
       return
     }
-    if (modalOverlayCount > 0 || toolbarOverlay === 'tab-menu') {
+    if (modalOverlayCount > 0 || toolbarOverlay === 'tab-menu' || toolbarOverlay === 'menu') {
       void hideNativeTab(active.id)
       return
     }
@@ -1266,8 +1266,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   const [isWindowFullscreen, setIsWindowFullscreen] = useState(false)
   async function handleToggleFullscreen() {
-    const next = await toggleWindowFullscreen()
-    setIsWindowFullscreen(next)
+    try {
+      const next = await toggleWindowFullscreen()
+      setIsWindowFullscreen(next)
+    } catch (error) {
+      diagnosticLog('window.fullscreen.failed', 'error', { error })
+      messageApi.error('切换全屏失败')
+    }
   }
   function runBrowserMenuAction(action: string) {
     diagnosticLog('browser.menu.action', 'info', { action, tabId: active.id, url: redactUrl(active.url) })
@@ -1283,14 +1288,19 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       case 'print':
         diagnosticLog('browser.print.requested', 'info', { tabId: active.id, url: redactUrl(active.url) })
         void printNativeTab(active.id)
-          .then(() => diagnosticLog('browser.print.completed', 'info', { tabId: active.id }))
+          .then(() => diagnosticLog('browser.print.dialog-opened', 'info', { tabId: active.id }))
           .catch(error => diagnosticLog('browser.print.failed', 'error', { tabId: active.id, error }))
         break
       case 'devtools': if (advancedSettings.developerToolsEnabled) void openNativeDevtools(active.id); break
       case 'screenshot-visible': void saveScreenshot(false); break
       case 'screenshot-full': void saveScreenshot(true); break
       case 'translate-page':
-        void openReader().then(() => { setAiTranslationSource(''); setAiInitialMode('translate'); setAiOpen(true) })
+        void openReader().then(opened => {
+          if (!opened) return
+          setAiTranslationSource('')
+          setAiInitialMode('translate')
+          setAiOpen(true)
+        })
         break
       case 'new-private': openNewTab(undefined, { private: true }); break
       case 'fullscreen': void handleToggleFullscreen(); break
@@ -1306,11 +1316,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   async function saveScreenshot(fullPage: boolean, clip?: {x:number;y:number;width:number;height:number}) {
     diagnosticLog('browser.screenshot.requested', 'info', { tabId: active.id, fullPage, clipped: Boolean(clip), url: redactUrl(active.url) })
     try {
-      // The in-page toolbar menu lives inside the captured WebView. Remove it
-      // and allow WebView2 to commit a clean frame before taking the snapshot.
+      // Closing the trusted host menu makes the native child WebView visible
+      // again. Allow WebView2 to commit that clean frame before capture.
       setToolbarOverlay(null)
       if (hasNativeTab(active.id)) {
-        await setNativeToolbarMenu(active.id, false).catch(() => undefined)
         await new Promise(resolve => window.setTimeout(resolve, 80))
       }
       diagnosticLog('browser.screenshot.overlay-closed', 'info', { tabId: active.id })
@@ -1332,50 +1341,19 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     let unlisten: (() => void) | undefined
     void onNativeToolbarMenuAction(({ tabId, action, value }) => {
       if (disposed || tabId !== activeTabIdRef.current) return
-      if (action === 'bookmark-open' && value) void navigate(value)
+      if (action === 'bookmark-open' && value && bookmarkActions.bookmarks.some(item => item.url === value)) void navigate(value)
       else if (action === 'resource-scan') void scanCurrentResources()
       else if (action === 'resource-download' && value) {
         const resource = mediaResources.find(item => item.url === value)
         if (resource) void downloadMediaResource(resource)
       }
-      else if (action !== '__dismiss__') runBrowserMenuAction(action)
-      if (!action.startsWith('zoom-') || action === 'zoom-reset') setToolbarOverlay(null)
+      if (action !== 'resource-scan') setToolbarOverlay(null)
     }).then(stop => {
       if (disposed) stop()
       else unlisten = stop
     })
     return () => { disposed = true; unlisten?.() }
-  })
-
-  function toggleBrowserMenu() {
-    // Native popup menus are drawn by the OS above every child WebView. Keep
-    // the React dropdown closed so no hidden overlay state survives dismissal.
-    setToolbarOverlay(null)
-    void setNativeToolbarMenu(active.id, true, Math.round((zoomLevels[active.id] ?? browserAppearance.defaultZoom) * 100)).catch(error => {
-      console.error('browser toolbar menu failed', error)
-      messageApi.error('菜单浮层加载失败，请重启桌面应用后重试')
-    })
-  }
-
-  useEffect(() => {
-    if (!nativeMode) return
-    const isMenuTrigger = (event: Event) => event.target instanceof Element && !!event.target.closest('button[aria-label="浏览器菜单"]')
-    const stopPointerDown = (event: Event) => {
-      if (isMenuTrigger(event)) event.stopImmediatePropagation()
-    }
-    const interceptClick = (event: Event) => {
-      if (!isMenuTrigger(event)) return
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      toggleBrowserMenu()
-    }
-    document.addEventListener('pointerdown', stopPointerDown, true)
-    document.addEventListener('click', interceptClick, true)
-    return () => {
-      document.removeEventListener('pointerdown', stopPointerDown, true)
-      document.removeEventListener('click', interceptClick, true)
-    }
-  }, [active.id, nativeMode, toolbarOverlay, zoomLevels])
+  }, [active.id, bookmarkActions.bookmarks, mediaResources])
 
   const browserMenu: MenuProps['items'] = ([
     { key: 'find', label: '在页面中查找', extra: 'Ctrl+F', onClick: () => runBrowserMenuAction('find') },
@@ -1385,13 +1363,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     { key: 'bookmarks', label: '打开收藏夹', extra: 'Ctrl+Shift+O', onClick: () => runBrowserMenuAction('bookmarks') },
     { key: 'bulk-summary', label: '多链接 AI 摘要', extra: 'Ctrl+Shift+S', onClick: () => runBrowserMenuAction('bulk-summary') },
     { key: 'toggle-notes', label: '网页笔记面板', extra: 'Ctrl+Shift+N', onClick: () => runBrowserMenuAction('toggle-notes') },
-    { key: 'save-workspace', label: '保存当前标签为工作区', extra: 'Ctrl+Shift+W', icon: <SaveOutlined/>, disabled: tabs.length === 0, onClick: () => runBrowserMenuAction('save-workspace') },
+    { key: 'save-workspace', label: '保存全部标签为工作区', extra: 'Ctrl+Shift+W', icon: <SaveOutlined/>, disabled: tabs.length === 0, onClick: () => runBrowserMenuAction('save-workspace') },
     { key: 'translate-page', label: '翻译当前网页', icon: <TranslationOutlined/>, disabled: !active.url, onClick: () => runBrowserMenuAction('translate-page') },
     { key: 'print', label: '打印 / 保存为 PDF', icon: <PrinterOutlined/>, extra: 'Ctrl+P', disabled: !nativeMode, onClick: () => runBrowserMenuAction('print') },
     { key: 'devtools', label: '开发者工具', extra: 'F12', disabled: !nativeMode || !advancedSettings.developerToolsEnabled, onClick: () => runBrowserMenuAction('devtools') },
     { key: 'screenshot-visible', label: '截取可视区域', disabled: !nativeMode, onClick: () => runBrowserMenuAction('screenshot-visible') },
     { key: 'screenshot-full', label: '截取整个网页', disabled: !nativeMode, onClick: () => runBrowserMenuAction('screenshot-full') },
-    { key: 'clear-site-data', label: '清除此网站数据', disabled: !active.url || !nativeMode, onClick: () => runBrowserMenuAction('clear-site-data') },
+    { key: 'clear-site-data', label: '清除共享浏览数据', disabled: !active.url || !nativeMode, onClick: () => runBrowserMenuAction('clear-site-data') },
     currentBlock
       ? { key: 'site-unblock', label: '解除封杀此网站', icon: <StopOutlined/>, onClick: () => runBrowserMenuAction('site-unblock') }
       : { key: 'site-block', label: '封杀此网站', icon: <StopOutlined/>, disabled: !currentHost || !nativeMode, onClick: () => runBrowserMenuAction('site-block') },
@@ -2129,7 +2107,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }
 
   async function openReader() {
-    if (!hasNativeTab(active.id)) { messageApi.info('请先在桌面应用中打开一个网页'); return }
+    if (!hasNativeTab(active.id)) { messageApi.info('请先在桌面应用中打开一个网页'); return false }
     const key = 'reader'
     try {
       messageApi.open({ key, type: 'loading', content: '正在提取正文…', duration: 0 })
@@ -2138,7 +2116,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       setReaderArticle(article)
       setAiArticle(article)
       messageApi.open({ key, type: 'success', content: `已提取 ${article.wordCount} 字词` })
-    } catch { messageApi.open({ key, type: 'error', content: '无法识别该页面正文' }) }
+      return true
+    } catch {
+      messageApi.open({ key, type: 'error', content: '无法识别该页面正文' })
+      return false
+    }
   }
 
   const nativeSurfaceVisible = nativeMode
@@ -2296,7 +2278,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     />
     <Modal
       open={clearSiteDataOpen}
-      title="彻底清除 Cookie 与缓存"
+      title="清除共享浏览数据"
       okText="清除并重新加载"
       cancelText="取消"
       okButtonProps={{ danger: true }}
