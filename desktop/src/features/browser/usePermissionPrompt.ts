@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { onPermissionRequest, type PermissionRequest } from '../../services/nativeBrowser'
 import { respondPermissionRequest } from '../../services/permissions'
 import { getRule, setKind, type SitePermissionKind, type SitePermissionRule, type SitePermissionValue, writeSitePermissions, readSitePermissions } from './sitePermissions'
+import { permissionPromptQueueReducer } from './permissionPromptQueue'
 
 export type PermissionDecision = 'allow-once' | 'allow-always' | 'deny-once' | 'deny-always'
 
