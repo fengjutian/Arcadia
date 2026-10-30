@@ -1873,6 +1873,14 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     max-width: 18vw;
   }
 
+  .assistant-history-item {
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background-color .15s;
+
+    &:hover { background: var(--accent-soft); }
+  }
+
   .assistant-ui-thread {
     flex: 1;
     min-height: 0;

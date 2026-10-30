@@ -19,6 +19,7 @@ import {
   ClockCircleOutlined,
   CopyOutlined,
   DownloadOutlined,
+  DeleteOutlined,
   FileTextOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -58,6 +59,7 @@ import { AgentRunHistory } from '../../features/ai/AgentRunHistory'
 import { KnowledgeAttachmentAdapter } from '../../features/ai/knowledgeAttachmentAdapter'
 
 const CONVERSATION_KEY = 'ai.conversation.v1'
+const CONVERSATION_HISTORY_KEY = 'ai.conversation.history.v1'
 
 const SUGGESTED_PROMPTS = [
   { title: '总结我最近保存的内容', hint: '提炼最近资料里的关键结论', icon: <FileTextOutlined /> },
@@ -91,7 +93,26 @@ interface AssistantTurn {
 type Turn = UserTurn | AssistantTurn
 type AssistantPatch = Partial<Omit<AssistantTurn, 'id' | 'role'>>
 
+interface SavedConversation {
+  id: string
+  title: string
+  updatedAt: string
+  turns: Turn[]
+}
+
 const KNOWLEDGE_ATTACHMENT_ADAPTER = new KnowledgeAttachmentAdapter()
+
+function conversationTitle(turns: readonly Turn[]): string {
+  const firstQuestion = turns.find((turn): turn is UserTurn => turn.role === 'user')?.content.trim()
+  if (!firstQuestion) return '未命名对话'
+  return firstQuestion.length > 32 ? `${firstQuestion.slice(0, 32)}…` : firstQuestion
+}
+
+function restorableTurns(turns: readonly Turn[]): Turn[] {
+  return turns.map(turn => turn.role === 'user'
+    ? { id: turn.id, role: 'user', content: turn.content }
+    : { ...turn, pending: false, interrupted: turn.pending || turn.interrupted })
+}
 
 function conversationAsMarkdown(turns: readonly Turn[], documentsById: ReadonlyMap<string, Document>): string {
   const lines = ['# 知识库对话', '']
@@ -146,8 +167,11 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [agentBusy, setAgentBusy] = useState(false)
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([])
+  const [conversationHistory, setConversationHistory] = useState<SavedConversation[]>([])
+  const [historyHydrated, setHistoryHydrated] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
   const busyRef = useRef(false)
 
@@ -177,6 +201,14 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
             generalKnowledge:turn.generalKnowledge === true,
           }))
     }).catch(() => setTurns([])).finally(() => setConversationHydrated(true))
+    void getSession(CONVERSATION_HISTORY_KEY)
+      .then(raw => {
+        if (!raw) return
+        const parsed = JSON.parse(raw) as SavedConversation[]
+        if (Array.isArray(parsed)) setConversationHistory(parsed)
+      })
+      .catch(() => setConversationHistory([]))
+      .finally(() => setHistoryHydrated(true))
   }, [])
 
   useEffect(() => {
@@ -197,6 +229,11 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
         })
     void setSession(CONVERSATION_KEY, JSON.stringify(stored)).catch(() => undefined)
   }, [turns, conversationHydrated])
+
+  useEffect(() => {
+    if (!historyHydrated) return
+    void setSession(CONVERSATION_HISTORY_KEY, JSON.stringify(conversationHistory)).catch(() => undefined)
+  }, [conversationHistory, historyHydrated])
 
   useEffect(() => {
     const node = listRef.current
@@ -579,11 +616,36 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
     window.requestAnimationFrame(() => document.getElementById('assistant-question')?.focus())
   }
 
-  function clearConversation() {
+  function archiveCurrentConversation(excludeId?: string) {
+    if (turns.length === 0) return
+    const saved: SavedConversation = {
+      id: `conversation-${Date.now()}`,
+      title: conversationTitle(turns),
+      updatedAt: new Date().toISOString(),
+      turns: restorableTurns(turns),
+    }
+    setConversationHistory(current => [saved, ...current.filter(item => item.id !== excludeId)].slice(0, 50))
+  }
+
+  function startNewConversation() {
     if (busyRef.current) return
+    archiveCurrentConversation()
     setTurns([])
     setQuestion('')
     window.requestAnimationFrame(() => document.getElementById('assistant-question')?.focus())
+  }
+
+  function openSavedConversation(saved: SavedConversation) {
+    if (busyRef.current || agentBusy) return
+    archiveCurrentConversation(saved.id)
+    setConversationHistory(current => current.filter(item => item.id !== saved.id))
+    setTurns(restorableTurns(saved.turns))
+    setQuestion('')
+    setHistoryOpen(false)
+  }
+
+  function deleteSavedConversation(id: string) {
+    setConversationHistory(current => current.filter(item => item.id !== id))
   }
 
   async function copyConversation() {
@@ -847,6 +909,13 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
             }
             extra={
               <Space size={6} wrap>
+                <Button
+                  size="small"
+                  icon={<ClockCircleOutlined />}
+                  onClick={() => setHistoryOpen(true)}
+                >
+                  对话历史{conversationHistory.length > 0 ? ` ${conversationHistory.length}` : ''}
+                </Button>
                 {providers.length > 1 && (
                   <Select
                     size="small"
@@ -886,7 +955,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                       okText="新建"
                       okButtonProps={{ danger: true }}
                       disabled={busy || agentBusy}
-                      onConfirm={clearConversation}
+                      onConfirm={startNewConversation}
                     >
                       <Button size="small" icon={<PlusOutlined />} disabled={busy || agentBusy}>新对话</Button>
                     </Popconfirm>
@@ -966,6 +1035,49 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           </AssistantRuntimeProvider>
         </div>
 
+        <Drawer
+          title={`对话历史（${conversationHistory.length}）`}
+          placement="right"
+          width={420}
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+        >
+          <List
+            dataSource={conversationHistory}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无历史对话；新建对话后，当前内容会自动保存在这里。" /> }}
+            renderItem={item => (
+              <List.Item
+                className="assistant-history-item"
+                onClick={() => openSavedConversation(item)}
+                actions={[
+                  <Popconfirm
+                    key="delete"
+                    title="删除这条历史对话？"
+                    description="删除后无法恢复。"
+                    okText="删除"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => deleteSavedConversation(item.id)}
+                  >
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      title="删除这条历史对话"
+                      onClick={event => event.stopPropagation()}
+                    />
+                  </Popconfirm>,
+                ]}
+              >
+                <List.Item.Meta
+                  avatar={<ClockCircleOutlined />}
+                  title={item.title}
+                  description={`${item.turns.filter(turn => turn.role === 'user').length} 轮 · ${new Date(item.updatedAt).toLocaleString('zh-CN')}`}
+                />
+              </List.Item>
+            )}
+          />
+        </Drawer>
         <Drawer
           title={citedDocIds.size > 0 ? `引用来源（${citedDocIds.size}）` : `知识库来源（${documents.length}）`}
           placement="right"

@@ -1,0 +1,189 @@
+import { useEffect, useMemo, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Alert, Button, Empty, Input, Select, Spin, Tag } from '../../components/ui'
+import { ArrowUpOutlined, FileTextOutlined, RobotOutlined, SearchOutlined } from '../../components/ui/icons'
+import { aiChat, listAIProviders, ragRetrieve, searchDocuments, type RagRetrieveResponse } from '../../api'
+import type { AIProvider, ChatMessage } from '../../types'
+import { buildAiSearchRequest, citedSourceIds, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
+
+interface AiSearchTurn {
+  id: string
+  question: string
+  answer: string
+  sources: AiSearchSource[]
+  citedIds: string[]
+}
+
+export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
+  const [providers, setProviders] = useState<AIProvider[]>([])
+  const [providerId, setProviderId] = useState('')
+  const [question, setQuestion] = useState(initialQuery)
+  const [turns, setTurns] = useState<AiSearchTurn[]>([])
+  const [busy, setBusy] = useState(false)
+  const [loadingProviders, setLoadingProviders] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let current = true
+    void listAIProviders()
+      .then(items => {
+        if (!current) return
+        setProviders(items)
+        setProviderId(previous => previous || items[0]?.id || '')
+      })
+      .catch(caught => { if (current) setError(errorText(caught, '读取 AI Provider 失败')) })
+      .finally(() => { if (current) setLoadingProviders(false) })
+    return () => { current = false }
+  }, [])
+
+  useEffect(() => {
+    if (initialQuery.trim() && turns.length === 0) setQuestion(initialQuery)
+  }, [initialQuery, turns.length])
+
+  const activeProvider = providers.find(provider => provider.id === providerId)
+  const history = useMemo<ChatMessage[]>(() => turns.flatMap(turn => [
+    { role: 'user', content: turn.question },
+    { role: 'assistant', content: turn.answer },
+  ]).slice(-6), [turns])
+
+  async function submit(rawQuestion = question) {
+    const prompt = rawQuestion.trim()
+    if (!prompt || !providerId || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const provider = providers.find(item => item.id === providerId)
+      const baseQuery = {
+        query: prompt,
+        topK: 10,
+        candidateK: 24,
+        includeArchived: false,
+        retrievalMode: provider?.embeddingModel ? 'hybrid' as const : 'lexical' as const,
+        rerank: Boolean(provider?.embeddingModel),
+        providerId,
+        embeddingModel: provider?.embeddingModel,
+      }
+      let retrieval: RagRetrieveResponse
+      try {
+        retrieval = await ragRetrieve(providerId, baseQuery)
+      } catch (caught) {
+        if (!provider?.embeddingModel) throw caught
+        retrieval = await ragRetrieve(providerId, { ...baseQuery, retrievalMode: 'lexical', rerank: false, embeddingModel: undefined })
+      }
+      let sources = sourcesFromRetrieval(retrieval)
+      if (sources.length === 0) {
+        const documents = await searchDocuments(prompt)
+        sources = documents.slice(0, 8).map((document, index) => ({
+          id: `S${index + 1}`,
+          documentId: document.id,
+          title: document.title || document.url || '未命名来源',
+          url: document.url,
+          excerpt: (document.markdownSnippet || document.summarySnippet || document.summary || document.markdown || '').trim().slice(0, 2400),
+        })).filter(source => source.excerpt.length > 0)
+      }
+      if (sources.length === 0) {
+        setError('本地知识库中没有找到足够证据。请先保存相关网页，或换一种问法。')
+        return
+      }
+      const response = await aiChat(providerId, buildAiSearchRequest(prompt, sources, history))
+      const answer = response.content.trim()
+      if (!answer) throw new Error('模型返回了空答案')
+      setTurns(current => [...current, {
+        id: `ai-search-${Date.now()}`,
+        question: prompt,
+        answer,
+        sources,
+        citedIds: citedSourceIds(answer, sources),
+      }])
+      setQuestion('')
+    } catch (caught) {
+      setError(errorText(caught, 'AI 搜索失败，请稍后重试'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loadingProviders) return <div className="ai-search-loading"><Spin/><span>正在读取模型配置…</span></div>
+
+  return <div className="ai-search">
+    <div className="ai-search__composer">
+      <div className="ai-search__composer-head">
+        <span><RobotOutlined/> 基于本地知识库生成带引用的结构化答案</span>
+        {providers.length > 0 && <Select
+          className="ai-search__provider"
+          ariaLabel="AI Provider"
+          value={providerId}
+          options={providers.map(provider => ({ label: provider.model, value: provider.id }))}
+          onChange={setProviderId}
+        />}
+      </div>
+      <div className="ai-search__input-row">
+        <Input.TextArea
+          value={question}
+          onChange={event => setQuestion(event.target.value)}
+          placeholder="例如：比较我保存过的 SQLite FTS 与向量检索方案"
+          aria-label="AI 搜索问题"
+          autoSize={{ minRows: 2, maxRows: 5 }}
+          onKeyDown={event => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              void submit()
+            }
+          }}
+        />
+        <Button type="primary" icon={busy ? <Spin size="small"/> : <ArrowUpOutlined/>} disabled={!question.trim() || !providerId || busy} onClick={() => void submit()}>
+          {busy ? '生成中' : '搜索'}
+        </Button>
+      </div>
+      <div className="ai-search__hint">Enter 发送 · Shift + Enter 换行 · 只使用本地知识库证据</div>
+    </div>
+
+    {providers.length === 0 && <Empty
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description="尚未配置 AI Provider。请先在设置中添加兼容模型。"
+    />}
+    {error && <Alert type="warning" showIcon message={error}/>} 
+
+    {turns.length === 0 && providers.length > 0 && !error && <div className="ai-search__empty">
+      <SearchOutlined/>
+      <h2>把搜索结果整理成答案</h2>
+      <p>AI 会先检索本地知识库，再生成带来源的结论、步骤或对比表。</p>
+    </div>}
+
+    <div className="ai-search__turns">
+      {turns.map((turn, index) => <article className="ai-search-answer" key={turn.id}>
+        <header>
+          <span className="ai-search-answer__index">{index + 1}</span>
+          <div><small>问题</small><h2>{turn.question}</h2></div>
+        </header>
+        <div className="ai-search-answer__markdown markdown-body">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.answer}</ReactMarkdown>
+        </div>
+        <section className="ai-search-sources" aria-label="答案来源">
+          <h3><FileTextOutlined/> 来源</h3>
+          <div className="ai-search-sources__list">
+            {turn.sources.map(source => <button key={source.id} type="button" onClick={() => onOpenUrl?.(source.url)}>
+              <Tag color={turn.citedIds.includes(source.id) ? 'green' : undefined}>{source.id}</Tag>
+              <span><b>{source.title}</b><small>{domainOf(source.url)}</small></span>
+            </button>)}
+          </div>
+        </section>
+        {index === turns.length - 1 && <div className="ai-search-followups">
+          <span>继续追问</span>
+          {['给我一个具体实施步骤', '有哪些风险或反例？', '用表格比较关键选项'].map(item => <button key={item} type="button" disabled={busy} onClick={() => { setQuestion(item); void submit(item) }}>{item}</button>)}
+        </div>}
+      </article>)}
+    </div>
+    {turns.length > 0 && <div className="ai-search__footer-note">当前模型：{activeProvider?.model ?? '—'} · 新追问会重新检索本地证据</div>}
+  </div>
+}
+
+function domainOf(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, '') }
+  catch { return url }
+}
+
+function errorText(caught: unknown, fallback: string): string {
+  return caught instanceof Error && caught.message ? caught.message : fallback
+}

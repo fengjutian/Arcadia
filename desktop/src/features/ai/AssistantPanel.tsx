@@ -18,6 +18,8 @@ interface AssistantPanelProps {
   currentUrl: string
   currentTabId: string
   readerArticle: ReaderArticle | null
+  pageContextPending?: boolean
+  pageContextError?: string | null
   pdfArticle?: ReaderArticle | null
   pdfContextError?: string | null
   initialQuestion?: string
@@ -41,7 +43,7 @@ interface PanelPosition { x: number | null; y: number }
 
 const PANEL_EDGE_GAP = 12
 
-export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId, readerArticle, pdfArticle = null, pdfContextError = null, initialQuestion = '', initialMode, translationSource = '', nativeWindow = false }: AssistantPanelProps) {
+export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId, readerArticle, pageContextPending = false, pageContextError = null, pdfArticle = null, pdfContextError = null, initialQuestion = '', initialMode, translationSource = '', nativeWindow = false }: AssistantPanelProps) {
   const article = readerArticle ?? pdfArticle
   const isPdfContext = /^file:\/\/.*\.pdf(?:$|[?#])/i.test(currentUrl)
   const [messageApi, contextHolder] = message.useMessage()
@@ -166,7 +168,7 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
   async function generateSummary() {
     if (!providerId) { setError('请先在「设置 → AI Provider」中配置一个 Provider。'); return }
     const markdown = (translationSource || article?.markdown || '').trim()
-    if (!markdown) { setError('请先打开「阅读模式」提取页面正文。'); return }
+    if (!markdown) { setError('暂时无法提取当前页面正文。'); return }
     setBusy(true); setError(null); setSummary('')
     try {
       const request = buildSummaryPrompt(markdown, kind, article?.title || currentUrl)
@@ -180,7 +182,7 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
     if (!providerId) { setError('请先在「设置 → AI Provider」中配置一个 Provider。'); return }
     const markdown = article?.markdown?.trim()
     const trimmed = question.trim()
-    if (!markdown) { setError('请先打开「阅读模式」提取页面正文。'); return }
+    if (!markdown) { setError('暂时无法提取当前页面正文。'); return }
     if (!trimmed) { setError('请输入问题。'); return }
     setBusy(true); setError(null); setAskAnswer(''); setAskCitations([]); setAskNotFound(false)
     try {
@@ -200,7 +202,7 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
   async function translateArticle() {
     if (!providerId) { setError('请先在「设置 → AI Provider」中配置一个 Provider。'); return }
     const markdown = article?.markdown?.trim()
-    if (!markdown) { setError('请先打开「阅读模式」提取页面正文。'); return }
+    if (!markdown) { setError('暂时无法提取当前页面正文。'); return }
     const input = { markdown, targetLanguage, view: translationView }
     const key = translationKey(input)
     const hit = cache.find(entry => entry.key === key)
@@ -264,10 +266,10 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
     </Space>
     <Card size="small" className="context-card">
       {article
-        ? <><GlobalOutlined/> {isPdfContext ? 'PDF 文本' : '阅读模式'} · {article.wordCount} 字<Tag color="success">就绪</Tag></>
+        ? <><GlobalOutlined/> {isPdfContext ? 'PDF 文本' : '页面正文'} · {article.wordCount} 字<Tag color="success">就绪</Tag></>
         : isPdfContext
           ? <><GlobalOutlined/> PDF 文本<Tag>{pdfContextError || '正在提取'}</Tag></>
-          : <><GlobalOutlined/> 当前页面<Tag>请先进入阅读模式</Tag></>}
+          : <><GlobalOutlined/> 当前页面<Tag>{pageContextPending ? '正在提取正文' : pageContextError || '无法提取正文'}</Tag></>}
     </Card>
 
     {mode === 'summarize' && (

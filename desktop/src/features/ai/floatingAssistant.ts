@@ -12,6 +12,8 @@ export interface FloatingAssistantPayload {
   currentUrl: string
   currentTabId: string
   readerArticle: ReaderArticle | null
+  pageContextPending: boolean
+  pageContextError: string | null
   pdfArticle: ReaderArticle | null
   pdfContextError: string | null
   initialQuestion: string

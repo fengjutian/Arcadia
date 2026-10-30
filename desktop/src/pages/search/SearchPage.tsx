@@ -1,4 +1,4 @@
-import { AutoComplete, Button, Input, Modal, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
+import { AutoComplete, Button, Input, Modal, Segmented, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
 import { BookOutlined, ClockCircleOutlined, FileTextOutlined, InboxOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
@@ -9,6 +9,7 @@ import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { renderHighlightedSnippet } from '../../features/search/renderSnippet'
 import { X } from 'lucide-react'
 import { dedupeSearchResults, matchesAdvancedSearch, parseAdvancedSearch } from '../../features/search/advancedSearch'
+import { AiSearchPanel } from '../../features/search/AiSearchPanel'
 
 type SortKey = 'recent' | 'oldest' | 'starred' | 'relevance'
 
@@ -19,6 +20,7 @@ const SORT_OPTIONS: Array<{ label: string; value: SortKey }> = [
 ]
 
 export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
+  const [searchMode, setSearchMode] = useState<'local' | 'ai'>('local')
   const [query, setQuery] = useState(initialQuery)
   const debouncedQuery = useDebouncedValue(query, 250)
   const advancedQuery = useMemo(() => parseAdvancedSearch(debouncedQuery), [debouncedQuery])
@@ -179,9 +181,9 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
 
   return <section className="page search-page">
     <PageHeader
-      eyebrow="LOCAL SEARCH"
-      title="找回你读过的内容"
-      description="搜索保存在本地 SQLite 中的真实网页内容。"
+      eyebrow={searchMode === 'ai' ? 'AI SEARCH' : 'LOCAL SEARCH'}
+      title={searchMode === 'ai' ? '从资料中得到答案' : '找回你读过的内容'}
+      description={searchMode === 'ai' ? '检索本地知识库，并生成带引用、可继续追问的结构化答案。' : '搜索保存在本地 SQLite 中的真实网页内容。'}
       extra={<div className={`search-status${loading ? ' is-loading' : ''}${unavailable ? ' is-error' : ''}`} aria-live="polite">
         <span className="search-status__dot" aria-hidden="true"/>
         {loading
@@ -193,6 +195,14 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     />
 
     <div className="search-page__body">
+      <div className="search-mode-switch">
+        <Segmented<'local' | 'ai'>
+          value={searchMode}
+          options={[{ label: '普通搜索', value: 'local' }, { label: 'AI 搜索', value: 'ai' }]}
+          onChange={setSearchMode}
+        />
+      </div>
+      {searchMode === 'ai' ? <AiSearchPanel initialQuery={query} onOpenUrl={onOpenUrl}/> : <>
       <div className="search-console">
         <AutoComplete options={searchSuggestions.map(value => ({ value, label: value }))} value={query} onChange={setQuery} onSelect={value => { setQuery(value); rememberQuery(value) }}>
         <Input
@@ -317,6 +327,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
           </section>}
         </>
       )}
+      </>}
     </div>
 
     <Modal

@@ -153,6 +153,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const certificatePrompt = useCertificatePrompt()
   const bookmarkActions = useBookmarks()
   const [readerArticle, setReaderArticle] = useState<ReaderArticle | null>(null)
+  const [aiArticle, setAiArticle] = useState<ReaderArticle | null>(null)
+  const [aiContextPending, setAiContextPending] = useState(false)
+  const [aiContextError, setAiContextError] = useState<string | null>(null)
   const [pdfArticle, setPdfArticle] = useState<ReaderArticle | null>(null)
   const [pdfContextError, setPdfContextError] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
@@ -222,7 +225,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     void openFloatingAssistant({
       currentUrl: active.url,
       currentTabId: active.id,
-      readerArticle,
+      readerArticle: readerArticle ?? aiArticle,
+      pageContextPending: aiContextPending,
+      pageContextError: aiContextError,
       pdfArticle,
       pdfContextError,
       initialQuestion: aiInitialQuestion,
@@ -232,7 +237,27 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       console.error('failed to open floating AI assistant', error)
       setAiOpen(false)
     })
-  }, [active.id, active.url, aiInitialMode, aiInitialQuestion, aiOpen, aiTranslationSource, nativeMode, pdfArticle, pdfContextError, readerArticle])
+  }, [active.id, active.url, aiArticle, aiContextError, aiContextPending, aiInitialMode, aiInitialQuestion, aiOpen, aiTranslationSource, nativeMode, pdfArticle, pdfContextError, readerArticle])
+
+  useEffect(() => {
+    if (!aiOpen || !nativeMode || readerArticle || pdfArticle || active.loading || active.error || active.crashed || !hasNativeTab(active.id) || !/^https?:\/\//i.test(active.url)) return
+    let cancelled = false
+    setAiArticle(null)
+    setAiContextError(null)
+    setAiContextPending(true)
+    void captureNativePage(active.id)
+      .then(snapshot => extractArticle(snapshot))
+      .then(article => {
+        if (!cancelled) setAiArticle(article)
+      })
+      .catch(() => {
+        if (!cancelled) setAiContextError('无法提取正文')
+      })
+      .finally(() => {
+        if (!cancelled) setAiContextPending(false)
+      })
+    return () => { cancelled = true }
+  }, [active.crashed, active.error, active.id, active.loading, active.url, aiOpen, nativeMode, pdfArticle, readerArticle])
   const currentHost = useMemo(() => hostFromUrl(active.url), [active.url])
   // `blacklistVersion` forces a re-match after the list is mutated elsewhere.
   const currentBlock = useMemo(() => findBlockingEntry(active.url), [active.url, blacklistVersion])
@@ -1907,7 +1932,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     const key = 'save-document'
     try {
       messageApi.open({ key, type: 'loading', content: '正在保存并提取…', duration: 0 })
-      let article = readerArticle
+      let article = readerArticle ?? aiArticle
       if (!article && hasNativeTab(active.id)) article = extractArticle(await captureNativePage(active.id))
       if (!article?.markdown?.trim()) throw new Error('reader_content_not_found')
       const created = await saveDocument({ title: article.title || active.title, url: active.url || 'about:blank', markdown: article.markdown, tags: ['Inbox'] })
@@ -1951,6 +1976,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       const article = extractArticle(await captureNativePage(active.id))
       await hideNativeTab(active.id)
       setReaderArticle(article)
+      setAiArticle(article)
       messageApi.open({ key, type: 'success', content: `已提取 ${article.wordCount} 字词` })
     } catch { messageApi.open({ key, type: 'error', content: '无法识别该页面正文' }) }
   }
@@ -2091,7 +2117,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             ? <div className="web-surface__loading"><LoadingOutlined spin/></div>
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:'当前网页需要在 Tauri 桌面应用中打开。'}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
-              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{
