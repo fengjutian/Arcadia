@@ -1,5 +1,5 @@
 import type { ChatRequest, ChatMessage } from '../../types'
-import type { RagRetrieveResponse } from '../../api'
+import type { DocumentSearchHit, RagRetrieveResponse } from '../../api'
 
 export interface AiSearchSource {
   id: string
@@ -9,24 +9,78 @@ export interface AiSearchSource {
   excerpt: string
 }
 
+type AiSearchSourceInput = Omit<AiSearchSource, 'id'>
+
+const TRACKING_PARAMETERS = new Set(['fbclid', 'gclid', 'mc_cid', 'mc_eid', 'ref', 'ref_src', 'source', 'spm'])
+
 export function sourcesFromRetrieval(retrieval: RagRetrieveResponse, limit = 8): AiSearchSource[] {
-  const seen = new Set<string>()
-  const sources: AiSearchSource[] = []
-  for (const hit of retrieval.hits) {
+  const candidates: AiSearchSourceInput[] = []
+  for (const hit of retrieval.hits.slice(0, Math.max(limit * 4, limit))) {
     const chunk = hit.chunk
-    const key = chunk.documentId || chunk.chunkId
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    sources.push({
-      id: `S${sources.length + 1}`,
+    if (!chunk.documentId && !chunk.chunkId) continue
+    candidates.push({
       documentId: chunk.documentId,
       title: chunk.title || chunk.url || '未命名来源',
       url: chunk.url,
       excerpt: chunk.text.trim().slice(0, 2400),
     })
-    if (sources.length >= limit) break
   }
-  return sources
+  return prepareAiSearchSources(candidates, limit)
+}
+
+export function sourcesFromDocuments(documents: readonly DocumentSearchHit[], limit = 8): AiSearchSource[] {
+  return prepareAiSearchSources(documents.map(document => ({
+    documentId: document.id,
+    title: document.title || document.url || '未命名来源',
+    url: document.url,
+    excerpt: (document.markdownSnippet || document.summarySnippet || document.summary || document.markdown || '').trim().slice(0, 2400),
+  })), limit)
+}
+
+export function canonicalSourceUrl(value: string): string {
+  try {
+    const url = new URL(value)
+    url.hash = ''
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, '')
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (key.toLowerCase().startsWith('utm_') || TRACKING_PARAMETERS.has(key.toLowerCase())) url.searchParams.delete(key)
+    }
+    url.searchParams.sort()
+    if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, '')
+    return url.toString()
+  } catch {
+    return value.trim().toLowerCase().replace(/#.*$/, '')
+  }
+}
+
+export function prepareAiSearchSources(candidates: readonly AiSearchSourceInput[], limit = 8): AiSearchSource[] {
+  const unique: AiSearchSourceInput[] = []
+  const seen = new Set<string>()
+  for (const source of candidates) {
+    if (!source.excerpt.trim()) continue
+    const canonicalUrl = canonicalSourceUrl(source.url)
+    const key = canonicalUrl || `document:${source.documentId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push({ ...source, url:canonicalUrl || source.url })
+  }
+
+  const selected: AiSearchSourceInput[] = []
+  const deferred: AiSearchSourceInput[] = []
+  const domains = new Map<string, number>()
+  for (const source of unique) {
+    const domain = sourceDomain(source.url)
+    const count = domains.get(domain) ?? 0
+    if (domain && count >= 2) { deferred.push(source); continue }
+    selected.push(source)
+    if (domain) domains.set(domain, count + 1)
+    if (selected.length >= limit) break
+  }
+  for (const source of deferred) {
+    if (selected.length >= limit) break
+    selected.push(source)
+  }
+  return selected.slice(0, limit).map((source, index) => ({ ...source, id:`S${index + 1}` }))
 }
 
 export function buildAiSearchRequest(
@@ -70,4 +124,9 @@ export function buildAiSearchRequest(
 export function citedSourceIds(markdown: string, validSources: readonly AiSearchSource[]): string[] {
   const valid = new Set(validSources.map(source => source.id))
   return Array.from(markdown.matchAll(/\[(S\d+)]/g), match => match[1]).filter((id, index, all) => valid.has(id) && all.indexOf(id) === index)
+}
+
+function sourceDomain(value: string): string {
+  try { return new URL(value).hostname.replace(/^www\./, '') }
+  catch { return '' }
 }

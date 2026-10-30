@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Alert, Button, Empty, Input, message, Modal, Select, Spin, Tag } from '../../components/ui'
-import { ArrowUpOutlined, CheckCircleOutlined, CopyOutlined, DownloadOutlined, ExportOutlined, FileTextOutlined, FullscreenOutlined, PlusOutlined, RobotOutlined, SaveOutlined, SearchOutlined } from '../../components/ui/icons'
+import { ArrowUpOutlined, CheckCircleOutlined, ClockCircleOutlined, CopyOutlined, DownloadOutlined, ExportOutlined, FileTextOutlined, FullscreenOutlined, PlusOutlined, ReloadOutlined, RobotOutlined, SaveOutlined, SearchOutlined } from '../../components/ui/icons'
 import { aiChat, getSession, listAIProviders, ragRetrieve, saveDocument, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
 import type { AIProvider, ChatMessage } from '../../types'
-import { buildAiSearchRequest, citedSourceIds, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
+import { buildAiSearchRequest, citedSourceIds, sourcesFromDocuments, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
 import {
   answerAsMarkdown,
   extractFollowUpQuestions,
@@ -26,9 +26,12 @@ interface AiSearchTurn {
   sources: AiSearchSource[]
   citedIds: string[]
   savedDocumentId?: string
+  versionCreatedAt?: string
+  previousVersions?: AiSearchVersion[]
 }
 
 interface AnswerPreview { turnId: string; title: string; html: string }
+interface AiSearchVersion { id: string; answer: string; sources: AiSearchSource[]; citedIds: string[]; createdAt: string }
 
 export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
   const [providers, setProviders] = useState<AIProvider[]>([])
@@ -40,6 +43,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   const [sessionHydrated, setSessionHydrated] = useState(false)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<AnswerPreview | null>(null)
+  const [versionTurnId, setVersionTurnId] = useState<string | null>(null)
   const previewFrameRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -97,54 +101,46 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     { role: 'assistant', content: turn.answer },
   ]).slice(-6), [turns])
 
+  async function generateAnswer(prompt: string, conversationHistory: readonly ChatMessage[]) {
+    const provider = providers.find(item => item.id === providerId)
+    const baseQuery = {
+      query: prompt,
+      topK: 10,
+      candidateK: 24,
+      includeArchived: false,
+      retrievalMode: provider?.embeddingModel ? 'hybrid' as const : 'lexical' as const,
+      rerank: Boolean(provider?.embeddingModel),
+      providerId,
+      embeddingModel: provider?.embeddingModel,
+    }
+    let retrieval: RagRetrieveResponse
+    try {
+      retrieval = await ragRetrieve(providerId, baseQuery)
+    } catch (caught) {
+      if (!provider?.embeddingModel) throw caught
+      retrieval = await ragRetrieve(providerId, { ...baseQuery, retrievalMode:'lexical', rerank:false, embeddingModel:undefined })
+    }
+    let sources = sourcesFromRetrieval(retrieval)
+    if (sources.length === 0) sources = sourcesFromDocuments(await searchDocuments(prompt))
+    if (sources.length === 0) throw new Error('本地知识库中没有找到足够证据。请先保存相关网页，或换一种问法。')
+    const response = await aiChat(providerId, buildAiSearchRequest(prompt, sources, conversationHistory))
+    const answer = response.content.trim()
+    if (!answer) throw new Error('模型返回了空答案')
+    return { answer, sources, citedIds:citedSourceIds(answer, sources) }
+  }
+
   async function submit(rawQuestion = question) {
     const prompt = rawQuestion.trim()
     if (!prompt || !providerId || busy) return
     setBusy(true)
     setError('')
     try {
-      const provider = providers.find(item => item.id === providerId)
-      const baseQuery = {
-        query: prompt,
-        topK: 10,
-        candidateK: 24,
-        includeArchived: false,
-        retrievalMode: provider?.embeddingModel ? 'hybrid' as const : 'lexical' as const,
-        rerank: Boolean(provider?.embeddingModel),
-        providerId,
-        embeddingModel: provider?.embeddingModel,
-      }
-      let retrieval: RagRetrieveResponse
-      try {
-        retrieval = await ragRetrieve(providerId, baseQuery)
-      } catch (caught) {
-        if (!provider?.embeddingModel) throw caught
-        retrieval = await ragRetrieve(providerId, { ...baseQuery, retrievalMode: 'lexical', rerank: false, embeddingModel: undefined })
-      }
-      let sources = sourcesFromRetrieval(retrieval)
-      if (sources.length === 0) {
-        const documents = await searchDocuments(prompt)
-        sources = documents.slice(0, 8).map((document, index) => ({
-          id: `S${index + 1}`,
-          documentId: document.id,
-          title: document.title || document.url || '未命名来源',
-          url: document.url,
-          excerpt: (document.markdownSnippet || document.summarySnippet || document.summary || document.markdown || '').trim().slice(0, 2400),
-        })).filter(source => source.excerpt.length > 0)
-      }
-      if (sources.length === 0) {
-        setError('本地知识库中没有找到足够证据。请先保存相关网页，或换一种问法。')
-        return
-      }
-      const response = await aiChat(providerId, buildAiSearchRequest(prompt, sources, history))
-      const answer = response.content.trim()
-      if (!answer) throw new Error('模型返回了空答案')
+      const generated = await generateAnswer(prompt, history)
       setTurns(current => [...current, {
         id: `ai-search-${Date.now()}`,
         question: prompt,
-        answer,
-        sources,
-        citedIds: citedSourceIds(answer, sources),
+        ...generated,
+        versionCreatedAt:new Date().toISOString(),
       }])
       setQuestion('')
     } catch (caught) {
@@ -152,6 +148,50 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     } finally {
       setBusy(false)
     }
+  }
+
+  async function regenerateTurn(turn: AiSearchTurn) {
+    if (busy || !providerId) return
+    setBusy(true)
+    setError('')
+    try {
+      const turnIndex = turns.findIndex(item => item.id === turn.id)
+      const priorHistory = turns.slice(0, Math.max(0, turnIndex)).flatMap(item => [
+        { role:'user', content:item.question },
+        { role:'assistant', content:item.answer },
+      ]).slice(-6)
+      const generated = await generateAnswer(turn.question, priorHistory)
+      const previous = versionFromTurn(turn)
+      setTurns(current => current.map(item => item.id === turn.id ? {
+        ...item,
+        ...generated,
+        savedDocumentId:undefined,
+        versionCreatedAt:new Date().toISOString(),
+        previousVersions:[...(item.previousVersions ?? []), previous].slice(-5),
+      } : item))
+      message.success('已生成新版本，旧版本已保留')
+    } catch (caught) { setError(errorText(caught, '重新生成失败，请稍后重试')) }
+    finally { setBusy(false) }
+  }
+
+  function restoreVersion(turnId: string, versionId: string) {
+    setTurns(current => current.map(turn => {
+      if (turn.id !== turnId) return turn
+      const target = turn.previousVersions?.find(version => version.id === versionId)
+      if (!target) return turn
+      const currentVersion = versionFromTurn(turn)
+      return {
+        ...turn,
+        answer:target.answer,
+        sources:target.sources,
+        citedIds:target.citedIds,
+        versionCreatedAt:target.createdAt,
+        previousVersions:[...(turn.previousVersions ?? []).filter(version => version.id !== versionId), currentVersion].slice(-5),
+        savedDocumentId:undefined,
+      }
+    }))
+    setVersionTurnId(null)
+    message.success('已恢复所选版本')
   }
 
   async function copyTurn(turn: AiSearchTurn) {
@@ -269,6 +309,8 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
           <div><small>问题</small><h2>{turn.question}</h2></div>
           <div className="ai-search-answer__actions">
             <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>复制</Button>
+            <Button size="small" type="text" icon={<ReloadOutlined/>} disabled={busy} onClick={() => void regenerateTurn(turn)}>重生成</Button>
+            {(turn.previousVersions?.length ?? 0) > 0 && <Button size="small" type="text" icon={<ClockCircleOutlined/>} onClick={() => setVersionTurnId(turn.id)}>版本 {turn.previousVersions?.length}</Button>}
             <Button size="small" type="text" icon={turn.savedDocumentId ? <CheckCircleOutlined/> : <SaveOutlined/>} disabled={Boolean(turn.savedDocumentId)} onClick={() => void saveTurn(turn)}>{turn.savedDocumentId ? '已保存' : '保存'}</Button>
             <Button size="small" type="text" icon={<ExportOutlined/>} onClick={() => void shareTurn(turn)}>分享</Button>
             <Button size="small" type="text" icon={<FullscreenOutlined/>} onClick={() => previewTurn(turn)}>页面</Button>
@@ -312,6 +354,23 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
         referrerPolicy="no-referrer"
         srcDoc={preview.html}
       />}
+    </Modal>
+    <Modal
+      open={versionTurnId !== null}
+      title="回答历史版本"
+      width={720}
+      footer={<Button onClick={() => setVersionTurnId(null)}>关闭</Button>}
+      onCancel={() => setVersionTurnId(null)}
+      destroyOnHidden
+    >
+      <div className="ai-search-versions">
+        {(turns.find(turn => turn.id === versionTurnId)?.previousVersions ?? []).map((version, index) => <article key={version.id}>
+          <div><b>版本 {index + 1}</b><time>{formatVersionTime(version.createdAt)}</time></div>
+          <p>{version.answer.replace(/[#*_`>\[\]]/g, '').slice(0, 240)}{version.answer.length > 240 ? '…' : ''}</p>
+          <span>{version.sources.length} 个来源</span>
+          <Button size="small" onClick={() => versionTurnId && restoreVersion(versionTurnId, version.id)}>恢复此版本</Button>
+        </article>)}
+      </div>
     </Modal>
   </div>
 }
@@ -417,7 +476,33 @@ function isStoredTurns(value: unknown): value is AiSearchTurn[] {
       && Array.isArray(item.sources)
       && Array.isArray(item.citedIds)
       && (item.savedDocumentId === undefined || typeof item.savedDocumentId === 'string')
+      && (item.versionCreatedAt === undefined || typeof item.versionCreatedAt === 'string')
+      && (item.previousVersions === undefined || isStoredVersions(item.previousVersions))
   })
+}
+
+function isStoredVersions(value: unknown): value is AiSearchVersion[] {
+  return Array.isArray(value) && value.every(version => {
+    if (!version || typeof version !== 'object') return false
+    const item = version as Partial<AiSearchVersion>
+    return typeof item.id === 'string' && typeof item.answer === 'string' && typeof item.createdAt === 'string'
+      && Array.isArray(item.sources) && Array.isArray(item.citedIds)
+  })
+}
+
+function versionFromTurn(turn: AiSearchTurn): AiSearchVersion {
+  return {
+    id:`version-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    answer:turn.answer,
+    sources:turn.sources,
+    citedIds:turn.citedIds,
+    createdAt:turn.versionCreatedAt ?? new Date().toISOString(),
+  }
+}
+
+function formatVersionTime(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN')
 }
 
 function isPreviewFollowUp(value: unknown): value is { type:'arcadia-ai-search-follow-up'; question:string; option:string; comment:string } {

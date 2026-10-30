@@ -156,6 +156,22 @@
   background: #f5f2eb;
 }
 
+.ai-search-versions { display: grid; gap: 10px; }
+.ai-search-versions article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 14px;
+  padding: 13px;
+  border: 1px solid var(--search-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, #fff 62%, transparent);
+
+  > div { display: flex; align-items: center; gap: 9px; }
+  time, > span { color: var(--search-muted); font-size: 11px; }
+  p { grid-column: 1 / -1; margin: 0; color: var(--search-muted); font-size: 12.5px; line-height: 1.6; }
+  > .ui-button { grid-column: 2; grid-row: 1; }
+}
+
 .ai-search__empty {
   display: grid;
   place-items: center;

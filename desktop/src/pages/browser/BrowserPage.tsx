@@ -707,24 +707,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   useEffect(() => {
     if (previousTab.current && previousTab.current !== active.id) void hideNativeTab(previousTab.current)
     previousTab.current = active.id
-    if (hasNativeTab(active.id)) {
-      if (visible && !active.error) {
-        if (modalOverlayCount > 0 || toolbarOverlay === 'tab-menu') {
-          void hideNativeTab(active.id)
-        } else {
-          void showNativeTab(active.id)
-          requestAnimationFrame(() => {
-            const next = bounds()
-            if (!next) return
-            const inset = toolbarOverlay ? TOOLBAR_OVERLAY_INSET[toolbarOverlay] ?? 0 : 0
-            void resizeNativeTab(active.id, { ...next, width: Math.max(1, next.width - inset) })
-          })
-        }
-      } else {
-        void hideNativeTab(active.id)
-      }
-    }
-  }, [active.error, active.id, modalOverlayCount, toolbarOverlay, visible])
+    // Visibility and bounds for the active view are synchronized by the
+    // effect above. Showing it here before the next resize briefly paints the
+    // previous bounds and causes a visible jump during tab switches.
+  }, [active.id])
 
   const tabRuntime = useTabRuntime({
     tab: active,
@@ -1684,7 +1670,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }
 
   function activateTab(id: string) {
+    if (id === activeTabIdRef.current) return
     const selected = tabs.find(tab => tab.id === id)
+    const currentId = activeTabIdRef.current
+    if (currentId) void hideNativeTab(currentId)
     setTabs(current => current.map(tab => ({ ...tab, active: tab.id === id })))
     setActiveTabId(id)
     activeTabIdRef.current = id
