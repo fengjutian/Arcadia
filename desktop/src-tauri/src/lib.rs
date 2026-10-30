@@ -734,8 +734,17 @@ async fn browser_create(
     }
     let page_app = app.clone();
     let page_label = label.clone();
-    let builder = tauri::webview::WebviewBuilder::new(&label, tauri::WebviewUrl::External(url))
-        .incognito(private_mode)
+    // WebView2's native InPrivate controller is not available on every runtime
+    // used by child WebViews. Give private tabs a dedicated ephemeral profile
+    // instead: it provides the same storage separation without depending on
+    // that controller API, and the directory is removed when the tab closes.
+    let mut builder = tauri::webview::WebviewBuilder::new(&label, tauri::WebviewUrl::External(url));
+    if private_mode {
+        builder = builder.data_directory(
+            std::env::temp_dir().join("arcadia-private-webviews").join(&label),
+        );
+    }
+    let builder = builder
         .initialization_script(permission_guard_script(
             permissions.as_deref().unwrap_or(&[]),
             private_mode,
@@ -2646,6 +2655,9 @@ fn browser_password_candidate(
 #[tauri::command]
 async fn browser_close_tab(app: tauri::AppHandle, label: String) -> Result<(), String> {
     validate_browser_label(&label)?;
+    let private_profile = privacy::platform::tab_origin(&label)
+        .filter(|tab| tab.private)
+        .map(|_| std::env::temp_dir().join("arcadia-private-webviews").join(&label));
     let webview = app
         .get_webview(&label)
         .ok_or_else(|| "browser tab webview not found".to_string())?;
@@ -2656,6 +2668,18 @@ async fn browser_close_tab(app: tauri::AppHandle, label: String) -> Result<(), S
         .await
         .unwrap_or_default();
     webview.close().map_err(|error| error.to_string())?;
+    if let Some(path) = private_profile {
+        tauri::async_runtime::spawn(async move {
+            // WebView2 releases profile files shortly after its controller is
+            // closed. Retry briefly so Windows file locks do not leave data.
+            for attempt in 0..5 {
+                if tokio::fs::remove_dir_all(&path).await.is_ok() || !path.exists() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(200 * (attempt + 1))).await;
+            }
+        });
+    }
     // Revoke the privacy sub-resource filter handler so the WebView2 token
     // doesn't outlive the tab. Failure here is non-fatal — the WebView is
     // already gone.
