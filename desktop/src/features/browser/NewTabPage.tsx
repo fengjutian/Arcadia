@@ -45,7 +45,7 @@ const tools = [
 ]
 
 const googleTools = [
-  { name: 'Google', initial: 'G', color: '#4285f4', iconUrl: 'https://www.google.com/favicon.ico', url: 'https://www.google.com' },
+  { name: 'Google', initial: 'G', color: '#4285f4', iconUrl: 'https://www.google.com/favicon.ico', transparentIcon: true, url: 'https://www.google.com' },
   { name: 'Gmail', initial: 'M', color: '#ea4335', iconUrl: 'https://mail.google.com/favicon.ico', url: 'https://mail.google.com' },
   { name: 'Drive', initial: 'D', color: '#0f9d58', iconUrl: 'https://drive.google.com/favicon.ico', url: 'https://drive.google.com' },
   { name: 'Docs', initial: 'D', color: '#4285f4', iconUrl: 'https://docs.google.com/favicon.ico', url: 'https://docs.google.com/document/' },
@@ -134,10 +134,10 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
     onCompareSearch(query, engines, searchKnowledge, searchAi)
   }
 
-  function toolPanel(items: Array<{ name: string; initial: string; color: string; iconUrl?: string; icon?: ReactNode; url: string }>, title: string, icon: ReactNode, homeUrl?: string, homeLabel?: string) {
+  function toolPanel(items: Array<{ name: string; initial: string; color: string; iconUrl?: string; icon?: ReactNode; transparentIcon?: boolean; url: string }>, title: string, icon: ReactNode, homeUrl?: string, homeLabel?: string) {
     return <section className="new-tab__tools" aria-label={title}>
       <header><span>{icon}<b>{title}</b></span>{homeUrl && <button type="button" onClick={() => { setToolsOpen(null); void navigate(homeUrl) }}>{homeLabel}<ArrowUpRight size={14}/></button>}</header>
-      <div>{items.map(tool => <button key={tool.url} type="button" onClick={() => { setToolsOpen(null); void navigate(tool.url) }} title={`${text.open} ${tool.name}`}><span className="new-tab__tool-icon" style={{ '--tool-color': tool.color } as CSSProperties}><span>{tool.icon ?? tool.initial}</span>{tool.iconUrl && <img src={tool.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/>}</span><small>{tool.name}</small></button>)}</div>
+      <div>{items.map(tool => <button key={tool.url} type="button" onClick={() => { setToolsOpen(null); void navigate(tool.url) }} title={`${text.open} ${tool.name}`}><span className={`new-tab__tool-icon${tool.transparentIcon ? ' new-tab__tool-icon--transparent' : ''}`} style={{ '--tool-color': tool.color } as CSSProperties}><span>{tool.icon ?? tool.initial}</span>{tool.iconUrl && <img src={tool.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/>}</span><small>{tool.name}</small></button>)}</div>
     </section>
   }
 
