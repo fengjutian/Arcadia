@@ -121,11 +121,6 @@ function GeneralSettings() {
       <Button icon={<ReloadOutlined/>} disabled={theme === 'green'} onClick={() => changeTheme('green')}>恢复默认值</Button>
     </div>
 
-    <div className="theme-update-note">
-      <span className="theme-update-note__icon"><BgColorsOutlined/></span>
-      <div><strong>用颜色打造你的浏览空间</strong><small>主题颜色会应用到导航、按钮、页面背景和内容卡片。</small></div>
-    </div>
-
     <div className="theme-mode-tabs" aria-label="主题类型">
       <button type="button" className="is-active"><BgColorsOutlined/>颜色主题</button>
     </div>
