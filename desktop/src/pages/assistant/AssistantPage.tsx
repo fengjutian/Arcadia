@@ -4,8 +4,10 @@ import {
   Card,
   Drawer,
   Empty,
+  Input,
   List,
   message,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -20,6 +22,7 @@ import {
   CopyOutlined,
   DownloadOutlined,
   DeleteOutlined,
+  EditOutlined,
   FileTextOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -57,6 +60,7 @@ import { defaultAgentDeps, runResearchAgent } from '../../features/ai/agentLoop'
 import { listAgentRuns, type AgentRun } from '../../api'
 import { AgentRunHistory } from '../../features/ai/AgentRunHistory'
 import { KnowledgeAttachmentAdapter } from '../../features/ai/knowledgeAttachmentAdapter'
+import { filterConversations, makeConversationTitle, normalizeConversationTitle } from '../../features/ai/conversationHistory'
 
 const CONVERSATION_KEY = 'ai.conversation.v1'
 const CONVERSATION_HISTORY_KEY = 'ai.conversation.history.v1'
@@ -101,12 +105,6 @@ interface SavedConversation {
 }
 
 const KNOWLEDGE_ATTACHMENT_ADAPTER = new KnowledgeAttachmentAdapter()
-
-function conversationTitle(turns: readonly Turn[]): string {
-  const firstQuestion = turns.find((turn): turn is UserTurn => turn.role === 'user')?.content.trim()
-  if (!firstQuestion) return '未命名对话'
-  return firstQuestion.length > 32 ? `${firstQuestion.slice(0, 32)}…` : firstQuestion
-}
 
 function restorableTurns(turns: readonly Turn[]): Turn[] {
   return turns.map(turn => turn.role === 'user'
@@ -168,6 +166,9 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyQuery, setHistoryQuery] = useState('')
+  const [renamingConversation, setRenamingConversation] = useState<SavedConversation | null>(null)
+  const [conversationTitleDraft, setConversationTitleDraft] = useState('')
   const [agentBusy, setAgentBusy] = useState(false)
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([])
   const [conversationHistory, setConversationHistory] = useState<SavedConversation[]>([])
@@ -260,6 +261,10 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
   const sourceItems = citedDocIds.size > 0
     ? documents.filter(doc => citedDocIds.has(doc.id))
     : documents
+  const filteredConversationHistory = useMemo(
+    () => filterConversations(conversationHistory, historyQuery),
+    [conversationHistory, historyQuery],
+  )
 
   const roundCount = turns.filter(turn => turn.role === 'user').length
   const activeProvider = providers.find(item => item.id === providerId)
@@ -620,7 +625,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
     if (turns.length === 0) return
     const saved: SavedConversation = {
       id: `conversation-${Date.now()}`,
-      title: conversationTitle(turns),
+      title: makeConversationTitle(turns),
       updatedAt: new Date().toISOString(),
       turns: restorableTurns(turns),
     }
@@ -646,6 +651,22 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
 
   function deleteSavedConversation(id: string) {
     setConversationHistory(current => current.filter(item => item.id !== id))
+  }
+
+  function beginRenameConversation(saved: SavedConversation) {
+    setRenamingConversation(saved)
+    setConversationTitleDraft(saved.title)
+  }
+
+  function renameConversation() {
+    if (!renamingConversation) return
+    const title = normalizeConversationTitle(conversationTitleDraft)
+    if (!title) return
+    setConversationHistory(current => current.map(item => (
+      item.id === renamingConversation.id ? { ...item, title, updatedAt: new Date().toISOString() } : item
+    )))
+    setRenamingConversation(null)
+    setConversationTitleDraft('')
   }
 
   async function copyConversation() {
@@ -923,7 +944,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
                     value={providerId}
                     options={providers.map(provider => ({
                       value: provider.id,
-                      label: provider.model,
+                      label: `${provider.type === 'ollama' ? 'Ollama' : 'OpenAI'} · ${provider.model}`,
                     }))}
                     onChange={value => setProviderId(value)}
                     disabled={busy || agentBusy}
@@ -1042,14 +1063,46 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           open={historyOpen}
           onClose={() => setHistoryOpen(false)}
         >
+          <div className="assistant-history-toolbar">
+            <Input
+              value={historyQuery}
+              onChange={event => setHistoryQuery(event.target.value)}
+              prefix={<SearchOutlined />}
+              allowClear
+              placeholder="搜索标题或对话内容"
+              aria-label="搜索历史对话"
+            />
+            {conversationHistory.length > 0 && (
+              <Popconfirm
+                title="清空全部历史对话？"
+                description="当前正在查看的对话不会被删除；历史记录删除后无法恢复。"
+                okText="全部清空"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => setConversationHistory([])}
+              >
+                <Button danger>清空历史</Button>
+              </Popconfirm>
+            )}
+          </div>
           <List
-            dataSource={conversationHistory}
-            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无历史对话；新建对话后，当前内容会自动保存在这里。" /> }}
+            dataSource={filteredConversationHistory}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={historyQuery ? '没有匹配的历史对话' : '暂无历史对话；新建对话后，当前内容会自动保存在这里。'} /> }}
             renderItem={item => (
               <List.Item
                 className="assistant-history-item"
                 onClick={() => openSavedConversation(item)}
                 actions={[
+                  <Button
+                    key="rename"
+                    type="text"
+                    size="small"
+                    icon={<EditOutlined />}
+                    title="重命名"
+                    onClick={event => {
+                      event.stopPropagation()
+                      beginRenameConversation(item)
+                    }}
+                  />,
                   <Popconfirm
                     key="delete"
                     title="删除这条历史对话？"
@@ -1078,6 +1131,24 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
             )}
           />
         </Drawer>
+        <Modal
+          title="重命名对话"
+          open={renamingConversation !== null}
+          okText="保存"
+          okButtonProps={{ disabled: normalizeConversationTitle(conversationTitleDraft).length === 0 }}
+          onOk={renameConversation}
+          onCancel={() => setRenamingConversation(null)}
+        >
+          <Input
+            autoFocus
+            maxLength={60}
+            value={conversationTitleDraft}
+            onChange={event => setConversationTitleDraft(event.target.value)}
+            onPressEnter={renameConversation}
+            placeholder="输入对话标题"
+            aria-label="对话标题"
+          />
+        </Modal>
         <Drawer
           title={citedDocIds.size > 0 ? `引用来源（${citedDocIds.size}）` : `知识库来源（${documents.length}）`}
           placement="right"

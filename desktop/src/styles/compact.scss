@@ -1881,6 +1881,16 @@ body[data-theme='github'] .new-tab__workspace .new-tab-search {
     &:hover { background: var(--accent-soft); }
   }
 
+  .assistant-history-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+
+    .ui-input { flex: 1; min-width: 0; }
+    .ui-button { flex: none; }
+  }
+
   .assistant-ui-thread {
     flex: 1;
     min-height: 0;
