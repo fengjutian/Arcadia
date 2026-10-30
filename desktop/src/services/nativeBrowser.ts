@@ -5,6 +5,7 @@ import { Webview } from '@tauri-apps/api/webview'
 import { readSitePermissions } from '../features/browser/sitePermissions'
 import { isAdBlockerEnabled } from '../features/plugins/adBlocker'
 import { isMissingWebviewError } from '../features/browser/tabViewErrors'
+import { diagnosticLog } from '../shared/diagnostics'
 
 export interface BrowserBounds { x: number; y: number; width: number; height: number }
 export interface NativeBrowserState { url: string; title: string; favicon?: string; loading: boolean; scrollX: number; scrollY: number; scrollDepth?: number; canGoBack: boolean; canGoForward: boolean }
@@ -279,6 +280,7 @@ export async function readNativeState(tabId: string): Promise<NativeBrowserState
 export async function diagnoseNativeNavigation(url:string): Promise<NetworkDiagnosis> { return invoke<NetworkDiagnosis>('browser_diagnose_url',{url}) }
 export async function restoreNativeScroll(tabId: string, x: number, y: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_restore_scroll',{label,x,y}) }
 export async function setNativeToolbarMenu(tabId: string, open: boolean, zoomPercent = 100): Promise<void> {
+  diagnosticLog('browser.menu.requested', 'info', { tabId, open, zoomPercent })
   const label = labels.get(tabId)
   if (!label) throw new Error('native webview is not available')
   try {
@@ -286,11 +288,14 @@ export async function setNativeToolbarMenu(tabId: string, open: boolean, zoomPer
     // child WebView. Render in the page first so the click always has visible
     // feedback; retain the OS menu as a fallback for non-scriptable pages.
     await invoke('browser_toolbar_menu_in_page', { label, open, zoomPercent })
+    diagnosticLog('browser.menu.page.completed', 'info', { tabId, open })
   } catch (pageError) {
-    console.warn('in-page toolbar menu failed; falling back to native menu', pageError)
+    diagnosticLog('browser.menu.page.failed', 'warn', { tabId, open, error: pageError })
     try {
       await invoke('browser_toolbar_menu', { label, open, zoomPercent })
+      diagnosticLog('browser.menu.native.completed', 'info', { tabId, open })
     } catch (nativeError) {
+      diagnosticLog('browser.menu.failed', 'error', { tabId, open, pageError, nativeError })
       throw new Error(`toolbar menu failed (page: ${String(pageError)}; native: ${String(nativeError)})`)
     }
   }

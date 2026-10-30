@@ -40,6 +40,7 @@ import { shellOpen } from '../../services/webviewCompat'
 import { extractLocalPdf } from '../../services/webviewCompat'
 import { classifyShellOpenUrl, describeScheme } from '../../features/browser/externalSchemes'
 import { redactUrl } from '../../features/browser/logRedaction'
+import { diagnosticLog } from '../../shared/diagnostics'
 import { domainFromUrl, recordAdBlock } from '../../features/privacy/adBlockStats'
 import { usePermissionPrompt } from '../../features/browser/usePermissionPrompt'
 import { PermissionPromptBar } from '../../features/browser/PermissionPromptBar'
@@ -1269,6 +1270,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     setIsWindowFullscreen(next)
   }
   function runBrowserMenuAction(action: string) {
+    diagnosticLog('browser.menu.action', 'info', { action, tabId: active.id, url: redactUrl(active.url) })
     switch (action) {
       case 'find': setFindOpen(true); break
       case 'tab-search': setTabSearchOpen(true); break
@@ -1278,7 +1280,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       case 'bulk-summary': setBulkSummaryOpen(true); break
       case 'toggle-notes': setNotesOpen(value => !value); break
       case 'save-workspace': void saveAsWorkspace(); break
-      case 'print': void printNativeTab(active.id); break
+      case 'print':
+        diagnosticLog('browser.print.requested', 'info', { tabId: active.id, url: redactUrl(active.url) })
+        void printNativeTab(active.id)
+          .then(() => diagnosticLog('browser.print.completed', 'info', { tabId: active.id }))
+          .catch(error => diagnosticLog('browser.print.failed', 'error', { tabId: active.id, error }))
+        break
       case 'devtools': if (advancedSettings.developerToolsEnabled) void openNativeDevtools(active.id); break
       case 'screenshot-visible': void saveScreenshot(false); break
       case 'screenshot-full': void saveScreenshot(true); break
@@ -1297,6 +1304,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }
 
   async function saveScreenshot(fullPage: boolean, clip?: {x:number;y:number;width:number;height:number}) {
+    diagnosticLog('browser.screenshot.requested', 'info', { tabId: active.id, fullPage, clipped: Boolean(clip), url: redactUrl(active.url) })
     try {
       // The in-page toolbar menu lives inside the captured WebView. Remove it
       // and allow WebView2 to commit a clean frame before taking the snapshot.
@@ -1305,13 +1313,18 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         await setNativeToolbarMenu(active.id, false).catch(() => undefined)
         await new Promise(resolve => window.setTimeout(resolve, 80))
       }
+      diagnosticLog('browser.screenshot.overlay-closed', 'info', { tabId: active.id })
       const data = await captureNativeScreenshot(active.id, fullPage, clip)
       const link = document.createElement('a')
       link.href = `data:image/png;base64,${data}`
       link.download = `${safeFileName(active.title || '网页')}-${clip ? '选区' : fullPage ? '整页' : '可视区域'}.png`
       document.body.appendChild(link); link.click(); link.remove()
+      diagnosticLog('browser.screenshot.completed', 'info', { tabId: active.id, fullPage, clipped: Boolean(clip), encodedBytes: data.length })
       messageApi.success('截图已生成')
-    } catch (error) { messageApi.error(`截图失败：${String(error)}`) }
+    } catch (error) {
+      diagnosticLog('browser.screenshot.failed', 'error', { tabId: active.id, fullPage, clipped: Boolean(clip), error })
+      messageApi.error(`截图失败：${String(error)}`)
+    }
   }
 
   useEffect(() => {

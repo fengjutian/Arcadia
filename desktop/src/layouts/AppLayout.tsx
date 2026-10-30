@@ -5,6 +5,7 @@ import { BookOpen, Boxes, Globe2, Minus, Search, Settings, Sparkles, Square, X }
 import type { View } from '../types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TopBarPortalProvider } from '../app/TopBarPortal'
+import { diagnosticLog } from '../shared/diagnostics'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label: '浏览器' }, { key: 'library', icon: <BookOpen/>, label: '知识库' }, { key: 'search', icon: <Search/>, label: '搜索' }, { key: 'ai', icon: <Sparkles/>, label: 'AI Research' }, { key: 'mcp', icon: <Boxes/>, label: 'MCP' }] as const
 
@@ -59,13 +60,16 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
 function WindowChrome() {
   const stopWindowDrag = (event: PointerEvent<HTMLButtonElement>) => event.stopPropagation()
   const runWindowAction = (action: 'minimize' | 'maximize' | 'close') => {
+    diagnosticLog('window.action.requested', 'info', { action })
     const window = getCurrentWindow()
     const request = action === 'minimize'
       ? window.minimize()
       : action === 'maximize'
         ? window.toggleMaximize()
         : window.close()
-    void request.catch(error => console.error(`window ${action} failed`, error))
+    void request
+      .then(() => diagnosticLog('window.action.completed', 'info', { action }))
+      .catch(error => diagnosticLog('window.action.failed', 'error', { action, error }))
   }
   return <>
     <div className="window-drag-strip" data-tauri-drag-region/>
