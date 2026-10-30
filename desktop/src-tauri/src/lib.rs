@@ -2182,7 +2182,7 @@ pub fn run() {
                 // Agent supervisor — same shared connection; the supervisor
                 // runs `agent_runs` rows through the state machine and
                 // renews leases. The tool registry is a one-time build.
-                let registry = std::sync::Arc::new(agent::runtime::registry_with_basics());
+                let registry = std::sync::Arc::new(agent::runtime::registry_with_basics(app.handle().clone()));
                 let agent_supervisor = std::sync::Arc::new(
                     agent::supervisor::AgentSupervisor::new(database_arc.clone(), registry),
                 );

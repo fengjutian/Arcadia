@@ -76,7 +76,7 @@ pub fn decide(
     let approved_hash = if matches!(decision, ApprovalStatus::Approved) {
         let row = database
             .query_row(
-                "SELECT a.arguments_hash FROM agent_tool_calls tc
+                "SELECT tc.arguments_hash FROM agent_tool_calls tc
                  JOIN agent_approvals a ON a.tool_call_id = tc.id WHERE a.id = ?1",
                 params![approval_id],
                 |row| row.get::<_, String>(0),

@@ -513,7 +513,15 @@ impl AgentTool for KnowledgeSaveTool {
 }
 
 /// MCP schema discovery. Read-only.
-pub struct McpListToolsTool;
+pub struct McpListToolsTool {
+    app: tauri::AppHandle,
+}
+
+impl McpListToolsTool {
+    pub fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
 
 #[async_trait]
 impl AgentTool for McpListToolsTool {
@@ -527,7 +535,7 @@ impl AgentTool for McpListToolsTool {
                 "properties": {
                     "serverId": {"type": "string"}
                 },
-                "required": []
+                "required": ["serverId"]
             }),
             timeout_ms: 10_000,
             default_risk: ToolRisk::ReadOnly,
@@ -538,8 +546,15 @@ impl AgentTool for McpListToolsTool {
     }
 
     fn validate(&self, args: &serde_json::Value) -> Result<(), ToolError> {
-        if !args.is_object() && !args.is_null() {
-            return Err(ToolError::SchemaMismatch("expected object or null".into()));
+        if !args.is_object() {
+            return Err(ToolError::SchemaMismatch("expected object".into()));
+        }
+        if args
+            .get("serverId")
+            .and_then(|value| value.as_str())
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(ToolError::SchemaMismatch("serverId missing".into()));
         }
         Ok(())
     }
@@ -547,18 +562,36 @@ impl AgentTool for McpListToolsTool {
     async fn execute(
         &self,
         _ctx: ToolContext,
-        _args: serde_json::Value,
+        args: serde_json::Value,
     ) -> Result<ToolResult, ToolError> {
-        // Discovery is owned by the supervisor; we surface an explicit
-        // error rather than a fabricated list.
-        Err(ToolError::Execution(
-            "mcp_list_tools requires supervisor wiring".into(),
-        ))
+        let server_id = args["serverId"].as_str().unwrap();
+        let output = crate::mcp::mcp_list_tools(self.app.clone(), server_id.to_string())
+            .await
+            .map_err(ToolError::Execution)?;
+        let size_bytes = serde_json::to_vec(&output)
+            .map_err(|error| ToolError::Execution(error.to_string()))?
+            .len();
+        if size_bytes > self.definition().max_output_bytes {
+            return Err(ToolError::OutputTooLarge);
+        }
+        Ok(ToolResult {
+            output,
+            summary: format!("listed MCP tools from {server_id}"),
+            size_bytes,
+        })
     }
 }
 
 /// MCP tool call. External side effect; always requires an approval row.
-pub struct McpCallTool;
+pub struct McpCallTool {
+    app: tauri::AppHandle,
+}
+
+impl McpCallTool {
+    pub fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
 
 #[async_trait]
 impl AgentTool for McpCallTool {
@@ -588,11 +621,14 @@ impl AgentTool for McpCallTool {
         if !args.is_object() {
             return Err(ToolError::SchemaMismatch("expected object".into()));
         }
-        if args.get("serverId").and_then(|v| v.as_str()).is_none() {
+        if args.get("serverId").and_then(|v| v.as_str()).is_none_or(|value| value.trim().is_empty()) {
             return Err(ToolError::SchemaMismatch("serverId missing".into()));
         }
-        if args.get("toolName").and_then(|v| v.as_str()).is_none() {
+        if args.get("toolName").and_then(|v| v.as_str()).is_none_or(|value| value.trim().is_empty()) {
             return Err(ToolError::SchemaMismatch("toolName missing".into()));
+        }
+        if args.get("arguments").is_some_and(|value| !value.is_object()) {
+            return Err(ToolError::SchemaMismatch("arguments must be an object".into()));
         }
         Ok(())
     }
@@ -605,9 +641,28 @@ impl AgentTool for McpCallTool {
         if ctx.approval.is_none() {
             return Err(ToolError::NotAllowed);
         }
-        let _ = args;
-        Err(ToolError::Execution(
-            "mcp_call_tool requires supervisor wiring".into(),
-        ))
+        let server_id = args["serverId"].as_str().unwrap();
+        let tool_name = args["toolName"].as_str().unwrap();
+        let arguments = args.get("arguments").cloned().unwrap_or_else(|| serde_json::json!({}));
+        let output = crate::mcp::mcp_call_tool(
+            self.app.clone(),
+            server_id.to_string(),
+            tool_name.to_string(),
+            arguments,
+            true,
+        )
+        .await
+        .map_err(ToolError::Execution)?;
+        let size_bytes = serde_json::to_vec(&output)
+            .map_err(|error| ToolError::Execution(error.to_string()))?
+            .len();
+        if size_bytes > self.definition().max_output_bytes {
+            return Err(ToolError::OutputTooLarge);
+        }
+        Ok(ToolResult {
+            output,
+            summary: format!("called MCP tool {tool_name} on {server_id}"),
+            size_bytes,
+        })
     }
 }

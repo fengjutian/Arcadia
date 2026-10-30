@@ -279,7 +279,7 @@ pub fn leased_by(
     Ok(())
 }
 
-pub fn registry_with_basics() -> ToolRegistry {
+pub fn registry_with_basics(app: tauri::AppHandle) -> ToolRegistry {
     let _ = CHUNKER_VERSION;
     let mut registry = ToolRegistry::new();
     registry.register(Arc::new(super::tools::RagSearchTool));
@@ -287,8 +287,8 @@ pub fn registry_with_basics() -> ToolRegistry {
     registry.register(Arc::new(super::tools::BrowserCurrentPageTool));
     registry.register(Arc::new(super::tools::BrowserExtractTool));
     registry.register(Arc::new(super::tools::KnowledgeSaveTool));
-    registry.register(Arc::new(super::tools::McpListToolsTool));
-    registry.register(Arc::new(super::tools::McpCallTool));
+    registry.register(Arc::new(super::tools::McpListToolsTool::new(app.clone())));
+    registry.register(Arc::new(super::tools::McpCallTool::new(app)));
     registry
 }
 

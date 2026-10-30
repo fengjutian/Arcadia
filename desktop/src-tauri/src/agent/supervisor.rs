@@ -34,6 +34,7 @@ use tokio::sync::{Mutex, Notify};
 use tokio_util::sync::CancellationToken;
 
 use super::budget::{evaluate as evaluate_budget, BudgetCounters, BudgetLimits, BudgetVerdict};
+use super::approval::{verify as verify_approval, ApprovalDecision};
 #[cfg(test)]
 use super::runtime::create_run;
 use super::runtime::{apply_counters, leased_by, transition};
@@ -291,7 +292,7 @@ pub async fn execute_pending_tool_call(
     let conn = database.lock().await;
     let row = conn
         .query_row(
-            "SELECT id, tool_name, arguments_json, status FROM agent_tool_calls
+            "SELECT id, tool_name, arguments_json, status, requires_approval FROM agent_tool_calls
              WHERE id=?1 AND run_id=?2",
             rusqlite::params![tool_call_id, run_id],
             |row| {
@@ -300,13 +301,42 @@ pub async fn execute_pending_tool_call(
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
+                    row.get::<_, i64>(4)?,
                 ))
             },
         )
         .optional()
         .map_err(|e| e.to_string())?;
-    let Some((id, tool_name, arguments_json, _status)) = row else {
+    let Some((id, tool_name, arguments_json, _status, requires_approval)) = row else {
         return Ok(None);
+    };
+    let approval = if requires_approval != 0 {
+        let decision = conn
+            .query_row(
+                "SELECT a.id, a.run_id, a.tool_call_id, a.status, t.arguments_hash, a.approved_arguments_hash
+                 FROM agent_approvals a JOIN agent_tool_calls t ON t.id=a.tool_call_id
+                 WHERE a.tool_call_id=?1 ORDER BY a.requested_at DESC LIMIT 1",
+                rusqlite::params![id],
+                |row| {
+                    let status = super::types::ApprovalStatus::parse(&row.get::<_, String>(3)?)
+                        .unwrap_or(super::types::ApprovalStatus::Pending);
+                    Ok(ApprovalDecision {
+                        id: row.get(0)?, run_id: row.get(1)?, tool_call_id: row.get(2)?, status,
+                        arguments_hash: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                        approved_arguments_hash: row.get(5)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "tool call requires approval".to_string())?;
+        if decision.status != super::types::ApprovalStatus::Approved {
+            return Err("tool call approval is not approved".into());
+        }
+        verify_approval(&arguments_json, &decision)?;
+        Some(Arc::new(decision))
+    } else {
+        None
     };
     drop(conn);
     let args: serde_json::Value =
@@ -318,7 +348,7 @@ pub async fn execute_pending_tool_call(
     let ctx = ToolContext {
         run_id: run_id.clone(),
         step_id: id.clone(),
-        approval: None,
+        approval,
     };
     let outcome = tool.execute(ctx, args).await.map_err(|e| e.to_string())?;
     Ok(Some(outcome.output))
@@ -349,7 +379,14 @@ mod tests {
                 id TEXT PRIMARY KEY, run_id TEXT NOT NULL,
                 tool_name TEXT NOT NULL DEFAULT '', risk_level TEXT NOT NULL DEFAULT 'read_only',
                 arguments_json TEXT NOT NULL DEFAULT '{}', arguments_hash TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'PENDING', started_at INTEGER, finished_at INTEGER
+                status TEXT NOT NULL DEFAULT 'PENDING', requires_approval INTEGER NOT NULL DEFAULT 0,
+                started_at INTEGER, finished_at INTEGER
+             );
+             CREATE TABLE agent_approvals(
+                id TEXT PRIMARY KEY, run_id TEXT NOT NULL, tool_call_id TEXT NOT NULL,
+                status TEXT NOT NULL, requested_at INTEGER NOT NULL DEFAULT 0,
+                expires_at INTEGER, decided_at INTEGER, decision_source TEXT,
+                display_summary TEXT NOT NULL DEFAULT '', approved_arguments_hash TEXT
              );
              CREATE TABLE agent_steps(
                 id TEXT PRIMARY KEY, run_id TEXT NOT NULL,
