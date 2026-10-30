@@ -1093,7 +1093,7 @@ struct ScreenshotClip {
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-fn browser_capture_screenshot(
+async fn browser_capture_screenshot(
     app: tauri::AppHandle,
     label: String,
     full_page: bool,
@@ -1111,7 +1111,7 @@ fn browser_capture_screenshot(
             Ok(core) => core,
             Err(error) => { let _ = sender.send(Err(error.to_string())); return; }
         };
-        let (callback_sender, callback_receiver) = mpsc::channel();
+        let callback_sender = sender.clone();
         let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |status, result| {
             let value = status.map(|_| result).map_err(|error| error.to_string());
             let _ = callback_sender.send(value);
@@ -1124,14 +1124,16 @@ fn browser_capture_screenshot(
         let params_json = params_value.to_string();
         let params = CoTaskMemPWSTR::from(params_json.as_str());
         let started = unsafe { core.CallDevToolsProtocolMethod(*method.as_ref().as_pcwstr(), *params.as_ref().as_pcwstr(), &handler) };
-        let result = match started {
-            Ok(()) => webview2_com::wait_with_pump(callback_receiver).map_err(|error| error.to_string()).and_then(|value| value),
-            Err(error) => Err(error.to_string()),
-        };
-        let _ = sender.send(result);
+        if let Err(error) = started {
+            let _ = sender.send(Err(error.to_string()));
+        }
     }).map_err(|error| error.to_string())?;
-    let raw = receiver
-        .recv_timeout(Duration::from_secs(30))
+    // Never wait for the DevTools callback on WebView2's UI thread. Keeping
+    // that thread free is required for the callback itself and for all other
+    // browser/window buttons to remain responsive while capture is pending.
+    let raw = tauri::async_runtime::spawn_blocking(move || receiver.recv_timeout(Duration::from_secs(30)))
+        .await
+        .map_err(|error| error.to_string())?
         .map_err(|_| "screenshot timed out".to_string())??;
     let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
     value
