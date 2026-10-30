@@ -709,7 +709,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       if (!engine) return []
       return [{ id: `compare-${crypto.randomUUID()}`, kind: 'web' as const, label: engine.label, url: renderSearchTemplate(engine.template, query) }]
     })
-    if (includeAi) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'ai', label: 'AI 搜索', webEnabled: engineIds.length > 0 })
+    if (includeAi) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'ai', label: 'AI 搜索' })
     if (includeKnowledge) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'knowledge', label: '本地知识库' })
     if (sources.length === 0) return
     const next = { hostTabId: activeTabIdRef.current, query, sources, visibleIds: sources.slice(0, 3).map(source => source.id) }

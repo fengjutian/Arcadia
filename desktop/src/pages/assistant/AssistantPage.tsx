@@ -163,12 +163,14 @@ function AssistantMarkdownLink({ href, children, node: _node, onClick, ...props 
 
 const MARKDOWN_COMPONENTS = { a: AssistantMarkdownLink }
 
-export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => void }) {
+export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = false, embedded = false, sessionNamespace = 'default' }: { onNavigate?: (view: View) => void; initialQuestion?: string; autoSubmit?: boolean; embedded?: boolean; sessionNamespace?: string }) {
+  const conversationKey = sessionNamespace === 'default' ? CONVERSATION_KEY : `${CONVERSATION_KEY}:${sessionNamespace}`
+  const conversationHistoryKey = sessionNamespace === 'default' ? CONVERSATION_HISTORY_KEY : `${CONVERSATION_HISTORY_KEY}:${sessionNamespace}`
   const [messageApi, contextHolder] = message.useMessage()
   const [documents, setDocuments] = useState<Document[]>([])
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [providerId, setProviderId] = useState<string | null>(null)
-  const [question, setQuestion] = useState('')
+  const [question, setQuestion] = useState(initialQuestion)
   const [turns, setTurns] = useState<Turn[]>([])
   const [busy, setBusy] = useState(false)
   const [conversationHydrated, setConversationHydrated] = useState(false)
@@ -185,6 +187,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
   const [historyHydrated, setHistoryHydrated] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
   const busyRef = useRef(false)
+  const autoSubmittedRef = useRef(false)
 
   useEffect(() => {
     void listDocuments()
@@ -196,7 +199,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
         setProviderId(prev => prev ?? items[0]?.id ?? null)
       })
       .catch(() => { /* non-Tauri fallback */ })
-    void getSession(CONVERSATION_KEY).then(raw => {
+    void getSession(conversationKey).then(raw => {
       setTurns(restoreConversation(raw).map(turn => turn.role === 'user'
         ? { id:turn.id, role:'user', content:turn.content }
         : {
@@ -213,7 +216,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
             backgroundTaskId:turn.backgroundTaskId,
           }))
     }).catch(() => setTurns([])).finally(() => setConversationHydrated(true))
-    void getSession(CONVERSATION_HISTORY_KEY)
+    void getSession(conversationHistoryKey)
       .then(raw => {
         if (!raw) return
         const parsed = JSON.parse(raw) as SavedConversation[]
@@ -221,7 +224,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
       })
       .catch(() => setConversationHistory([]))
       .finally(() => setHistoryHydrated(true))
-  }, [])
+  }, [conversationHistoryKey, conversationKey])
 
   useEffect(() => {
     if (!conversationHydrated) return
@@ -240,8 +243,8 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
           pending:turn.pending,
           backgroundTaskId:turn.backgroundTaskId,
         })
-    void setSession(CONVERSATION_KEY, JSON.stringify(stored)).catch(() => undefined)
-  }, [turns, conversationHydrated])
+    void setSession(conversationKey, JSON.stringify(stored)).catch(() => undefined)
+  }, [conversationKey, turns, conversationHydrated])
 
   useEffect(() => {
     if (!conversationHydrated) return
@@ -266,8 +269,8 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
 
   useEffect(() => {
     if (!historyHydrated) return
-    void setSession(CONVERSATION_HISTORY_KEY, JSON.stringify(conversationHistory)).catch(() => undefined)
-  }, [conversationHistory, historyHydrated])
+    void setSession(conversationHistoryKey, JSON.stringify(conversationHistory)).catch(() => undefined)
+  }, [conversationHistory, conversationHistoryKey, historyHydrated])
 
   useEffect(() => {
     const node = listRef.current
@@ -599,6 +602,19 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
     setQuestion('')
     await generateAnswer(options?.modelPrompt?.trim() || trimmed, pendingTurn.id, history)
   }
+
+  useEffect(() => {
+    if (!initialQuestion.trim() || turns.length > 0) return
+    setQuestion(initialQuestion)
+  }, [initialQuestion, turns.length])
+
+  useEffect(() => {
+    if (!autoSubmit || autoSubmittedRef.current || !conversationHydrated || !providerId || turns.length > 0 || !initialQuestion.trim()) return
+    autoSubmittedRef.current = true
+    void submitQuestion(initialQuestion)
+    // Submit once after the shared conversation runtime has restored its provider and session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSubmit, conversationHydrated, initialQuestion, providerId, turns.length])
 
   async function retryTurn(turn: AssistantTurn) {
     if (busyRef.current || agentBusy) return
@@ -944,7 +960,7 @@ export function AssistantPage({ onNavigate }: { onNavigate?: (view: View) => voi
   return (
     <>
       {contextHolder}
-      <section className="page assistant-page">
+      <section className={`page assistant-page${embedded ? ' assistant-page--embedded' : ''}`}>
         {noProvider && (
           <Alert
             className="assistant-provider-alert"
