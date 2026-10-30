@@ -48,6 +48,11 @@ const isTauri = () => '__TAURI_INTERNALS__' in window
 
 const FALLBACK: DownloadRecord[] = []
 
+export async function getDefaultDownloadDirectory(): Promise<string> {
+  if (!isTauri()) return '系统默认下载文件夹'
+  return invoke<string>('download_default_directory')
+}
+
 export async function listDownloads(includePrivate = false): Promise<DownloadRecord[]> {
   if (!isTauri()) return FALLBACK
   return invoke<DownloadRecord[]>('download_list', { includePrivate })

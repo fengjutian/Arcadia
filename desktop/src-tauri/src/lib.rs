@@ -2209,6 +2209,7 @@ pub fn run() {
             local_store::browser_password_delete,
             local_store::browser_password_generate,
             downloads::download_list,
+            downloads::download_default_directory,
             downloads::download_get,
             downloads::download_remove_record,
             downloads::download_open_file,

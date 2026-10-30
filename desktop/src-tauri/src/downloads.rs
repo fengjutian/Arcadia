@@ -520,6 +520,15 @@ use tauri::{AppHandle, Emitter, Manager};
 
 const DOWNLOADS_SUBDIR: &str = "downloads";
 
+#[tauri::command]
+pub fn download_default_directory(app: AppHandle) -> Result<String, String> {
+    let path = match app.path().download_dir() {
+        Ok(path) => path,
+        Err(_) => downloads_root(&app)?,
+    };
+    Ok(path.to_string_lossy().into_owned())
+}
+
 /// Per-job in-memory state. The cancel flag is shared between the spawned
 /// task and the command surface (`pause` / `cancel` flip it without having
 /// to know the task's `JoinHandle`).

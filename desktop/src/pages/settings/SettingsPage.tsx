@@ -39,6 +39,9 @@ import {
 import { deleteWorkspace, listWorkspaces, saveWorkspace, validateWorkspaceDescription, validateWorkspaceName, decorateSummaries, relativeUpdatedAt, type WorkspaceDisplayRow, WORKSPACE_RESTORE_EVENT } from '../../features/browser/workspaces'
 import { getWorkspace } from '../../services/workspaces'
 import { addSearchAlias, deleteSearchAlias, getSearchIndexStatus, listSearchAliases, rebuildSearchIndex, type SearchAlias, type SearchIndexStatus } from '../../api'
+import { DEFAULT_BROWSER_APPEARANCE, readBrowserAppearance, writeBrowserAppearance, type BrowserAppearanceSettings, type OptionalToolbarItem } from '../../features/settings/browserAppearance'
+import { readDownloadSettings, writeDownloadSettings, type DownloadSettings } from '../../features/settings/downloadSettings'
+import { getDefaultDownloadDirectory } from '../../services/downloads'
 
 const PROVIDER_OPTIONS: { label: string; value: AIProviderType }[] = [
   { label: 'OpenAI 兼容（API Key）', value: 'openai-compatible' },
@@ -390,6 +393,15 @@ function BrowserSettings() {
   const [messageApi, contextHolder] = message.useMessage()
   const [overrides, setOverrides] = useState<ShortcutOverrides>(() => readShortcutOverrides())
   const [recording, setRecording] = useState<ShortcutAction | null>(null)
+  const [appearance, setAppearance] = useState<BrowserAppearanceSettings>(readBrowserAppearance)
+
+  function updateAppearance(next: BrowserAppearanceSettings) {
+    setAppearance(writeBrowserAppearance(next))
+  }
+
+  function toggleToolbarItem(item: OptionalToolbarItem, checked: boolean) {
+    updateAppearance({ ...appearance, toolbar: { ...appearance.toolbar, [item]: checked } })
+  }
 
   useEffect(() => {
     function onChange(event: Event) {
@@ -448,6 +460,30 @@ function BrowserSettings() {
 
   return <>{contextHolder}<Card title="浏览器" className="settings-card browser-settings-card">
     <Tabs className="browser-settings-tabs privacy-section-tabs" tabPosition="top" defaultActiveKey="shortcuts" destroyOnHidden={false} items={[
+      { key: 'appearance', label: '外观', children: <div className="browser-appearance-settings">
+        <Typography.Title level={5}>页面缩放</Typography.Title>
+        <Typography.Paragraph type="secondary">设置所有新页面的默认缩放级别。当前标签仍可通过 Ctrl/⌘ + 加号或减号单独调整。</Typography.Paragraph>
+        <div className="browser-setting-row">
+          <div><Typography.Text strong>默认页面缩放</Typography.Text><Typography.Text type="secondary">新打开的网页将使用此比例</Typography.Text></div>
+          <Select value={appearance.defaultZoom} style={{ width: 120 }} options={[0.5,0.75,0.8,0.9,1,1.1,1.25,1.5,1.75,2,2.5,3].map(value => ({ value, label: `${Math.round(value * 100)}%` }))} onChange={value => updateAppearance({ ...appearance, defaultZoom: value })}/>
+        </div>
+        <Typography.Title level={5}>工具栏</Typography.Title>
+        <Typography.Paragraph type="secondary">选择地址栏两侧显示的功能。导航按钮、地址栏和主菜单始终显示。</Typography.Paragraph>
+        <div className="toolbar-settings-list">
+          {([
+            ['reader', '阅读模式', '将当前网页转换为专注阅读视图'],
+            ['adBlock', '广告过滤状态', '显示当前标签拦截的广告数量'],
+            ['ai', 'AI 助手', '快速打开当前页面的 AI 助手'],
+            ['downloads', '下载', '查看正在进行和最近完成的下载'],
+            ['bookmarks', '收藏夹', '快速访问已收藏的页面'],
+            ['resources', '资源面板', '查看标签页和 WebView 资源状态'],
+          ] as Array<[OptionalToolbarItem, string, string]>).map(([key, label, description]) => <div className="browser-setting-row" key={key}>
+            <div><Typography.Text strong>{label}</Typography.Text><Typography.Text type="secondary">{description}</Typography.Text></div>
+            <Switch checked={appearance.toolbar[key]} onChange={checked => toggleToolbarItem(key, checked)}/>
+          </div>)}
+        </div>
+        <Button onClick={() => updateAppearance(DEFAULT_BROWSER_APPEARANCE)} disabled={JSON.stringify(appearance) === JSON.stringify(DEFAULT_BROWSER_APPEARANCE)}>恢复默认设置</Button>
+      </div> },
       { key: 'shortcuts', label: '键盘快捷键', children: <>
     <Typography.Title level={5}>键盘快捷键</Typography.Title>
     <Typography.Paragraph type="secondary">关闭后,浏览器视图不再拦截 Ctrl/Cmd + T、W、Tab、1-9、Alt + ←/→ 等全局快捷键,改由各 WebView 自行处理。</Typography.Paragraph>
@@ -480,6 +516,44 @@ function BrowserSettings() {
       </> },
       { key: 'workspaces', label: '工作区', children: <WorkspacesEditor/> },
     ]}/>
+  </Card></>
+}
+
+function DownloadSettingsPanel() {
+  const [settings, setSettings] = useState<DownloadSettings>(readDownloadSettings)
+  const [defaultDirectory, setDefaultDirectory] = useState('正在读取…')
+  const [messageApi, contextHolder] = message.useMessage()
+
+  useEffect(() => {
+    void getDefaultDownloadDirectory().then(setDefaultDirectory).catch(() => setDefaultDirectory('系统默认下载文件夹'))
+  }, [])
+
+  function update(patch: Partial<DownloadSettings>) {
+    const next = { ...settings, ...patch }
+    setSettings(next)
+    writeDownloadSettings(next)
+  }
+
+  async function chooseDirectory() {
+    try {
+      const result = await pickFiles({ title: '选择下载文件夹', directory: true })
+      if (result.paths[0]) update({ directory: result.paths[0] })
+    } catch (error) {
+      messageApi.error(`无法选择下载文件夹：${String(error)}`)
+    }
+  }
+
+  return <>{contextHolder}<Card title="下载" className="settings-card download-settings-card">
+    <div className="download-location-setting">
+      <div><Typography.Text strong>位置</Typography.Text><Typography.Text type="secondary" ellipsis={{ tooltip: settings.directory || defaultDirectory }}>{settings.directory || defaultDirectory}</Typography.Text></div>
+      <Space><Button onClick={() => void chooseDirectory()}>更改</Button>{settings.directory && <Button type="text" onClick={() => update({ directory: '' })}>使用默认位置</Button>}</Space>
+    </div>
+    <div className="download-settings-list">
+      <div className="browser-setting-row"><div><Typography.Text strong>在下载之前询问每个文件的保存位置</Typography.Text><Typography.Text type="secondary">下载任务开始前选择保存文件夹</Typography.Text></div><Switch checked={settings.askWhereToSave} onChange={value => update({ askWhereToSave: value })}/></div>
+      <div className="browser-setting-row"><div><Typography.Text strong>在浏览器中打开 Office 文件</Typography.Text><Typography.Text type="secondary">支持的网站可直接预览演示文稿、电子表格和文档</Typography.Text></div><Switch checked={settings.openOfficeInBrowser} onChange={value => update({ openOfficeInBrowser: value })}/></div>
+      <div className="browser-setting-row"><div><Typography.Text strong>下载开始时显示下载菜单</Typography.Text><Typography.Text type="secondary">新下载开始后自动展开工具栏中的下载面板</Typography.Text></div><Switch checked={settings.showPanelOnStart} onChange={value => update({ showPanelOnStart: value })}/></div>
+    </div>
+    <Alert type="info" showIcon message="保存位置说明" description="网页自身触发的原生下载可能由系统 WebView 决定最终位置；浏览器接管的下载会使用这里选择的位置。"/>
   </Card></>
 }
 
@@ -1475,10 +1549,10 @@ function PasswordManagerSettings() {
 }
 
 export function SettingsPage() {
-  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','高级','字体','搜索引擎'].map((label, index) => ({
+  const items = ['通用','浏览器','隐私','密码管理器','AI Provider','知识库','MCP','插件','高级','字体','搜索引擎','下载'].map((label, index) => ({
     key: label,
     label,
-    children: <div className="settings-pane">{index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <AdvancedSettingsPanel/> : index === 9 ? <TypographySettingsPanel/> : <SearchEngineSettings/>}</div>,
+    children: <div className="settings-pane">{index === 0 ? <GeneralSettings/> : index === 1 ? <BrowserSettings/> : index === 2 ? <PrivacySettings/> : index === 3 ? <PasswordManagerSettings/> : index === 4 ? <AIProviderSettings/> : index === 5 ? <KnowledgeBaseSettings/> : index === 6 ? <McpSettings/> : index === 7 ? <PluginSettings/> : index === 8 ? <AdvancedSettingsPanel/> : index === 9 ? <TypographySettingsPanel/> : index === 10 ? <SearchEngineSettings/> : <DownloadSettingsPanel/>}</div>,
   }))
   return <section className="page settings-page">
     <PageHeader title="设置"/>

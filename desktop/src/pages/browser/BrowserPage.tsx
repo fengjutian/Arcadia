@@ -75,6 +75,8 @@ import { NewTab } from '../../features/browser/NewTabPage'
 import { ReaderArticleView } from '../../features/reader/ReaderArticleView'
 import { TabFavicon } from '../../features/browser/TabFavicon'
 import { SearchComparisonWorkspace, type ComparisonSource } from '../../features/browser/SearchComparisonWorkspace'
+import { BROWSER_APPEARANCE_EVENT, readBrowserAppearance, type BrowserAppearanceSettings } from '../../features/settings/browserAppearance'
+import { readDownloadSettings } from '../../features/settings/downloadSettings'
 
 const SESSION_KEY = 'browser.tabs'
 const SESSION_DEBOUNCE_MS = 500
@@ -136,7 +138,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [findQuery, setFindQuery] = useState('')
   const [findStatus, setFindStatus] = useState<'idle' | 'found' | 'missing'>('idle')
   const [zoomLevels, setZoomLevels] = useState<Record<string, number>>({})
+  const [browserAppearance, setBrowserAppearance] = useState<BrowserAppearanceSettings>(readBrowserAppearance)
   const { downloads } = useDownloads({
+    onUpdate: entry => {
+      if (entry.status === 'downloading' && readDownloadSettings().showPanelOnStart) setToolbarOverlay('downloads')
+    },
     onTerminal: entry => {
       if (entry.status === 'completed') messageApi.success('下载完成')
       else if (entry.status === 'failed') messageApi.error('下载失败')
@@ -187,6 +193,18 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const lastAdBlockCountRef = useRef<Record<string, number>>({})
   const active = tabs.find(tab => tab.id === activeTabId) ?? tabs[0]
   const nativeMode = hasNativeTab(active.id)
+
+  useEffect(() => {
+    const onAppearanceChange = (event: Event) => setBrowserAppearance((event as CustomEvent<BrowserAppearanceSettings>).detail ?? readBrowserAppearance())
+    window.addEventListener(BROWSER_APPEARANCE_EVENT, onAppearanceChange)
+    return () => window.removeEventListener(BROWSER_APPEARANCE_EVENT, onAppearanceChange)
+  }, [])
+
+
+  useEffect(() => {
+    if (!nativeMode || !active.url) return
+    void zoomNativeTab(active.id, zoomLevels[active.id] ?? browserAppearance.defaultZoom)
+  }, [active.id, active.url, browserAppearance.defaultZoom, nativeMode, zoomLevels])
 
   useEffect(() => {
     let unlistenClosed: (() => void) | undefined
@@ -1070,7 +1088,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   function changeZoom(tabId: string, delta: number) {
     setZoomLevels(current => {
-      const next = Math.min(3, Math.max(0.5, Math.round(((current[tabId] ?? 1) + delta) * 10) / 10))
+      const next = Math.min(3, Math.max(0.5, Math.round(((current[tabId] ?? browserAppearance.defaultZoom) + delta) * 10) / 10))
       if (hasNativeTab(tabId)) void zoomNativeTab(tabId, next)
       return { ...current, [tabId]: next }
     })
@@ -1154,7 +1172,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     // Native popup menus are drawn by the OS above every child WebView. Keep
     // the React dropdown closed so no hidden overlay state survives dismissal.
     setToolbarOverlay(null)
-    void setNativeToolbarMenu(active.id, true, Math.round((zoomLevels[active.id] ?? 1) * 100)).catch(error => {
+    void setNativeToolbarMenu(active.id, true, Math.round((zoomLevels[active.id] ?? browserAppearance.defaultZoom) * 100)).catch(error => {
       console.error('browser toolbar menu failed', error)
       messageApi.error('菜单浮层加载失败，请重启桌面应用后重试')
     })
@@ -1202,7 +1220,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     { key: 'new-private', label: '新建私密窗口', icon: <LockOutlined/>, extra: 'Shift+Ctrl+N', onClick: () => runBrowserMenuAction('new-private') },
     { key: 'fullscreen', label: isWindowFullscreen ? '退出全屏' : '进入全屏', icon: <FullscreenOutlined/>, extra: 'F11', onClick: () => runBrowserMenuAction('fullscreen') },
     { type: 'divider' },
-    { key: 'zoom', label: <Space><Button size="small" onClick={event => { event.stopPropagation(); changeZoom(active.id, -0.1) }}>−</Button><span className="browser-zoom-value">{Math.round((zoomLevels[active.id] ?? 1) * 100)}%</span><Button size="small" onClick={event => { event.stopPropagation(); changeZoom(active.id, 0.1) }}>+</Button></Space> },
+    { key: 'zoom', label: <Space><Button size="small" onClick={event => { event.stopPropagation(); changeZoom(active.id, -0.1) }}>−</Button><span className="browser-zoom-value">{Math.round((zoomLevels[active.id] ?? browserAppearance.defaultZoom) * 100)}%</span><Button size="small" onClick={event => { event.stopPropagation(); changeZoom(active.id, 0.1) }}>+</Button></Space> },
     { key: 'zoom-reset', label: '重置缩放', extra: 'Ctrl+0', onClick: () => setZoom(active.id, 1) },
   ]) as MenuProps['items']
 
@@ -1960,7 +1978,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             closable: tabs.length > 1 && !tab.pinned,
           }
         })})()} activeKey={activeTabId} onChange={activateTab} addIcon={<Tooltip title="新建标签页 (Ctrl+T)"><PlusOutlined aria-label="新建标签页"/></Tooltip>} onEdit={(target, action) => action === 'add' ? openNewTab() : closeTab(String(target))}/></div></TopBarPortal>
-    <div className="browser-toolbar"><Space><Button type="text" aria-label="后退" title="后退 (Alt+←)" icon={<ArrowLeftOutlined/>} disabled={!nativeMode || !active.canGoBack} onClick={() => void navigateHistory(active.id,-1)}/><Button type="text" aria-label="前进" title="前进 (Alt+→)" icon={<ArrowRightOutlined/>} disabled={!nativeMode || !active.canGoForward} onClick={() => void navigateHistory(active.id,1)}/><Button type="text" aria-label={active.loading?'停止加载':'重新加载'} title={active.loading?'停止加载 (Esc)':'重新加载 (F5)'} icon={active.loading?<CloseOutlined/>:<ReloadOutlined/>} disabled={!nativeMode} onClick={() => void (active.loading ? stopNativeTab(active.id) : reloadNativeTab(active.id))}/><Button type="text" icon={<BookOutlined/>} onClick={() => void openReader()}>阅读模式</Button></Space><form onSubmit={event => { event.preventDefault(); void navigate(address) }}><AutoComplete value={address} options={addressSuggestions} onChange={setAddress} onSelect={value=>void navigate(value)}><Input ref={addressRef} prefix={<SafetyCertificateOutlined/>} suffix={<button type="button" className={`browser-star${starredDocId ? ' is-active' : ''}`} disabled={!active.url} aria-label={starredDocId ? '取消收藏' : '收藏当前页'} title={starredDocId ? '取消收藏' : '收藏当前页'} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleStarCurrent() }}><StarOutlined/></button>} onFocus={event=>event.currentTarget.select()} placeholder="搜索或输入网址"/></AutoComplete></form><Tooltip title={adBlockerEnabled ? `广告过滤已开启，本标签已过滤 ${blockedAdsByTab[active.id] ?? 0} 项` : '广告过滤已关闭'}><Tag icon={<SafetyCertificateOutlined/>} color={adBlockerEnabled ? 'green' : 'default'}>{blockedAdsByTab[active.id] ?? 0}</Tag></Tooltip><Button type={aiOpen?'primary':'text'} ghost={aiOpen} icon={<RobotOutlined/>} onClick={()=>setAiOpen(value=>!value)}/><Popover trigger="click" placement="bottomRight" content={downloadPanel} open={toolbarOverlay==='downloads'} onOpenChange={open=>void changeToolbarOverlay('downloads',open)}><Badge size="small" count={downloads.filter(item=>item.status==='downloading').length}><Button type="text" aria-label="下载" icon={<DownloadOutlined/>}/></Badge></Popover><Popover trigger="click" placement="bottomRight" content={bookmarkBarPanel} open={toolbarOverlay==='bookmarks'} onOpenChange={open=>void changeToolbarOverlay('bookmarks',open)}><Button type="text" aria-label="收藏夹" title={`${bookmarkActions.bookmarks.length} 条收藏 (Ctrl+Shift+O)`} icon={<StarFilled style={{ color: bookmarkActions.bookmarks.length ? '#d49a26' : undefined }}/>}/></Popover><Popover trigger="click" placement="bottomRight" content={resourcePanel} open={toolbarOverlay==='resources'} onOpenChange={open=>void changeToolbarOverlay('resources',open)}><Button type="text" aria-label="资源面板" icon={<ThunderboltOutlined/>} title={`${resourceStats.liveTabs} 个 WebView / ${resourceStats.totalTabs} 标签`}/></Popover><Dropdown menu={{items:browserMenu}} trigger={['click']} open={toolbarOverlay==='menu'} onOpenChange={open=>void changeToolbarOverlay('menu',open)}><Button type="text" aria-label="浏览器菜单" icon={<MoreOutlined/>}/></Dropdown></div>
+    <div className="browser-toolbar"><Space><Button type="text" aria-label="后退" title="后退 (Alt+←)" icon={<ArrowLeftOutlined/>} disabled={!nativeMode || !active.canGoBack} onClick={() => void navigateHistory(active.id,-1)}/><Button type="text" aria-label="前进" title="前进 (Alt+→)" icon={<ArrowRightOutlined/>} disabled={!nativeMode || !active.canGoForward} onClick={() => void navigateHistory(active.id,1)}/><Button type="text" aria-label={active.loading?'停止加载':'重新加载'} title={active.loading?'停止加载 (Esc)':'重新加载 (F5)'} icon={active.loading?<CloseOutlined/>:<ReloadOutlined/>} disabled={!nativeMode} onClick={() => void (active.loading ? stopNativeTab(active.id) : reloadNativeTab(active.id))}/>{browserAppearance.toolbar.reader&&<Button type="text" icon={<BookOutlined/>} onClick={() => void openReader()}>阅读模式</Button>}</Space><form onSubmit={event => { event.preventDefault(); void navigate(address) }}><AutoComplete value={address} options={addressSuggestions} onChange={setAddress} onSelect={value=>void navigate(value)}><Input ref={addressRef} prefix={<SafetyCertificateOutlined/>} suffix={<button type="button" className={`browser-star${starredDocId ? ' is-active' : ''}`} disabled={!active.url} aria-label={starredDocId ? '取消收藏' : '收藏当前页'} title={starredDocId ? '取消收藏' : '收藏当前页'} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleStarCurrent() }}><StarOutlined/></button>} onFocus={event=>event.currentTarget.select()} placeholder="搜索或输入网址"/></AutoComplete></form>{browserAppearance.toolbar.adBlock&&<Tooltip title={adBlockerEnabled ? `广告过滤已开启，本标签已过滤 ${blockedAdsByTab[active.id] ?? 0} 项` : '广告过滤已关闭'}><Tag icon={<SafetyCertificateOutlined/>} color={adBlockerEnabled ? 'green' : 'default'}>{blockedAdsByTab[active.id] ?? 0}</Tag></Tooltip>}{browserAppearance.toolbar.ai&&<Button type={aiOpen?'primary':'text'} ghost={aiOpen} icon={<RobotOutlined/>} onClick={()=>setAiOpen(value=>!value)}/>} {browserAppearance.toolbar.downloads&&<Popover trigger="click" placement="bottomRight" content={downloadPanel} open={toolbarOverlay==='downloads'} onOpenChange={open=>void changeToolbarOverlay('downloads',open)}><Badge size="small" count={downloads.filter(item=>item.status==='downloading').length}><Button type="text" aria-label="下载" icon={<DownloadOutlined/>}/></Badge></Popover>}{browserAppearance.toolbar.bookmarks&&<Popover trigger="click" placement="bottomRight" content={bookmarkBarPanel} open={toolbarOverlay==='bookmarks'} onOpenChange={open=>void changeToolbarOverlay('bookmarks',open)}><Button type="text" aria-label="收藏夹" title={`${bookmarkActions.bookmarks.length} 条收藏 (Ctrl+Shift+O)`} icon={<StarFilled style={{ color: bookmarkActions.bookmarks.length ? '#d49a26' : undefined }}/>}/></Popover>}{browserAppearance.toolbar.resources&&<Popover trigger="click" placement="bottomRight" content={resourcePanel} open={toolbarOverlay==='resources'} onOpenChange={open=>void changeToolbarOverlay('resources',open)}><Button type="text" aria-label="资源面板" icon={<ThunderboltOutlined/>} title={`${resourceStats.liveTabs} 个 WebView / ${resourceStats.totalTabs} 标签`}/></Popover>}<Dropdown menu={{items:browserMenu}} trigger={['click']} open={toolbarOverlay==='menu'} onOpenChange={open=>void changeToolbarOverlay('menu',open)}><Button type="text" aria-label="浏览器菜单" icon={<MoreOutlined/>}/></Dropdown></div>
     {findOpen&&<div className="browser-find"><Input autoFocus allowClear prefix={<SearchOutlined/>} value={findQuery} status={findStatus==='missing'?'error':undefined} placeholder="在页面中查找" onChange={event=>{setFindQuery(event.target.value);setFindStatus('idle')}} onPressEnter={event=>void runFind(event.shiftKey)}/><Typography.Text type={findStatus==='missing'?'danger':'secondary'}>{findStatus==='missing'?'未找到':findStatus==='found'?'已定位':''}</Typography.Text><Button type="text" aria-label="上一个匹配项" icon={<ArrowUpOutlined/>} onClick={()=>void runFind(true)}/><Button type="text" aria-label="下一个匹配项" icon={<ArrowDownOutlined/>} onClick={()=>void runFind(false)}/><Button type="text" aria-label="关闭查找" icon={<CloseOutlined/>} onClick={closeFind}/></div>}
     <PermissionPromptBar prompt={permissionPrompt} />
     <TabSearchPalette

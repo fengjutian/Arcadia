@@ -73,6 +73,33 @@
   max-width: none;
 }
 
+.browser-appearance-settings { max-width: 780px; }
+.browser-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 64px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border-color, #e4e9e5);
+
+  > div { display: flex; flex-direction: column; gap: 3px; }
+}
+.toolbar-settings-list { margin-bottom: 18px; }
+.download-settings-card > .ui-card__body { max-width: 920px; }
+.download-location-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 4px 4px 18px;
+  border-bottom: 1px solid var(--border-color, #e4e9e5);
+
+  > div:first-child { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
+  .ui-typography-text { max-width: 620px; }
+}
+.download-settings-list { margin-bottom: 20px; }
+
 // Edge-inspired theme picker: tactile color swatches plus a real-time shell
 // preview make the effect of each choice visible before leaving settings.
 .theme-settings {

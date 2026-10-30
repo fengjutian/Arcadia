@@ -5,6 +5,8 @@ import { onNativeDownload } from '../../services/nativeBrowser'
 export interface UseDownloadsOptions {
   /** Optional callback fired once per terminal (completed/failed) update. */
   onTerminal?: (entry: DownloadFeedEntry) => void
+  /** Called for every valid native download update, including start/progress. */
+  onUpdate?: (entry: DownloadFeedEntry) => void
 }
 
 export interface UseDownloadsResult {
@@ -26,10 +28,12 @@ export interface UseDownloadsResult {
  * higher version is accepted but the frontend only reads v1 fields today.
  */
 export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsResult {
-  const { onTerminal } = options
+  const { onTerminal, onUpdate } = options
   const [downloads, setDownloads] = useState<DownloadFeedEntry[]>([])
   const onTerminalRef = useRef(onTerminal)
   onTerminalRef.current = onTerminal
+  const onUpdateRef = useRef(onUpdate)
+  onUpdateRef.current = onUpdate
   const lastTerminalRef = useRef(new Set<string>())
 
   useEffect(() => {
@@ -38,6 +42,7 @@ export function useDownloads(options: UseDownloadsOptions = {}): UseDownloadsRes
     void onNativeDownload(payload => {
       const normalized = normalizeDownloadPayload(payload)
       if (!normalized) return
+      onUpdateRef.current?.(normalized)
       setDownloads(current => applyDownloadUpdate(current, normalized, DOWNLOAD_FEED_LIMIT))
       if (normalized.status === 'completed' || normalized.status === 'failed') {
         const key = `${normalized.status}:${normalized.url}`
