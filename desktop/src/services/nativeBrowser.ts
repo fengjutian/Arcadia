@@ -9,6 +9,7 @@ import { isMissingWebviewError } from '../features/browser/tabViewErrors'
 export interface BrowserBounds { x: number; y: number; width: number; height: number }
 export interface NativeBrowserState { url: string; title: string; favicon?: string; loading: boolean; scrollX: number; scrollY: number; scrollDepth?: number; canGoBack: boolean; canGoForward: boolean }
 export interface NativePageSnapshot { url: string; html: string }
+export interface NativeResourceCandidate { url:string; initiatorType?:string; transferSize?:number; decodedBodySize?:number; source:'performance'|'dom' }
 export interface NetworkDiagnosis { kind:'reachable'|'offline'|'dns'|'timeout'|'tls'|'connection-refused'|'network'|'http-client'|'http-server'; message:string; httpStatus?:number }
 interface NativeToolbarMenuEvent { version: number; tabLabel: string; action: string }
 export interface NativeToolbarMenuAction { tabId: string; action: string; value?: string }
@@ -276,6 +277,7 @@ export async function setNativeAdBlocking(enabled: boolean): Promise<void> {
 }
 export async function setNativeMuted(tabId: string, muted: boolean): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_set_muted',{label,muted}) }
 export async function captureNativePage(tabId: string): Promise<NativePageSnapshot> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<NativePageSnapshot>('browser_snapshot',{label}) }
+export async function scanNativeResources(tabId: string): Promise<NativeResourceCandidate[]> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<NativeResourceCandidate[]>('browser_resource_candidates',{label}) }
 export function hasNativeTab(tabId: string): boolean { return labels.has(tabId) }
 export async function onNativeNewTab(handler: (url: string, options: { private: boolean }) => void): Promise<UnlistenFn> {
   if (!isTauri()) return () => undefined
