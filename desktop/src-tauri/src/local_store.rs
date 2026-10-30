@@ -751,6 +751,15 @@ pub struct LocalHistoryEntry {
     visited_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalHistoryPage {
+    items: Vec<LocalHistoryEntry>,
+    total: i64,
+    page: i64,
+    page_size: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalReadingActivity {
@@ -3101,6 +3110,40 @@ pub fn local_list_history(app: tauri::AppHandle) -> Result<Vec<LocalHistoryEntry
         .map_err(|error| error.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_list_history_page(
+    app: tauri::AppHandle,
+    page: i64,
+    page_size: i64,
+) -> Result<LocalHistoryPage, String> {
+    let page = page.max(1);
+    let page_size = page_size.clamp(1, 100);
+    let offset = (page - 1).saturating_mul(page_size);
+    let database = connection(&app)?;
+    let total = database
+        .query_row("SELECT COUNT(*) FROM browser_history", [], |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+    let mut statement = database
+        .prepare(
+            "SELECT url,title,visited_at FROM browser_history
+             ORDER BY visited_at DESC, id DESC LIMIT ?1 OFFSET ?2",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![page_size, offset], |row| {
+            Ok(LocalHistoryEntry {
+                url: row.get(0)?,
+                title: row.get(1)?,
+                visited_at: row.get(2)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    let items = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(LocalHistoryPage { items, total, page, page_size })
 }
 
 #[tauri::command]

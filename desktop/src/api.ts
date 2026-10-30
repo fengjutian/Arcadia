@@ -549,6 +549,24 @@ export async function listBrowserHistory(): Promise<HistoryEntry[]> {
   return invoke<HistoryEntry[]>('local_list_history')
 }
 
+export interface BrowserHistoryPage {
+  items: HistoryEntry[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export async function listBrowserHistoryPage(page = 1, pageSize = 20): Promise<BrowserHistoryPage> {
+  const safePage = Math.max(1, Math.floor(page))
+  const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)))
+  if (!isTauri()) {
+    const entries = await listBrowserHistory()
+    const offset = (safePage - 1) * safePageSize
+    return { items: entries.slice(offset, offset + safePageSize), total: entries.length, page: safePage, pageSize: safePageSize }
+  }
+  return invoke<BrowserHistoryPage>('local_list_history_page', { page: safePage, pageSize: safePageSize })
+}
+
 export async function addBrowserHistory(entry: HistoryEntry): Promise<void> {
   if (!isTauri()) {
     const entries = await listBrowserHistory()

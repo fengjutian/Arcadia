@@ -2385,6 +2385,7 @@ pub fn run() {
             local_store::local_get_session,
             local_store::local_set_session,
             local_store::local_list_history,
+            local_store::local_list_history_page,
             local_store::local_record_reading_activity,
             local_store::local_list_reading_activity,
             local_store::local_save_reading_snapshot,

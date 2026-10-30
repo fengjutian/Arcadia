@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getVersion } from '@tauri-apps/api/app'
 import appLogo from '../../assets/app-logo-humanist.png'
 import { PageHeader } from '../../shared/components/PageHeader'
-import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInDb, clearReadingSnapshots, deleteAIProvider, deleteMcpServer, discoverMcpServer, dispatchPluginEvent, exportBackup, getAIProvider, getBrowserShortcutsEnabled, getReadingSnapshotStats, importBackup, installPlugin, listAIProviders, listBrowserHistory, listMcpResources, listMcpServers, listMcpTools, listPluginAudit, listPlugins, privacyCapabilityReport, privacyGetStats, privacyListBlocklists, privacyListBlockEvents, privacySetBlocklistEnabled, purgeReadingSnapshots, ragCancelJob, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragRetryJob, replaceSitePermissions, saveAIProvider, saveMcpServer, aiTestProvider, setBrowserShortcutsEnabled, setPluginEnabled, setPluginPermission, uninstallPlugin, type AIProviderInput, type InstalledPlugin, type McpServer, type McpTransport, type PluginAuditEntry, type PluginPermission, type ReadingSnapshotStats } from '../../api'
+import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInDb, clearReadingSnapshots, deleteAIProvider, deleteMcpServer, discoverMcpServer, dispatchPluginEvent, exportBackup, getAIProvider, getBrowserShortcutsEnabled, getReadingSnapshotStats, importBackup, installPlugin, listAIProviders, listBrowserHistory, listBrowserHistoryPage, listMcpResources, listMcpServers, listMcpTools, listPluginAudit, listPlugins, privacyCapabilityReport, privacyGetStats, privacyListBlocklists, privacyListBlockEvents, privacySetBlocklistEnabled, purgeReadingSnapshots, ragCancelJob, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragRetryJob, replaceSitePermissions, saveAIProvider, saveMcpServer, aiTestProvider, setBrowserShortcutsEnabled, setPluginEnabled, setPluginPermission, uninstallPlugin, type AIProviderInput, type InstalledPlugin, type McpServer, type McpTransport, type PluginAuditEntry, type PluginPermission, type ReadingSnapshotStats } from '../../api'
 import type { AIProvider, AIProviderType } from '../../types'
 import { normalizeOrigin, readSitePermissions, writeSitePermissions, type SitePermissionKind, type SitePermissionRule } from '../../features/browser/sitePermissions'
 import { KnowledgeBaseStatusPanel } from '../../features/settings/KnowledgeBaseStatusPanel'
@@ -1050,6 +1050,11 @@ const PERMISSION_LABELS: Record<SitePermissionKind, string> = {
 function PrivacySettings() {
   const [messageApi, contextHolder] = message.useMessage()
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([])
+  const [historyPageEntries, setHistoryPageEntries] = useState<HistoryEntry[]>([])
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(20)
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyPageLoading, setHistoryPageLoading] = useState(false)
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
   const [blocklists, setBlocklists] = useState<Awaited<ReturnType<typeof privacyListBlocklists>>>([])
@@ -1070,6 +1075,24 @@ function PrivacySettings() {
     })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    let active = true
+    setHistoryPageLoading(true)
+    void listBrowserHistoryPage(historyPage, historyPageSize)
+      .then(result => {
+        if (!active) return
+        const lastPage = Math.max(1, Math.ceil(result.total / historyPageSize))
+        if (historyPage > lastPage) {
+          setHistoryPage(lastPage)
+          return
+        }
+        setHistoryPageEntries(result.items)
+        setHistoryTotal(result.total)
+      })
+      .finally(() => { if (active) setHistoryPageLoading(false) })
+    return () => { active = false }
+  }, [historyPage, historyPageSize])
 
   useEffect(() => { void getReadingSnapshotStats().then(setSnapshotStats) }, [])
 
@@ -1103,6 +1126,9 @@ function PrivacySettings() {
     if (scope === 'all') {
       await clearBrowserHistory()
       setHistoryEntries([])
+      setHistoryPageEntries([])
+      setHistoryTotal(0)
+      setHistoryPage(1)
       window.dispatchEvent(new CustomEvent<HistoryEntry[]>(HISTORY_CHANGE_EVENT, { detail: [] }))
       messageApi.success(`已清理全部 ${all.length} 条浏览记录`)
       return
@@ -1111,6 +1137,10 @@ function PrivacySettings() {
     const next = all.filter(item => item.visitedAt < cutoff)
     await clearBrowserHistory(cutoff)
     setHistoryEntries(next)
+    const firstPage = await listBrowserHistoryPage(1, historyPageSize)
+    setHistoryPageEntries(firstPage.items)
+    setHistoryTotal(firstPage.total)
+    setHistoryPage(1)
     window.dispatchEvent(new CustomEvent<HistoryEntry[]>(HISTORY_CHANGE_EVENT, { detail: next }))
     messageApi.success(`已清理 ${all.length - next.length} 条浏览记录`)
   }
@@ -1149,6 +1179,12 @@ function PrivacySettings() {
     <Typography.Paragraph type="secondary">私密标签关闭后不会出现在最近关闭列表，也不会参与会话恢复。</Typography.Paragraph>
   </div>
 
+  const historyPageCount = Math.max(1, Math.ceil(historyTotal / historyPageSize))
+  const historyPageNumbers = Array.from({ length: Math.min(7, historyPageCount) }, (_, index) => {
+    const start = Math.max(1, Math.min(historyPage - 3, historyPageCount - 6))
+    return start + index
+  })
+
   const historyContent = <div className="privacy-section">
     <Typography.Paragraph type="secondary">按时间范围清理浏览历史（只删数据，不会删除已保存到知识库的文档）。</Typography.Paragraph>
     <Space wrap>
@@ -1157,8 +1193,17 @@ function PrivacySettings() {
       <Button onClick={() => void clearHistory('week')}>最近 7 天</Button>
       <Button danger onClick={() => void clearHistory('all')}>清空全部</Button>
     </Space>
-    <div className="privacy-history-head"><Typography.Text strong>全部记录</Typography.Text><Typography.Text type="secondary">{historyEntries.length} 条</Typography.Text></div>
-    <List className="privacy-history-list" size="small" dataSource={historyEntries} locale={{ emptyText: '暂无浏览历史' }} renderItem={item => <List.Item key={`${item.url}-${item.visitedAt}`}><List.Item.Meta title={item.title || item.url} description={<><Typography.Text type="secondary">{new Date(item.visitedAt).toLocaleString()}</Typography.Text><Typography.Text className="privacy-history-url" copyable={{ text: item.url }}>{item.url}</Typography.Text></>}/></List.Item>}/>
+    <div className="privacy-history-head"><Typography.Text strong>全部记录</Typography.Text><Typography.Text type="secondary">共 {historyTotal} 条</Typography.Text></div>
+    <List loading={historyPageLoading} className="privacy-history-list" size="small" dataSource={historyPageEntries} locale={{ emptyText: '暂无浏览历史' }} renderItem={item => <List.Item key={`${item.url}-${item.visitedAt}`}><List.Item.Meta title={item.title || item.url} description={<><Typography.Text type="secondary">{new Date(item.visitedAt).toLocaleString()}</Typography.Text><Typography.Text className="privacy-history-url" copyable={{ text: item.url }}>{item.url}</Typography.Text></>}/></List.Item>}/>
+    {historyTotal > 0 && <div className="privacy-history-pagination" aria-label="浏览历史分页">
+      <Typography.Text type="secondary">第 {(historyPage - 1) * historyPageSize + 1}–{Math.min(historyPage * historyPageSize, historyTotal)} 条</Typography.Text>
+      <div className="privacy-history-pagination__pages">
+        <Button size="small" disabled={historyPage === 1 || historyPageLoading} onClick={() => setHistoryPage(page => page - 1)}>上一页</Button>
+        {historyPageNumbers.map(page => <Button key={page} size="small" type={page === historyPage ? 'primary' : 'default'} disabled={historyPageLoading} onClick={() => setHistoryPage(page)}>{page}</Button>)}
+        <Button size="small" disabled={historyPage === historyPageCount || historyPageLoading} onClick={() => setHistoryPage(page => page + 1)}>下一页</Button>
+      </div>
+      <Select<number> className="privacy-history-page-size" ariaLabel="每页条数" value={historyPageSize} options={[10, 20, 50, 100].map(value => ({ label: `${value} 条/页`, value }))} onChange={value => { setHistoryPageSize(value); setHistoryPage(1) }}/>
+    </div>}
   </div>
 
   const categoryColors: Record<string, string> = { '开发技术':'#1677ff', '视频娱乐':'#9254de', '社交社区':'#13a8a8', '搜索工具':'#52c41a', '购物':'#fa8c16', '其他':'#8c8c8c' }
