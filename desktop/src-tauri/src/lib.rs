@@ -30,7 +30,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::image::Image;
-use tauri::menu::MenuBuilder;
+use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::webview::DownloadEvent;
 use tauri::{Emitter, LogicalPosition, Manager};
 
@@ -516,6 +516,9 @@ async fn browser_diagnose_url(url: String) -> Result<NetworkDiagnosis, String> {
 struct NavStacks {
     stacks: Mutex<HashMap<String, NavStack>>,
 }
+
+#[derive(Default)]
+struct ToolbarMenuTokens(Mutex<HashMap<String, String>>);
 
 #[derive(Default)]
 struct NavStack {
@@ -1305,6 +1308,12 @@ fn browser_toolbar_menu_in_page(
     let webview = app
         .get_webview(&label)
         .ok_or_else(|| "browser tab webview not found".to_string())?;
+    let token = uuid::Uuid::new_v4().to_string();
+    app.state::<ToolbarMenuTokens>()
+        .0
+        .lock()
+        .map_err(|_| "toolbar menu token store poisoned".to_string())?
+        .insert(label.clone(), token.clone());
     let script = if !open {
         "window.__arcadiaToolbarMenu?.close(false)".to_string()
     } else {
@@ -1314,20 +1323,20 @@ fn browser_toolbar_menu_in_page(
           const host = document.createElement('div');
           host.id = '__arcadia-toolbar-menu';
           const shadow = host.attachShadow({{mode:'closed'}});
-          const emit = action => window.__TAURI_INTERNALS__?.invoke('browser_emit_event', {{event:'browser://toolbar-menu-action', payload:{{version:1,tabLabel:'{label}',action}}}}).catch(()=>undefined);
+          const emit = action => window.__TAURI_INTERNALS__?.invoke('browser_emit_event', {{event:'browser://toolbar-menu-action', payload:{{version:1,tabLabel:'{label}',action,token:'{token}'}}}}).catch(()=>undefined);
           const close = (notify=true) => {{ document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', keydown, true); host.remove(); delete window.__arcadiaToolbarMenu; if(notify) emit('__dismiss__'); }};
           const outside = event => {{ if(!event.composedPath().includes(host)) close(); }};
           const keydown = event => {{ if(event.key === 'Escape') close(); }};
           const items = [
-            ['find','在页面中查找'],['tab-search','搜索标签页'],['history-search','浏览历史记录'],
+            ['find','在页面中查找'],['tab-search','搜索标签页'],['history-search','浏览历史记录'],null,
             ['bookmark-add','收藏当前页'],['bookmarks','打开收藏夹'],['bulk-summary','多链接 AI 摘要'],
-            ['toggle-notes','网页笔记面板'],['save-workspace','保存当前标签为工作区'],['translate-page','翻译当前网页'],['print','打印 / 保存为 PDF'],['screenshot-visible','截取可视区域'],['screenshot-full','截取整个网页'],['devtools','开发者工具'],['clear-site-data','清除此网站数据'],
+            ['toggle-notes','网页笔记面板'],['save-workspace','保存为工作区'],null,['translate-page','翻译当前网页'],['print','打印 / 保存为 PDF'],['screenshot-visible','截图：可视区域'],['screenshot-full','截图：整个网页'],['devtools','开发者工具'],['clear-site-data','清除此网站数据'],
             null,['new-private','新建私密窗口'],['fullscreen','进入全屏'],null
           ];
           const style = document.createElement('style');
           style.textContent = `
-            :host{{all:initial}} .menu{{font:14px/1.4 system-ui,"Microsoft YaHei",sans-serif;color:#202521;background:#fff;border:1px solid #d9dfda;border-radius:12px;box-shadow:0 12px 32px rgba(20,35,27,.18);padding:8px;width:224px;box-sizing:border-box}}
-            button{{all:unset;box-sizing:border-box;display:block;width:100%;padding:9px 10px;border-radius:7px;cursor:pointer}} button:hover{{background:#edf5ef}} .sep{{height:1px;background:#e1e6e2;margin:5px 2px}} .zoom{{display:grid;grid-template-columns:34px 1fr 34px;align-items:center;gap:6px;padding:5px 3px}} .zoom button{{padding:6px;text-align:center;border:1px solid #d9dfda;background:#fff}} .zoom span{{text-align:center;font:13px system-ui}}
+            :host{{all:initial}} .menu{{font:13px/1.35 system-ui,"Microsoft YaHei",sans-serif;color:#202521;background:rgba(255,255,255,.98);border:1px solid #d9dfda;border-radius:14px;box-shadow:0 18px 48px rgba(20,35,27,.22);padding:7px;width:236px;max-height:calc(100vh - 16px);overflow:auto;box-sizing:border-box;scrollbar-width:thin}}
+            button{{all:unset;box-sizing:border-box;display:block;width:100%;padding:8px 10px;border-radius:8px;cursor:pointer}} button:hover{{background:#edf5ef}} button:focus-visible{{outline:2px solid #277a50;outline-offset:-2px}} .sep{{height:1px;background:#e1e6e2;margin:5px 3px}} .zoom{{display:grid;grid-template-columns:34px 1fr 34px;align-items:center;gap:6px;padding:5px 3px}} .zoom button{{padding:6px;text-align:center;border:1px solid #d9dfda;background:#fff}} .zoom span{{text-align:center;font:13px system-ui}}
           `;
           const menu = document.createElement('div');
           menu.className = 'menu'; menu.setAttribute('role', 'menu');
@@ -1351,6 +1360,7 @@ fn browser_toolbar_menu_in_page(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 fn browser_toolbar_menu(
     app: tauri::AppHandle,
     label: String,
@@ -1368,20 +1378,37 @@ fn browser_toolbar_menu(
         .get_webview(&label)
         .and_then(|view| view.url().ok())
         .and_then(|url| site_blacklist::match_url(url.as_str()));
+    let page_tools = SubmenuBuilder::new(&app, "页面工具")
+        .text(id("translate-page"), "翻译当前网页")
+        .text(id("print"), "打印 / 保存为 PDF\tCtrl+P")
+        .separator()
+        .text(id("screenshot-visible"), "截图：可视区域")
+        .text(id("screenshot-full"), "截图：整个网页")
+        .separator()
+        .text(id("devtools"), "开发者工具\tF12")
+        .build()
+        .map_err(|error| error.to_string())?;
+    let zoom = SubmenuBuilder::new(&app, format!("页面缩放（{zoom_percent}%）"))
+        .text(id("zoom-out"), "缩小\t−")
+        .text(id("zoom-in"), "放大\t+")
+        .separator()
+        .text(id("zoom-reset"), "重置缩放\tCtrl+0")
+        .build()
+        .map_err(|error| error.to_string())?;
     let builder = MenuBuilder::new(&app)
         .text(id("find"), "在页面中查找\tCtrl+F")
         .text(id("tab-search"), "搜索标签页\tCtrl+K")
         .text(id("history-search"), "浏览历史记录\tCtrl+H")
+        .separator()
         .text(id("bookmark-add"), "收藏当前页\tCtrl+D")
         .text(id("bookmarks"), "打开收藏夹\tCtrl+Shift+O")
         .text(id("bulk-summary"), "多链接 AI 摘要\tCtrl+Shift+S")
         .text(id("toggle-notes"), "网页笔记面板\tCtrl+Shift+N")
-        .text(id("save-workspace"), "保存当前标签为工作区\tCtrl+Shift+W")
-        .text(id("translate-page"), "翻译当前网页")
-        .text(id("print"), "打印 / 保存为 PDF\tCtrl+P")
-        .text(id("screenshot-visible"), "截取可视区域")
-        .text(id("screenshot-full"), "截取整个网页")
-        .text(id("devtools"), "开发者工具")
+        .text(id("save-workspace"), "保存为工作区\tCtrl+Shift+W")
+        .separator()
+        .item(&page_tools)
+        .item(&zoom)
+        .separator()
         .text(id("clear-site-data"), "清除此网站数据");
     let builder = match blocked {
         Some(found) => builder.text(
@@ -1392,15 +1419,8 @@ fn browser_toolbar_menu(
     };
     let menu = builder
         .separator()
-        .text(id("new-private"), "新建私密窗口\tCtrl+Shift+N")
+        .text(id("new-private"), "新建私密标签页\tCtrl+Shift+N")
         .text(id("fullscreen"), "进入/退出全屏\tF11")
-        .separator()
-        .text(id("zoom-out"), "缩小\t−")
-        .text(id("zoom-in"), "放大\t+")
-        .text(
-            id("zoom-reset"),
-            format!("重置缩放（{zoom_percent}%）\tCtrl+0"),
-        )
         .build()
         .map_err(|error| error.to_string())?;
     // This app uses a native Window with child WebViews, not a WebviewWindow.
@@ -1414,9 +1434,24 @@ fn browser_toolbar_menu(
     let size = window.inner_size().map_err(|error| error.to_string())?;
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
     let x = (size.width as f64 / scale - 248.0).max(0.0);
-    window
+    // A child WebView owns a native HWND and can paint above a popup attached
+    // to its parent Window. Reserve the menu's right-hand column while the
+    // synchronous native popup is open, then restore the page immediately
+    // after dismissal. This keeps the page visible without covering the menu.
+    let page = app.get_webview(&label);
+    let original_page_size = page.as_ref().and_then(|view| view.size().ok());
+    if let (Some(view), Some(original)) = (page.as_ref(), original_page_size) {
+        let reserved = (272.0 * scale).round() as u32;
+        let narrowed = tauri::PhysicalSize::new(original.width.saturating_sub(reserved).max(1), original.height);
+        let _ = view.set_size(narrowed);
+    }
+    let popup_result = window
         .popup_menu_at(&menu, LogicalPosition::new(x, 104.0))
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string());
+    if let (Some(view), Some(original)) = (page.as_ref(), original_page_size) {
+        let _ = view.set_size(original);
+    }
+    popup_result
 }
 
 #[tauri::command]
@@ -2172,6 +2207,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .manage(NavStacks::default())
+        .manage(ToolbarMenuTokens::default())
         .manage(DownloadIndex::default())
         .manage(downloads::DownloadManager::default())
         .manage(privacy::NavBlockRegistry::default())
@@ -2304,7 +2340,7 @@ pub fn run() {
             browser_state,
             browser_diagnose_url,
             browser_restore_scroll,
-            browser_toolbar_menu,
+            browser_toolbar_menu_in_page,
             browser_toolbar_panel,
             browser_page_toast,
             browser_page_toast_close,
@@ -2518,12 +2554,24 @@ fn browser_emit_event(
         let action = object
             .get("action")
             .and_then(|value| value.as_str())
-            .ok_or_else(|| "toolbar action is required".to_string())?;
+            .ok_or_else(|| "toolbar action is required".to_string())?
+            .to_string();
+        let supplied_token = object
+            .get("token")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let trusted_menu = app
+            .state::<ToolbarMenuTokens>()
+            .0
+            .lock()
+            .map_err(|_| "toolbar menu token store poisoned".to_string())?
+            .get(&label)
+            .is_some_and(|expected| expected == supplied_token);
         // Remote pages may only report interactions from the small native
         // bookmark/resource panels. Privileged browser-menu actions are owned
         // by the trusted main WebView and must never be page-forgeable.
-        if !matches!(
-            action,
+        if !trusted_menu && !matches!(
+            action.as_str(),
             "__dismiss__" | "bookmark-open" | "resource-scan" | "resource-download"
         ) {
             return Err("toolbar action is not allowlisted".into());

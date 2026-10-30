@@ -1543,7 +1543,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       event.preventDefault()
       event.stopImmediatePropagation()
       const zoomPercent = Math.round((zoomLevelsRef.current[active.id] ?? browserAppearance.defaultZoom) * 100)
-      void setNativeToolbarMenu(active.id, true, zoomPercent).catch(error => {
+      const fullBounds = bounds()
+      const restore = fullBounds ? resizeNativeTab(active.id, fullBounds) : Promise.resolve()
+      void restore.then(() => setNativeToolbarMenu(active.id, true, zoomPercent)).catch(error => {
         diagnosticLog('browser.toolbar-menu.open-failed', 'error', { tabId: active.id, error })
         messageApi.error(`浏览器菜单打开失败：${String(error)}`)
       })

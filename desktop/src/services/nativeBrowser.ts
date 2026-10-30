@@ -85,14 +85,6 @@ function enqueueTabOperation<T>(tabId: string, operation: () => Promise<T>): Pro
   return result
 }
 
-function sameBounds(left: BrowserBounds | undefined, right: BrowserBounds): boolean {
-  return !!left
-    && left.x === right.x
-    && left.y === right.y
-    && left.width === right.width
-    && left.height === right.height
-}
-
 /**
  * Forget the cached label and best-effort destroy the native view. Used when
  * the native side reports the WebView is gone: keeping a dead handle in
@@ -128,7 +120,6 @@ async function rebuildWhenViewMissing<T>(tabId: string, action: () => Promise<T>
  * callers that care — `openNativeTab` / `ensureNativeTab` — can rebuild.
  */
 async function applyBounds(tabId: string, bounds: BrowserBounds): Promise<void> {
-  if (sameBounds(lastAppliedBounds.get(tabId), bounds)) return
   const label = labels.get(tabId)
   if (!label) return
   await invoke('browser_set_bounds', { label, bounds })
@@ -274,7 +265,7 @@ export async function navigateHistory(tabId: string, delta: -1|1): Promise<void>
 export async function readNativeState(tabId: string): Promise<NativeBrowserState | null> { const label=labels.get(tabId);return label ? invoke<NativeBrowserState>('browser_state',{label}) : null }
 export async function diagnoseNativeNavigation(url:string): Promise<NetworkDiagnosis> { return invoke<NetworkDiagnosis>('browser_diagnose_url',{url}) }
 export async function restoreNativeScroll(tabId: string, x: number, y: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_restore_scroll',{label,x,y}) }
-export async function setNativeToolbarMenu(tabId: string, open: boolean, zoomPercent: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_toolbar_menu',{label,open,zoomPercent}) }
+export async function setNativeToolbarMenu(tabId: string, open: boolean, zoomPercent: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_toolbar_menu_in_page',{label,open,zoomPercent}) }
 export async function setNativeToolbarPanel(tabId: string, open: boolean, kind: 'downloads' | 'bookmarks' | 'resources', payload: unknown): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_toolbar_panel',{label,open,kind,payload:JSON.stringify(payload)}) }
 /**
  * Paints a toast inside the page instead of the host DOM. Resolves `false`
