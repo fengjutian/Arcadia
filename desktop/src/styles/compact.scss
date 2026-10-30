@@ -1574,8 +1574,8 @@ body[data-theme-kind='image'] {
   }
 
   .new-tab__workspace {
-    border-color: rgba(255,255,255,.62);
-    background: rgba(255,255,255,.74);
+    border-color: rgba(255,255,255,.52);
+    background: rgba(255,255,255,.54);
     box-shadow: 0 22px 60px rgba(12,25,19,.22), inset 0 1px 0 rgba(255,255,255,.72);
     -webkit-backdrop-filter: blur(24px) saturate(125%);
     backdrop-filter: blur(24px) saturate(125%);
@@ -1583,21 +1583,21 @@ body[data-theme-kind='image'] {
 
   .new-tab__weather,
   .new-tab__utility {
-    border-color: rgba(255,255,255,.62);
-    background: rgba(255,255,255,.58);
+    border-color: rgba(255,255,255,.52);
+    background: rgba(255,255,255,.42);
     box-shadow: 0 8px 26px rgba(12,25,19,.14), inset 0 1px 0 rgba(255,255,255,.68);
     -webkit-backdrop-filter: blur(18px) saturate(130%);
     backdrop-filter: blur(18px) saturate(130%);
   }
 
   .new-tab__utility:hover,
-  .new-tab__utility[aria-expanded='true'] { background: rgba(255,255,255,.76); }
+  .new-tab__utility[aria-expanded='true'] { background: rgba(255,255,255,.58); }
 
   .new-tab .quick-site,
   .new-tab-search form .ant-input-affix-wrapper,
   .search-engine-picker .ui-select,
   .knowledge-search-toggle {
-    background: rgba(255,255,255,.56) !important;
+    background: rgba(255,255,255,.40) !important;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.62);
   }
 }

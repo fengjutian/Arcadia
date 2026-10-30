@@ -26,8 +26,8 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   }, [view])
 
   function navButton(item: { key: View; icon: ReactNode; label: string }) {
-    const button = <button type="button" className={`rail-button${view === item.key ? ' is-active' : ''}`} aria-label={item.label} aria-current={view === item.key ? 'page' : undefined} onClick={() => onViewChange(item.key)}><span className="nav-glyph">{item.icon}</span><span className="rail-button__label">{item.label}</span></button>
-    return collapsed ? <Tooltip key={item.key} title={item.label} placement="right" mouseEnterDelay={0.5}>{button}</Tooltip> : <span key={item.key}>{button}</span>
+    const button = <button type="button" title={collapsed ? item.label : undefined} className={`rail-button${view === item.key ? ' is-active' : ''}`} aria-label={item.label} aria-current={view === item.key ? 'page' : undefined} onClick={() => onViewChange(item.key)}><span className="nav-glyph">{item.icon}</span><span className="rail-button__label">{item.label}</span></button>
+    return collapsed ? <Tooltip key={item.key} title={item.label} placement="right" mouseEnterDelay={0.15}>{button}</Tooltip> : <span key={item.key}>{button}</span>
   }
 
   return <TopBarPortalProvider target={topBarSlot}>

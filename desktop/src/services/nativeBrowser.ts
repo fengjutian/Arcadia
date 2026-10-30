@@ -282,13 +282,16 @@ export async function setNativeToolbarMenu(tabId: string, open: boolean, zoomPer
   const label = labels.get(tabId)
   if (!label) throw new Error('native webview is not available')
   try {
-    await invoke('browser_toolbar_menu', { label, open, zoomPercent })
-  } catch (nativeError) {
-    console.warn('native toolbar menu failed; falling back to in-page menu', nativeError)
+    // A Windows native popup can report success without painting above the
+    // child WebView. Render in the page first so the click always has visible
+    // feedback; retain the OS menu as a fallback for non-scriptable pages.
+    await invoke('browser_toolbar_menu_in_page', { label, open, zoomPercent })
+  } catch (pageError) {
+    console.warn('in-page toolbar menu failed; falling back to native menu', pageError)
     try {
-      await invoke('browser_toolbar_menu_in_page', { label, open, zoomPercent })
-    } catch (fallbackError) {
-      throw new Error(`toolbar menu failed (native: ${String(nativeError)}; fallback: ${String(fallbackError)})`)
+      await invoke('browser_toolbar_menu', { label, open, zoomPercent })
+    } catch (nativeError) {
+      throw new Error(`toolbar menu failed (page: ${String(pageError)}; native: ${String(nativeError)})`)
     }
   }
 }
