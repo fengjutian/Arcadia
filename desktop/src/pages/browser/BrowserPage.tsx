@@ -1344,9 +1344,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       // again. Allow WebView2 to commit that clean frame before capture.
       setToolbarOverlay(null)
       if (hasNativeTab(active.id)) {
-        await new Promise(resolve => window.setTimeout(resolve, 80))
+        const nextBounds = bounds()
+        if (nextBounds) await resizeNativeTab(active.id, nextBounds)
+        await showNativeTab(active.id)
+        await new Promise(resolve => window.setTimeout(resolve, 160))
       }
-      diagnosticLog('browser.screenshot.overlay-closed', 'info', { tabId: active.id })
+      diagnosticLog('browser.screenshot.webview-restored', 'info', { tabId: active.id })
       const data = await captureNativeScreenshot(active.id, fullPage, clip)
       const link = document.createElement('a')
       link.href = `data:image/png;base64,${data}`
@@ -1357,6 +1360,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     } catch (error) {
       diagnosticLog('browser.screenshot.failed', 'error', { tabId: active.id, fullPage, clipped: Boolean(clip), error })
       messageApi.error(`截图失败：${String(error)}`)
+    } finally {
+      if (hasNativeTab(active.id) && visibleRef.current && activeTabIdRef.current === active.id) {
+        const nextBounds = bounds()
+        if (nextBounds) await resizeNativeTab(active.id, nextBounds).catch(() => undefined)
+        await showNativeTab(active.id).catch(error => diagnosticLog('browser.screenshot.restore-failed', 'error', { tabId: active.id, error }))
+      }
     }
   }
 
