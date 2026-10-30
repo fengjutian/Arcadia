@@ -1529,6 +1529,24 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     void setNativeToolbarPanel(active.id, true, toolbarOverlay, nativePanelPayloads[toolbarOverlay])
   }, [active.id, nativeMode, nativePanelPayloads, toolbarOverlay])
 
+  useEffect(() => {
+    if (!nativeMode) return
+    const openNativeMenu = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return
+      const trigger = event.target.closest<HTMLButtonElement>('button[aria-label="浏览器菜单"]')
+      if (!trigger) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      const zoomPercent = Math.round((zoomLevelsRef.current[active.id] ?? browserAppearance.defaultZoom) * 100)
+      void setNativeToolbarMenu(active.id, true, zoomPercent).catch(error => {
+        diagnosticLog('browser.toolbar-menu.open-failed', 'error', { tabId: active.id, error })
+        messageApi.error(`浏览器菜单打开失败：${String(error)}`)
+      })
+    }
+    document.addEventListener('click', openNativeMenu, true)
+    return () => document.removeEventListener('click', openNativeMenu, true)
+  }, [active.id, browserAppearance.defaultZoom, messageApi, nativeMode])
+
   const resourcePanel = (
     <div className="resource-panel" role="status">
       <div className="resource-panel__header"><Typography.Text type="secondary" className="resource-panel__title">媒体资源</Typography.Text><Button size="small" loading={resourceScanBusy} onClick={() => void scanCurrentResources()}>扫描当前页</Button></div>
