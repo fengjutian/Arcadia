@@ -38,11 +38,14 @@ pub async fn assistant_task_start(
     app: AppHandle,
     request: RagAnswerRequest,
     general_request: Option<ChatRequest>,
+    task_id: Option<String>,
 ) -> Result<String, String> {
     if request.provider_id.trim().is_empty() {
         return Err("provider_id is required".into());
     }
-    let id = format!("assistant-{}", uuid::Uuid::new_v4());
+    let id = task_id
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| format!("assistant-{}", uuid::Uuid::new_v4()));
     let registry = app.state::<AssistantTaskRegistry>();
     registry.insert(AssistantTask {
         id: id.clone(),

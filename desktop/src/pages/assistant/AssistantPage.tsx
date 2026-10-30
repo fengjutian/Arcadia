@@ -114,8 +114,18 @@ function restorableTurns(turns: readonly Turn[]): Turn[] {
 }
 
 async function waitForAssistantTask(taskId: string): Promise<RagAnswerResponse> {
+  let missingAttempts = 0
   for (;;) {
-    const task = await getAssistantTask(taskId)
+    const task = await getAssistantTask(taskId).catch(error => {
+      // A reload can reconnect in the few milliseconds between persisting the
+      // deterministic id and the backend command registering it.
+      if (missingAttempts++ < 10) return null
+      throw error
+    })
+    if (!task) {
+      await new Promise(resolve => window.setTimeout(resolve, 250))
+      continue
+    }
     if (task.status === 'completed' && task.result) return task.result
     if (task.status === 'failed') throw new Error(task.error || '后台生成失败')
     await new Promise(resolve => window.setTimeout(resolve, 800))
@@ -187,6 +197,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
   const [historyHydrated, setHistoryHydrated] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
   const busyRef = useRef(false)
+  const conversationSaveRef = useRef<Promise<void>>(Promise.resolve())
   const autoSubmittedRef = useRef(false)
 
   useEffect(() => {
@@ -243,7 +254,11 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
           pending:turn.pending,
           backgroundTaskId:turn.backgroundTaskId,
         })
-    void setSession(conversationKey, JSON.stringify(stored)).catch(() => undefined)
+    const serialized = JSON.stringify(stored)
+    conversationSaveRef.current = conversationSaveRef.current
+      .catch(() => undefined)
+      .then(() => setSession(conversationKey, serialized))
+      .catch(() => undefined)
   }, [conversationKey, turns, conversationHydrated])
 
   useEffect(() => {
@@ -424,6 +439,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
       notFound: false,
       docIds: undefined,
       documentIds: undefined,
+      backgroundTaskId: pendingId,
     })
 
     try {
@@ -466,6 +482,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         ragQuery,
         generalRequest,
         { temperature: 0.2, maxTokens: 1024 },
+        pendingId,
       ).catch(() => null)
       if (taskId) {
         patchTurn(pendingId, { backgroundTaskId: taskId })

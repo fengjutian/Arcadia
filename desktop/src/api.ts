@@ -869,7 +869,7 @@ export interface AssistantTaskStatus {
   error?: string | null
 }
 
-export async function startAssistantTask(providerId: string, query: RagQuery, generalRequest?: ChatRequest, options?: { skipRepair?: boolean; temperature?: number; maxTokens?: number }): Promise<string | null> {
+export async function startAssistantTask(providerId: string, query: RagQuery, generalRequest?: ChatRequest, options?: { skipRepair?: boolean; temperature?: number; maxTokens?: number }, taskId?: string): Promise<string | null> {
   if (!isTauri()) return null
   return invoke<string>('assistant_task_start', {
     request: {
@@ -880,6 +880,7 @@ export async function startAssistantTask(providerId: string, query: RagQuery, ge
       maxTokens: options?.maxTokens ?? null,
     },
     generalRequest: generalRequest ?? null,
+    taskId: taskId ?? null,
   })
 }
 

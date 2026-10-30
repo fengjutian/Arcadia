@@ -184,6 +184,7 @@ commands.allow = [
   "set_plugin_enabled",
   "set_plugin_permission",
   "shell_open",
+  "skillhub_search",
   "site_blacklist_add",
   "site_blacklist_add_many",
   "site_blacklist_check",
