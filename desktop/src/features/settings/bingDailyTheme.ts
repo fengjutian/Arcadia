@@ -8,6 +8,7 @@ export interface BingDailyImage {
 }
 
 const CACHE_KEY = 'arcadia-bing-daily-image'
+const CACHE_CHECKED_DATE_KEY = 'arcadia-bing-daily-image-checked-date'
 const AUTO_REFRESH_KEY = 'arcadia-bing-daily-refresh'
 
 export function readCachedBingDailyImage(): BingDailyImage | null {
@@ -32,11 +33,13 @@ export function writeBingDailyRefresh(enabled: boolean) {
 export async function loadBingDailyImage(force = false): Promise<BingDailyImage | null> {
   const cached = readCachedBingDailyImage()
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' }).replaceAll('-', '')
-  if (!force && cached && (!readBingDailyRefresh() || cached.date === today)) return cached
+  const checkedDate = localStorage.getItem(CACHE_CHECKED_DATE_KEY)
+  if (!force && cached && (!readBingDailyRefresh() || checkedDate === today)) return cached
   if (!('__TAURI_INTERNALS__' in window)) return cached
   try {
     const image = await invoke<BingDailyImage>('bing_daily_image')
     localStorage.setItem(CACHE_KEY, JSON.stringify(image))
+    localStorage.setItem(CACHE_CHECKED_DATE_KEY, today)
     return image
   } catch {
     return cached

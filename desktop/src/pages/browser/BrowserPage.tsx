@@ -57,9 +57,8 @@ import { readSitePermissions, writeSitePermissions } from '../../features/browse
 import { forceAllDenyFor } from '../../features/browser/usePermissionPrompt'
 import { LockOutlined } from '../../components/ui/icons'
 import { readRecoverySnapshot, restoreFromSnapshot, stripTransientTabStates, writeSnapshot, type SessionSnapshot } from '../../features/browser/sessionStore'
-import { RecoveryPanel, type RecoveryChoice } from '../../features/browser/RecoveryPanel'
 import { TopBarPortal } from '../../app/TopBarPortal'
-import { dropSessionLock, getSessionLockState, type SessionLockState } from '../../services/session'
+import { dropSessionLock, getSessionLockState } from '../../services/session'
 import { toggleFullscreen as toggleWindowFullscreen } from '../../services/webviewCompat'
 import { buildSuggestions, trimSuggestions } from '../../features/browser/suggestionProvider'
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS } from '../../features/browser/searchEngine'
@@ -157,11 +156,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
-  const [lockState, setLockState] = useState<SessionLockState | null>(null)
-  const [recoveredTabs, setRecoveredTabs] = useState<BrowserTab[]>([])
-  const [recoveredActiveId, setRecoveredActiveId] = useState<string>('')
-  const [recoveredScroll, setRecoveredScroll] = useState<Record<string, { x: number; y: number }>>({})
-  const [recoveredZoom, setRecoveredZoom] = useState<Record<string, number>>({})
   const [advancedSettings, setAdvancedSettings] = useState<AdvancedSettings>(readAdvancedSettings)
   const [trackingCleanerEnabled, setTrackingCleanerEnabledState] = useState(isTrackingCleanerEnabled)
   const [adBlockerEnabled, setAdBlockerEnabledState] = useState(isAdBlockerEnabled)
@@ -185,9 +179,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const downloadsRef = useRef(downloads)
   const comparisonRef = useRef<ComparisonSession | null>(null)
   const visibleRef = useRef(visible)
-  // Do not let the default blank tab overwrite a crash snapshot while the
-  // recovery dialog is waiting for the user's decision.
-  const recoveryPendingRef = useRef(false)
   const lastActiveAtRef = useRef(new Map<string, number>([['new', Date.now()]]))
   const lastHistoryUrl = useRef<string>('')
   const shortcutsEnabledRef = useRef(getBrowserShortcutsEnabled())
@@ -394,12 +385,36 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       const snapshot = readRecoverySnapshot()
       const restored = snapshot ? restoreFromSnapshot(snapshot.snapshot) : null
       if (crash && restored && restored.tabs.some(tab => tab.url.trim().length > 0)) {
-        recoveryPendingRef.current = true
-        setLockState(lockState)
-        setRecoveredTabs(restored.tabs)
-        setRecoveredActiveId(restored.activeTabId)
-        setRecoveredScroll(restored.scrollPositions)
-        setRecoveredZoom(restored.zoomLevels)
+        // A crash snapshot is authoritative: restore it immediately instead
+        // of interrupting startup with a recovery-choice dialog.
+        void dropSessionLock().catch(() => undefined)
+        const restoredTabs = stripTransientTabStates(restored.tabs)
+        const activeId = restoredTabs.find(tab => tab.id === restored.activeTabId)?.id
+          ?? restoredTabs[0]?.id
+          ?? 'new'
+        const activeTab = restoredTabs.find(tab => tab.id === activeId)
+        setTabs(restoredTabs)
+        setActiveTabId(activeId)
+        setAddress(activeTab?.url ?? '')
+        setZoomLevels(restored.zoomLevels)
+        if (activeTab?.url) lastHistoryUrl.current = activeTab.url
+        setHydrated(true)
+        void new Promise(resolve => requestAnimationFrame(resolve)).then(async () => {
+          if (cancelled) return
+          const nextBounds = bounds()
+          if (!nextBounds || !activeTab?.url) return
+          try {
+            const opened = await ensureNativeTab(activeTab.id, activeTab.url, nextBounds, { private: activeTab.private })
+            if (opened) {
+              tabRuntime.enqueueScroll(activeTab.id, {
+                x: restored.scrollPositions[activeTab.id]?.x ?? 0,
+                y: restored.scrollPositions[activeTab.id]?.y ?? 0,
+              })
+              if (visibleRef.current) await showNativeTab(activeTab.id)
+            }
+          } catch { /* the restored tab can be retried from its error view */ }
+          await enforceLiveTabLimit(activeId)
+        })
         return
       }
       const parsed = workspace ?? parsePersistedSession(getSessionLegacy(SESSION_KEY))
@@ -448,7 +463,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   const sessionJson = useDebouncedValue(JSON.stringify({ tabs: stripTransientTabStates(stripPrivateTabs(tabs)), activeTabId }), SESSION_DEBOUNCE_MS)
   useEffect(() => {
-    if (!hydrated || recoveryPendingRef.current) return
+    if (!hydrated) return
     // Runtime error/crash state must never be persisted (see
     // `stripTransientTabState`): it cannot be true for the next process.
     const persistableTabs = stripTransientTabStates(stripPrivateTabs(tabs))
@@ -1469,53 +1484,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     }
   }
 
-  async function handleRecovery(choice: RecoveryChoice) {
-    await dropSessionLock()
-    recoveryPendingRef.current = false
-    // Hydration completes only after a decision, so the first persisted
-    // snapshot contains the chosen tabs (or the intentional blank session).
-    setHydrated(true)
-    if (choice === 'discard') {
-      setLockState(null)
-      setRecoveredTabs([])
-      return
-    }
-    const next = choice === 'pinned'
-      ? recoveredTabs.filter(tab => tab.pinned)
-      : recoveredTabs
-    if (next.length === 0) {
-      setLockState(null)
-      setRecoveredTabs([])
-      return
-    }
-    setTabs(next)
-    const activeId = next.find(tab => tab.id === recoveredActiveId)?.id
-      ?? next[0]?.id
-      ?? 'new'
-    setActiveTabId(activeId)
-    const active = next.find(tab => tab.id === activeId)
-    setAddress(active?.url ?? '')
-    setZoomLevels(recoveredZoom)
-    if (active?.url) lastHistoryUrl.current = active.url
-    setLockState(null)
-    setRecoveredTabs([])
-    void new Promise(resolve => requestAnimationFrame(resolve)).then(async () => {
-      const nextBounds = bounds()
-      if (!nextBounds) return
-      // Lazy: only mount the active tab WebView; everything else stays
-      // `suspended` until the user clicks them (handled by resumeTab).
-      await Promise.all(next.filter(tab => tab.url && tab.id === activeId).map(async tab => {
-        try {
-          const opened = await ensureNativeTab(tab.id, tab.url, nextBounds, { private: tab.private })
-          if (!opened) return
-          tabRuntime.enqueueScroll(tab.id, { x: recoveredScroll[tab.id]?.x ?? 0, y: recoveredScroll[tab.id]?.y ?? 0 })
-          if (visibleRef.current) await showNativeTab(tab.id)
-        } catch { /* skip */ }
-      }))
-      await enforceLiveTabLimit(activeId)
-    })
-  }
-
   async function handleContextAction(action: ContextMenuAction, request: { linkUrl: string | null; imageUrl: string | null; selectionText: string; selectionRect?: {x:number;y:number;width:number;height:number}|null }) {
   if (action === 'add-to-notes') {
     const text = request.selectionText?.trim()
@@ -2077,11 +2045,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       </div>
     </Modal>
     {certificatePrompt.prompt && <CertificateErrorBar payload={certificatePrompt.prompt} onRespond={allow => void certificatePrompt.respond(allow)} />}
-    <RecoveryPanel
-      open={lockState !== null}
-      state={lockState}
-      onChoose={choice => void handleRecovery(choice)}
-    />
     {showSafety && (
       <div className={`browser-safety-warn browser-safety-warn--${safetyLevel}`} role="status">
         <SafetyCertificateOutlined />
