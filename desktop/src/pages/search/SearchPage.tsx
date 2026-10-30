@@ -1,9 +1,9 @@
-import { AutoComplete, Button, Input, Modal, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
-import { BookOutlined, ClockCircleOutlined, FileTextOutlined, InboxOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
+import { AutoComplete, Button, Input, message, Modal, Popconfirm, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
+import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, InboxOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { deleteReadingSnapshot, searchDocuments, listReadingActivity, getSearchSuggestions, getSession, setSession, type DocumentSearchHit } from '../../api'
+import { deleteDocument, deleteReadingSnapshot, searchDocuments, listReadingActivity, getSearchSuggestions, getSession, setSession, type DocumentSearchHit } from '../../api'
 import type { ReadingActivity } from '../../types'
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { renderHighlightedSnippet } from '../../features/search/renderSnippet'
@@ -19,6 +19,7 @@ const SORT_OPTIONS: Array<{ label: string; value: SortKey }> = [
 ]
 
 export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: string; onOpenUrl?: (url: string) => void }) {
+  const [messageApi, contextHolder] = message.useMessage()
   const [query, setQuery] = useState(initialQuery)
   const debouncedQuery = useDebouncedValue(query, 250)
   const advancedQuery = useMemo(() => parseAdvancedSearch(debouncedQuery), [debouncedQuery])
@@ -177,7 +178,19 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     else onOpenUrl?.(item.url)
   }, [debouncedQuery, rememberQuery, onOpenUrl])
 
+  const removeDocument = useCallback(async (item: DocumentSearchHit) => {
+    try {
+      await deleteDocument(item.id)
+      setDocuments(items => items.filter(document => document.id !== item.id))
+      if (selected?.id === item.id) setSelected(null)
+      messageApi.success('已删除')
+    } catch {
+      messageApi.error('删除失败，请稍后重试')
+    }
+  }, [messageApi, selected?.id])
+
   return <section className="page search-page">
+    {contextHolder}
     <PageHeader
       eyebrow="LOCAL SEARCH"
       title="找回你读过的内容"
@@ -290,6 +303,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
                   wordCount={item.wordCount}
                   matchReason={item.matchReason}
                   onOpen={() => openDocument(item)}
+                  onDelete={() => removeDocument(item)}
                 />
               })}
             </div>
@@ -384,9 +398,10 @@ interface ResultCardProps {
   availability?: 'snapshot' | 'visit'
   actionLabel?: string
   onOpen: () => void
+  onDelete?: () => void | Promise<void>
 }
 
-function ResultCard({ title, titleText, url, snippet, snippetIsUrl, tags = [], activeTags = [], starred, activity, savedAt, wordCount, matchReason, availability, actionLabel, onOpen }: ResultCardProps) {
+function ResultCard({ title, titleText, url, snippet, snippetIsUrl, tags = [], activeTags = [], starred, activity, savedAt, wordCount, matchReason, availability, actionLabel, onOpen, onDelete }: ResultCardProps) {
   const domain = domainOf(url)
   const status = activity ? readingStatus(activity) : null
   const scroll = activity ? Math.min(100, Math.max(0, Math.round(activity.maxScrollDepth * 100))) : 0
@@ -409,6 +424,25 @@ function ResultCard({ title, titleText, url, snippet, snippetIsUrl, tags = [], a
       <span className="site-domain" title={url}>{domain}</span>
       <span className="result-card__top-actions">
         {starred && <StarFilled className="result-card__star" role="img" aria-label="已收藏"/>}
+        {onDelete && <Popconfirm
+          title="删除这篇已保存的内容？"
+          description="该操作会同时删除全文索引和标签关联。"
+          okText="删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+          onConfirm={onDelete}
+        >
+          <Button
+            type="text"
+            size="small"
+            danger
+            className="result-card__delete"
+            icon={<DeleteOutlined/>}
+            aria-label={`删除：${titleText}`}
+            onClick={event => event.stopPropagation()}
+            onKeyDown={event => event.stopPropagation()}
+          />
+        </Popconfirm>}
         <span className="result-card__open" aria-hidden="true"><RightOutlined/></span>
       </span>
     </div>

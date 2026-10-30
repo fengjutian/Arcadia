@@ -121,6 +121,11 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     setDocuments(items => items.map(item => item.id === document.id ? { ...item, status: 'ARCHIVED' } : item))
   }
 
+  function handleDeleted(document: Document) {
+    setDocuments(items => items.filter(item => item.id !== document.id))
+    if (selected?.id === document.id) setSelected(null)
+  }
+
   async function handleDocumentUpdated(document: Document) {
     setDocuments(items => items.map(item => item.id === document.id ? document : item))
     await refreshCollections()
@@ -259,7 +264,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
                 <Button type="text" onClick={() => setQuery('')}>清除搜索</Button>
               </div>
             : <div className="library-document-grid">
-                {visibleDocuments.map(document => <DocumentCard key={document.id} document={document} onOpen={setSelected} onToggleStarred={toggleStar} onArchived={handleArchived} onChanged={refreshCollections}/>)}
+                {visibleDocuments.map(document => <DocumentCard key={document.id} document={document} onOpen={setSelected} onToggleStarred={toggleStar} onArchived={handleArchived} onDeleted={handleDeleted} onChanged={refreshCollections}/>)}
                 {!query && visibleDocuments.length < 3 && <button type="button" className="library-add-tile" onClick={() => setAddOpen(true)}>
                   <span className="library-add-tile__icon"><PlusOutlined/></span>
                   <strong>添加下一篇</strong>

@@ -1,8 +1,8 @@
-import { Button, Card, Dropdown, Input, message, Popover, Space, Tag, Tooltip, Typography } from '../../components/ui'
-import { ClockCircleOutlined, FileTextOutlined, FolderAddOutlined, InboxOutlined, MoreOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
+import { Button, Card, Dropdown, Input, message, Popconfirm, Popover, Space, Tag, Tooltip, Typography } from '../../components/ui'
+import { ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderAddOutlined, InboxOutlined, MoreOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { useEffect, useState, type MouseEvent } from 'react'
 import type { Document } from '../../types'
-import { addToCollection, archiveDocument, createCollection, listCollections, type Collection } from '../../api'
+import { addToCollection, archiveDocument, createCollection, deleteDocument, listCollections, type Collection } from '../../api'
 
 function sourceName(document: Document) {
   if (document.source) return document.source
@@ -34,7 +34,7 @@ function excerptOf(document: Document) {
   return text || '暂无摘要，打开文档查看正文。'
 }
 
-export function DocumentCard({ document, onOpen, onToggleStarred, onArchived, onChanged }: { document: Document; onOpen?: (document: Document) => void; onToggleStarred?: (document: Document) => void; onArchived?: (document: Document) => void; onChanged?: () => void }) {
+export function DocumentCard({ document, onOpen, onToggleStarred, onArchived, onDeleted, onChanged }: { document: Document; onOpen?: (document: Document) => void; onToggleStarred?: (document: Document) => void; onArchived?: (document: Document) => void; onDeleted?: (document: Document) => void; onChanged?: () => void }) {
   const stop = (event: MouseEvent) => event.stopPropagation()
   const [messageApi, messageContext] = message.useMessage()
   const [collections, setCollections] = useState<Collection[]>([])
@@ -79,6 +79,17 @@ export function DocumentCard({ document, onOpen, onToggleStarred, onArchived, on
       onArchived?.(document)
     } catch {
       messageApi.error('归档失败')
+    }
+  }
+
+  async function remove() {
+    try {
+      await deleteDocument(document.id)
+      messageApi.success('文档已删除')
+      onDeleted?.(document)
+      onChanged?.()
+    } catch {
+      messageApi.error('删除失败，请稍后重试')
     }
   }
 
@@ -129,6 +140,16 @@ export function DocumentCard({ document, onOpen, onToggleStarred, onArchived, on
         >
           <button type="button" className="library-icon-button" aria-label="加入集合"><FolderAddOutlined/></button>
         </Popover>
+        <Popconfirm
+          title="删除这篇文档？"
+          description="该操作会同时删除全文索引和标签关联。"
+          okText="删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+          onConfirm={remove}
+        >
+          <button type="button" className="library-icon-button document-card__delete" aria-label={`删除：${document.title}`} onClick={stop}><DeleteOutlined/></button>
+        </Popconfirm>
         <Dropdown menu={{ items: [{ key: 'archive', label: '归档', icon: <InboxOutlined/>, disabled: document.status === 'ARCHIVED', onClick: () => void archive() }] }} trigger={['click']}>
           <button type="button" className="library-icon-button" aria-label="更多操作"><MoreOutlined/></button>
         </Dropdown>

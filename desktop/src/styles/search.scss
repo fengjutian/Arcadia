@@ -946,6 +946,22 @@
   color: #b7802a;
 }
 
+.result-card__delete {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 7px;
+  opacity: .62;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+  }
+
+  svg { width: 14px; height: 14px; }
+}
+
 .result-card__open {
   display: grid;
   place-items: center;
