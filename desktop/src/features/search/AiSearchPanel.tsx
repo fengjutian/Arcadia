@@ -7,6 +7,7 @@ import { aiChat, getSession, listAIProviders, ragRetrieve, saveDocument, searchD
 import type { AIProvider, ChatMessage } from '../../types'
 import { buildAiSearchRequest, citedSourceIds, sourcesFromDocuments, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
 import { compareAnswerVersions } from './aiSearchVersionDiff'
+import { evaluateAiSearchAnswer } from './aiSearchQuality'
 import {
   answerAsMarkdown,
   extractFollowUpQuestions,
@@ -46,6 +47,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   const [preview, setPreview] = useState<AnswerPreview | null>(null)
   const [versionTurnId, setVersionTurnId] = useState<string | null>(null)
   const [comparisonTarget, setComparisonTarget] = useState<{ turnId:string; versionId:string } | null>(null)
+  const [qualityTurnId, setQualityTurnId] = useState<string | null>(null)
   const previewFrameRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -321,6 +323,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
       {turns.map((turn, index) => {
         const generatedFollowUps = extractFollowUpQuestions(turn.answer)
         const followUps = generatedFollowUps.length > 0 ? generatedFollowUps : ['给我一个具体实施步骤', '有哪些风险或反例？', '用表格比较关键选项']
+        const quality = evaluateAiSearchAnswer(turn.answer, turn.sources)
         return <article className="ai-search-answer" key={turn.id}>
         <header>
           <span className="ai-search-answer__index">{index + 1}</span>
@@ -329,6 +332,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
             <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>复制</Button>
             <Button size="small" type="text" icon={<ReloadOutlined/>} disabled={busy} onClick={() => void regenerateTurn(turn)}>重生成</Button>
             {(turn.previousVersions?.length ?? 0) > 0 && <Button size="small" type="text" icon={<ClockCircleOutlined/>} onClick={() => setVersionTurnId(turn.id)}>版本 {turn.previousVersions?.length}</Button>}
+            <button type="button" className={`ai-search-quality-badge is-${quality.level}`} onClick={() => setQualityTurnId(turn.id)} title="查看本地答案质量检查">质量 {quality.score}</button>
             <Button size="small" type="text" icon={turn.savedDocumentId ? <CheckCircleOutlined/> : <SaveOutlined/>} disabled={Boolean(turn.savedDocumentId)} onClick={() => void saveTurn(turn)}>{turn.savedDocumentId ? '已保存' : '保存'}</Button>
             <Button size="small" type="text" icon={<ExportOutlined/>} onClick={() => void shareTurn(turn)}>分享</Button>
             <Button size="small" type="text" icon={<FullscreenOutlined/>} onClick={() => previewTurn(turn)}>页面</Button>
@@ -413,6 +417,31 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
           <VersionDiffColumn title="当前版" lines={versionComparison.diff.current}/>
         </div>
       </>}
+    </Modal>
+    <Modal
+      open={qualityTurnId !== null}
+      title="答案质量检查"
+      width={640}
+      footer={<Button onClick={() => setQualityTurnId(null)}>关闭</Button>}
+      onCancel={() => setQualityTurnId(null)}
+      destroyOnHidden
+    >
+      {(() => {
+        const turn = turns.find(item => item.id === qualityTurnId)
+        if (!turn) return null
+        const report = evaluateAiSearchAnswer(turn.answer, turn.sources)
+        return <div className="ai-search-quality">
+          <div className={`ai-search-quality__score is-${report.level}`}><strong>{report.score}</strong><span>本地规则评分</span></div>
+          <dl>
+            <div><dt>引用覆盖</dt><dd>{Math.round(report.citationCoverage * 100)}%（{report.citedParagraphs}/{report.factualParagraphs} 段）</dd></div>
+            <div><dt>有效引用</dt><dd>{report.citedSourceIds.length} 个</dd></div>
+            <div><dt>来源域名</dt><dd>{report.sourceDomains} 个</dd></div>
+            <div><dt>可视化组件</dt><dd>{report.validVisuals} 个有效 / {report.invalidDslBlocks} 个无效</dd></div>
+          </dl>
+          {report.warnings.length > 0 ? <ul>{report.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul> : <p className="ai-search-quality__ok"><CheckCircleOutlined/> 未发现明显的结构或引用问题</p>}
+          <small>评分只检查可验证的格式、引用和来源多样性，不代表事实一定正确。</small>
+        </div>
+      })()}
     </Modal>
   </div>
 }

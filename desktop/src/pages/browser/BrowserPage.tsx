@@ -5,7 +5,7 @@ import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -365,6 +365,33 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       if (tabId === activeTabIdRef.current) setAddress(payload.url)
       void hideNativeTab(tabId)
       setBlacklistVersion(value => value + 1)
+    }).then(stop => {
+      if (disposed) stop()
+      else unlisten = stop
+    })
+    return () => { disposed = true; unlisten?.() }
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    void onNativeProcessFailed(failure => {
+      if (disposed || !failure.fatal) return
+      const tabId = failure.tabLabel.replace(/^browser-/, '')
+      void hideNativeTab(tabId)
+      setTabs(current => current.map(tab => tab.id === tabId
+        ? {
+            ...tab,
+            crashed: true,
+            loading: false,
+            error: {
+              kind: 'load-failed',
+              message: failure.kind === 'renderer-unresponsive'
+                ? '页面渲染进程无响应，可点击“重新打开”恢复。'
+                : '页面渲染进程已退出，可点击“重新打开”恢复。',
+            },
+          }
+        : tab))
     }).then(stop => {
       if (disposed) stop()
       else unlisten = stop

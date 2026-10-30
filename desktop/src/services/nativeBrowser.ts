@@ -14,6 +14,7 @@ interface NativeToolbarMenuEvent { version: number; tabLabel: string; action: st
 export interface NativeToolbarMenuAction { tabId: string; action: string; value?: string }
 interface NativeAudioStateEvent { version: number; tabLabel: string; audible: boolean; muted: boolean }
 export interface NativeAudioState { tabId: string; audible: boolean; muted: boolean }
+export interface NativeProcessFailure { version: number; tabLabel: string; kind: string; fatal: boolean }
 export interface PasswordCandidate { origin: string; username: string; password: string }
 export interface SavedCredential { id: string; origin: string; username: string; updatedAt: number }
 export interface PasswordFillRequest { tabLabel: string; origin: string }
@@ -314,6 +315,11 @@ export async function onNativeAudioState(handler: (state: NativeAudioState) => v
     const tabId = Array.from(labels.entries()).find(([, label]) => label === event.payload.tabLabel)?.[0]
     if (tabId) handler({ tabId, audible: event.payload.audible, muted: event.payload.muted })
   })
+}
+
+export async function onNativeProcessFailed(handler: (failure: NativeProcessFailure) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return () => undefined
+  return listen<NativeProcessFailure>('browser://process-failed', event => handler(event.payload))
 }
 
 /**

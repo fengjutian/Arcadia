@@ -17,6 +17,7 @@ pub mod rag;
 pub mod session_lock;
 pub mod site_blacklist;
 pub mod webview_compat;
+pub mod webview_process_guard;
 
 use rusqlite::params;
 use serde::de::DeserializeOwned;
@@ -838,6 +839,7 @@ async fn browser_create(
         permissions.unwrap_or_default(),
         private_mode,
     );
+    webview_process_guard::attach_process_guard(&app, &label);
     // Wire the privacy sub-resource filter so script/image/xhr/iframe hits
     // a real `WebResourceRequested` handler backed by the compiled set.
     let _ = privacy::platform::attach_from_runtime(&app, &label, private_mode);
