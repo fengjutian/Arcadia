@@ -1368,9 +1368,14 @@ fn browser_toolbar_menu(
         )
         .build()
         .map_err(|error| error.to_string())?;
+    // This app uses a native Window with child WebViews, not a WebviewWindow.
+    // Resolve that actual top-level window instead of looking in the separate
+    // WebviewWindow registry (which is empty for this architecture).
     let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
+        .windows()
+        .into_values()
+        .next()
+        .ok_or_else(|| "browser window not found".to_string())?;
     let size = window.inner_size().map_err(|error| error.to_string())?;
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
     let x = (size.width as f64 / scale - 248.0).max(0.0);

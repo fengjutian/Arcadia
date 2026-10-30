@@ -1350,10 +1350,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       const data = await captureNativeScreenshot(active.id, fullPage, clip)
       const link = document.createElement('a')
       link.href = `data:image/png;base64,${data}`
-      link.download = `${safeFileName(active.title || '网页')}-${clip ? '选区' : fullPage ? '整页' : '可视区域'}.png`
+      const fileName = `${safeFileName(active.title || '网页')}-${clip ? '选区' : fullPage ? '整页' : '可视区域'}.png`
+      link.download = fileName
       document.body.appendChild(link); link.click(); link.remove()
       diagnosticLog('browser.screenshot.completed', 'info', { tabId: active.id, fullPage, clipped: Boolean(clip), encodedBytes: data.length })
-      messageApi.success('截图已生成')
+      messageApi.success(`截图已保存到系统下载文件夹：${fileName}`, 5)
     } catch (error) {
       diagnosticLog('browser.screenshot.failed', 'error', { tabId: active.id, fullPage, clipped: Boolean(clip), error })
       messageApi.error(`截图失败：${String(error)}`)
