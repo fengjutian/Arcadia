@@ -1437,6 +1437,12 @@ body[data-theme='dark'] {
   background: linear-gradient(160deg, #f4f8f6 0%, #f8faf9 48%, #f2f6f4 100%) !important;
 }
 
+// The new-tab page owns its scrolling. Hiding overflow on its parent avoids a
+// second, empty scrollbar track along the right edge on Windows/WebView2.
+.web-surface:has(> .new-tab) {
+  overflow: hidden;
+}
+
 body[data-theme-kind='image'] {
   .app-topbar {
     background-image: linear-gradient(rgba(255,255,255,.46), rgba(255,255,255,.62)), var(--app-theme-image);

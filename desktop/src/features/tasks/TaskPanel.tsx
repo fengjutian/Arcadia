@@ -78,7 +78,7 @@ export function TaskPanel() {
       rowKey="id"
       dataSource={tasks}
       loading={loading}
-      pagination={false}
+      pagination={{ pageSize: 10, showSizeChanger: false }}
       columns={[
         { title: '类型', dataIndex: 'kind', width: 150, render: (kind: string) => KIND_LABEL[kind] ?? kind },
         { title: '状态', dataIndex: 'status', width: 104, render: (status: string) => <Tag color={STATUS_COLOR[status] ?? 'default'}>{STATUS_LABEL[status] ?? status}</Tag> },
