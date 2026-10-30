@@ -1,7 +1,7 @@
 import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { Button, Input, Select, Switch, Typography } from '../../components/ui'
 import { SearchOutlined } from '../../components/ui/icons'
-import { ArrowUpRight, CloudSun, Grid3X3, Languages, Sparkles as RobotOutlined, Wrench } from 'lucide-react'
+import { ArrowLeftRight, ArrowUpRight, Calculator, CloudSun, Gauge, Grid3X3, Languages, MapPin, QrCode, Sparkles as RobotOutlined, Timer, Wrench } from 'lucide-react'
 import { readSearchEngineConfig, SEARCH_ENGINE_PRESETS } from './searchEngine'
 import { classifyNavigationInput, renderSearchTemplate } from './navigation'
 import { QUICK_SITES } from './browserUtils'
@@ -60,14 +60,14 @@ const googleTools = [
 ]
 
 const commonTools = [
-  { name: '计算器', initial: '123', color: '#2563eb', iconUrl: 'https://www.bing.com/favicon.ico', url: 'https://www.bing.com/search?q=calculator' },
-  { name: '翻译', initial: '译', color: '#0f8b8d', iconUrl: 'https://www.bing.com/translator/favicon.ico', url: 'https://www.bing.com/translator' },
-  { name: '单位换算', initial: '↔', color: '#7c3aed', iconUrl: 'https://www.bing.com/favicon.ico', url: 'https://www.bing.com/search?q=unit+converter' },
-  { name: '二维码', initial: 'QR', color: '#111827', iconUrl: 'https://www.bing.com/favicon.ico', url: 'https://www.bing.com/search?q=qr+code+generator' },
-  { name: '计时器', initial: '⏱', color: '#e11d48', iconUrl: 'https://www.bing.com/favicon.ico', url: 'https://www.bing.com/search?q=timer' },
-  { name: '测速', initial: '⚡', color: '#f59e0b', iconUrl: 'https://fast.com/favicon.ico', url: 'https://fast.com' },
-  { name: '天气', initial: '☀', color: '#0ea5e9', iconUrl: 'https://www.msn.com/favicon.ico', url: 'https://www.msn.com/weather' },
-  { name: '地图', initial: '⌖', color: '#16a34a', iconUrl: 'https://www.bing.com/maps/favicon.ico', url: 'https://www.bing.com/maps' },
+  { name: '计算器', initial: '123', color: '#2563eb', icon: <Calculator/>, url: 'https://www.bing.com/search?q=calculator' },
+  { name: '翻译', initial: '译', color: '#0f8b8d', icon: <Languages/>, url: 'https://www.bing.com/translator' },
+  { name: '单位换算', initial: '↔', color: '#7c3aed', icon: <ArrowLeftRight/>, url: 'https://www.bing.com/search?q=unit+converter' },
+  { name: '二维码', initial: 'QR', color: '#111827', icon: <QrCode/>, url: 'https://www.bing.com/search?q=qr+code+generator' },
+  { name: '计时器', initial: '⏱', color: '#e11d48', icon: <Timer/>, url: 'https://www.bing.com/search?q=timer' },
+  { name: '测速', initial: '⚡', color: '#f59e0b', icon: <Gauge/>, url: 'https://fast.com' },
+  { name: '天气', initial: '☀', color: '#0ea5e9', icon: <CloudSun/>, url: 'https://www.msn.com/weather' },
+  { name: '地图', initial: '⌖', color: '#16a34a', icon: <MapPin/>, url: 'https://www.bing.com/maps' },
 ]
 
 function weatherSymbol(code: number) {
@@ -134,10 +134,10 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
     onCompareSearch(query, engines, searchKnowledge, searchAi)
   }
 
-  function toolPanel(items: typeof tools, title: string, icon: ReactNode, homeUrl?: string, homeLabel?: string) {
+  function toolPanel(items: Array<{ name: string; initial: string; color: string; iconUrl?: string; icon?: ReactNode; url: string }>, title: string, icon: ReactNode, homeUrl?: string, homeLabel?: string) {
     return <section className="new-tab__tools" aria-label={title}>
       <header><span>{icon}<b>{title}</b></span>{homeUrl && <button type="button" onClick={() => { setToolsOpen(null); void navigate(homeUrl) }}>{homeLabel}<ArrowUpRight size={14}/></button>}</header>
-      <div>{items.map(tool => <button key={tool.url} type="button" onClick={() => { setToolsOpen(null); void navigate(tool.url) }} title={`${text.open} ${tool.name}`}><span className="new-tab__microsoft-icon" style={{ '--tool-color': tool.color } as CSSProperties}><span>{tool.initial}</span><img src={tool.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/></span><small>{tool.name}</small></button>)}</div>
+      <div>{items.map(tool => <button key={tool.url} type="button" onClick={() => { setToolsOpen(null); void navigate(tool.url) }} title={`${text.open} ${tool.name}`}><span className="new-tab__tool-icon" style={{ '--tool-color': tool.color } as CSSProperties}><span>{tool.icon ?? tool.initial}</span>{tool.iconUrl && <img src={tool.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/>}</span><small>{tool.name}</small></button>)}</div>
     </section>
   }
 
