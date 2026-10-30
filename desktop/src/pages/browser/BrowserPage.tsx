@@ -1298,6 +1298,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   async function saveScreenshot(fullPage: boolean, clip?: {x:number;y:number;width:number;height:number}) {
     try {
+      // The in-page toolbar menu lives inside the captured WebView. Remove it
+      // and allow WebView2 to commit a clean frame before taking the snapshot.
+      setToolbarOverlay(null)
+      if (hasNativeTab(active.id)) {
+        await setNativeToolbarMenu(active.id, false).catch(() => undefined)
+        await new Promise(resolve => window.setTimeout(resolve, 80))
+      }
       const data = await captureNativeScreenshot(active.id, fullPage, clip)
       const link = document.createElement('a')
       link.href = `data:image/png;base64,${data}`
@@ -2121,6 +2128,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     } catch { messageApi.open({ key, type: 'error', content: '无法识别该页面正文' }) }
   }
 
+  const nativeSurfaceVisible = nativeMode
+    && !(comparison && comparison.hostTabId === active.id)
+    && !readerArticle
+    && !active.crashed
+    && !active.error
+
   return <div className="browser-page">{contextHolder}
     <TopBarPortal><div className="browser-tabs" style={{ '--tab-count': tabs.length } as CSSProperties}><Tabs type="editable-card" items={(() => {
           const groupDecisions = groupTabsByOrigin(tabs)
@@ -2243,7 +2256,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         </span>
       </div>
     )}
-    <div className="browser-content"><div className="web-surface" ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
+    <div className="browser-content"><div className={`web-surface${nativeSurfaceVisible ? ' web-surface--native' : ''}`} ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
       ? <SearchComparisonWorkspace query={comparison.query} sources={comparison.sources} visibleIds={comparison.visibleIds} onShow={showComparisonSource} onSearch={searchAgainInComparison} onClose={closeComparison}/>
       : readerArticle
       ? <ReaderArticleView article={readerArticle}/>

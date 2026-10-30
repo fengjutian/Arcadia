@@ -1557,6 +1557,12 @@ body[data-theme='dark'] {
   overflow: hidden;
 }
 
+// A native child WebView (including Edge's print preview) owns its scrolling.
+// Prevent the empty React host beneath it from exposing a second scrollbar.
+.web-surface--native {
+  overflow: hidden;
+}
+
 body[data-theme-kind='image'] {
   .app-topbar {
     background-image: linear-gradient(rgba(255,255,255,.46), rgba(255,255,255,.62)), var(--app-theme-image);
