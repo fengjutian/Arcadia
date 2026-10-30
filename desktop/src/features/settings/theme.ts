@@ -1,11 +1,12 @@
-export type ThemePreference = 'green' | 'beige' | 'light' | 'dark' | 'github'
+export const THEME_PREFERENCES = ['green', 'beige', 'light', 'dark', 'system', 'github', 'ocean', 'cyan', 'mint', 'amber', 'coral', 'rose', 'violet'] as const
+export type ThemePreference = typeof THEME_PREFERENCES[number]
 
 const THEME_STORAGE_KEY = 'arcadia-theme'
 export const THEME_CHANGE_EVENT = 'arcadia-theme-change'
 
 export function readThemePreference(): ThemePreference {
   const saved = localStorage.getItem(THEME_STORAGE_KEY)
-  return saved === 'green' || saved === 'beige' || saved === 'light' || saved === 'dark' || saved === 'github' ? saved : 'green'
+  return THEME_PREFERENCES.includes(saved as ThemePreference) ? saved as ThemePreference : 'green'
 }
 
 export function writeThemePreference(theme: ThemePreference) {

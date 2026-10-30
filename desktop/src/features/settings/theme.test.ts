@@ -16,6 +16,13 @@ describe('theme preference', () => {
     expect(readThemePreference()).toBe('github')
   })
 
+  it('persists the extended color themes', () => {
+    for (const theme of ['system', 'ocean', 'cyan', 'mint', 'amber', 'coral', 'rose', 'violet'] as const) {
+      writeThemePreference(theme)
+      expect(readThemePreference()).toBe(theme)
+    }
+  })
+
   it('notifies the app when the theme changes', () => {
     const listener = vi.fn()
     window.addEventListener(THEME_CHANGE_EVENT, listener)

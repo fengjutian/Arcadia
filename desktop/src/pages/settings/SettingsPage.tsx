@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, List, message, Popconfirm, Segmented, Select, Space, Spin, Statistic, Switch, Tabs, Tag, Typography } from '../../components/ui'
-import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, MoonOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '../../components/ui/icons'
-import { useEffect, useMemo, useState } from 'react'
+import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, ThunderboltOutlined } from '../../components/ui/icons'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInDb, clearReadingSnapshots, deleteAIProvider, deleteMcpServer, discoverMcpServer, dispatchPluginEvent, exportBackup, getAIProvider, getBrowserShortcutsEnabled, getReadingSnapshotStats, importBackup, installPlugin, listAIProviders, listBrowserHistory, listMcpResources, listMcpServers, listMcpTools, listPluginAudit, listPlugins, privacyCapabilityReport, privacyGetStats, privacyListBlocklists, privacyListBlockEvents, privacySetBlocklistEnabled, purgeReadingSnapshots, ragCancelJob, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragRetryJob, replaceSitePermissions, saveAIProvider, saveMcpServer, aiTestProvider, setBrowserShortcutsEnabled, setPluginEnabled, setPluginPermission, uninstallPlugin, type AIProviderInput, type InstalledPlugin, type McpServer, type McpTransport, type PluginAuditEntry, type PluginPermission, type ReadingSnapshotStats } from '../../api'
 import type { AIProvider, AIProviderType } from '../../types'
@@ -80,6 +80,27 @@ interface ProviderFormValues {
   apiKey?: string
 }
 
+const THEME_OPTIONS: Array<{
+  value: ThemePreference
+  label: string
+  description: string
+  swatch: [string, string]
+}> = [
+  { value: 'green', label: '自然绿', description: '柔和、专注的默认外观', swatch: ['#dce8df', '#347851'] },
+  { value: 'beige', label: '暖米色', description: '适合长时间阅读', swatch: ['#eee2d1', '#8a6846'] },
+  { value: 'light', label: '经典浅色', description: '清爽的中性界面', swatch: ['#e7ece9', '#3f6f5a'] },
+  { value: 'dark', label: '深色', description: '减少暗光环境的亮度', swatch: ['#24372c', '#65a77d'] },
+  { value: 'system', label: '跟随系统', description: '自动匹配系统浅色或深色外观', swatch: ['#f4f5f4', '#202823'] },
+  { value: 'github', label: 'GitHub', description: '熟悉的蓝色开发者风格', swatch: ['#ddf4ff', '#0969da'] },
+  { value: 'ocean', label: '海洋蓝', description: '沉稳清晰的蓝色界面', swatch: ['#dbeaf8', '#2563a8'] },
+  { value: 'cyan', label: '青蓝', description: '清透现代的青色界面', swatch: ['#d7eff1', '#087f8c'] },
+  { value: 'mint', label: '薄荷', description: '轻盈舒缓的薄荷绿色', swatch: ['#dcefe7', '#2f7d68'] },
+  { value: 'amber', label: '琥珀', description: '温暖醒目的金色界面', swatch: ['#f4e8c7', '#9a6a00'] },
+  { value: 'coral', label: '珊瑚', description: '柔和而有活力的橙红色', swatch: ['#f3ded4', '#b4512f'] },
+  { value: 'rose', label: '玫瑰', description: '优雅柔和的玫瑰色界面', swatch: ['#f1dce3', '#ad4968'] },
+  { value: 'violet', label: '紫罗兰', description: '精致沉静的紫色界面', swatch: ['#e7def3', '#7352ad'] },
+]
+
 function GeneralSettings() {
   const [theme, setTheme] = useState<ThemePreference>(readThemePreference)
 
@@ -89,16 +110,51 @@ function GeneralSettings() {
     writeThemePreference(preference)
   }
 
+  const selected = THEME_OPTIONS.find(option => option.value === theme) ?? THEME_OPTIONS[0]
+
   return <Card title="外观" className="settings-card theme-settings">
-    <Typography.Title level={5}>主题</Typography.Title>
-    <Typography.Paragraph type="secondary">选择应用的显示主题。更改会立即生效，并自动保存。</Typography.Paragraph>
-    <Segmented block value={theme} onChange={changeTheme} options={[
-      { label: <Space><BgColorsOutlined/>绿色</Space>, value: 'green' },
-      { label: <Space><BgColorsOutlined/>米色</Space>, value: 'beige' },
-      { label: <Space><SunOutlined/>浅色</Space>, value: 'light' },
-      { label: <Space><MoonOutlined/>深色</Space>, value: 'dark' },
-      { label: 'GitHub', value: 'github' },
-    ]}/>
+    <div className="theme-settings__heading">
+      <div>
+        <Typography.Title level={5}>主题</Typography.Title>
+        <Typography.Paragraph type="secondary">选择喜欢的颜色主题。更改会立即生效，并自动保存。</Typography.Paragraph>
+      </div>
+      <Button icon={<ReloadOutlined/>} disabled={theme === 'green'} onClick={() => changeTheme('green')}>恢复默认值</Button>
+    </div>
+
+    <div className="theme-update-note">
+      <span className="theme-update-note__icon"><BgColorsOutlined/></span>
+      <div><strong>用颜色打造你的浏览空间</strong><small>主题颜色会应用到导航、按钮、页面背景和内容卡片。</small></div>
+    </div>
+
+    <div className="theme-mode-tabs" aria-label="主题类型">
+      <button type="button" className="is-active"><BgColorsOutlined/>颜色主题</button>
+    </div>
+
+    <div className="theme-palette" role="radiogroup" aria-label="选择颜色主题">
+      {THEME_OPTIONS.map(option => <button
+        key={option.value}
+        type="button"
+        role="radio"
+        aria-checked={theme === option.value}
+        aria-label={`${option.label}：${option.description}`}
+        title={option.label}
+        className={`theme-swatch${theme === option.value ? ' is-selected' : ''}`}
+        onClick={() => changeTheme(option.value)}
+        style={{ '--theme-swatch-soft': option.swatch[0], '--theme-swatch-accent': option.swatch[1] } as CSSProperties}
+      ><span/><small>{option.label}</small></button>)}
+    </div>
+
+    <div className={`theme-preview theme-preview--${theme}`} aria-label={`${selected.label}主题预览`}>
+      <div className="theme-preview__chrome">
+        <span className="theme-preview__tab">新标签页</span>
+        <i/><i/><i/>
+      </div>
+      <div className="theme-preview__toolbar"><span/><b/></div>
+      <div className="theme-preview__body">
+        <aside><i/><i className="is-active"/><i/><i/></aside>
+        <main><strong>{selected.label}</strong><small>{selected.description}</small><div><span/><span/><span/></div></main>
+      </div>
+    </div>
   </Card>
 }
 

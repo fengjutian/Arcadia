@@ -1131,6 +1131,28 @@ body[data-theme='beige'] { --accent:#8a6846; --accent-soft:#eee2d1; --accent-bor
 body[data-theme='light'] { --accent:#3f6f5a; --accent-soft:#e7ece9; --accent-border:#d1dad5; --page:#f7f8f7; --accent-hover:#334b40; --accent-solid:#3f6f5a; --accent-solid-hover:#334b40; }
 body[data-theme='dark'] { --accent:#65a77d; --accent-soft:#24372c; --accent-border:#375342; --page:#111714; --accent-hover:#8fd1a8; --accent-solid:#3d7752; --accent-solid-hover:#43805c; }
 body[data-theme='github'] { --accent:#0969da; --accent-soft:#ddf4ff; --accent-border:#d0d7de; --page:#f6f8fa; --accent-hover:#0550ae; --accent-solid:#0969da; --accent-solid-hover:#0550ae; }
+body[data-theme='ocean'] { --accent:#2563a8; --accent-soft:#dbeaf8; --accent-border:#bfd5e9; --page:#f4f8fc; --accent-hover:#194f89; --accent-solid:#2563a8; --accent-solid-hover:#194f89; }
+body[data-theme='cyan'] { --accent:#087f8c; --accent-soft:#d7eff1; --accent-border:#b9dde1; --page:#f3f9fa; --accent-hover:#05636d; --accent-solid:#087f8c; --accent-solid-hover:#05636d; }
+body[data-theme='mint'] { --accent:#2f7d68; --accent-soft:#dcefe7; --accent-border:#bfddd2; --page:#f3f9f6; --accent-hover:#22604f; --accent-solid:#2f7d68; --accent-solid-hover:#22604f; }
+body[data-theme='amber'] { --accent:#9a6a00; --accent-soft:#f4e8c7; --accent-border:#e4d19c; --page:#fbf8f0; --accent-hover:#755000; --accent-solid:#9a6a00; --accent-solid-hover:#755000; }
+body[data-theme='coral'] { --accent:#b4512f; --accent-soft:#f3ded4; --accent-border:#e4c2b3; --page:#fbf6f3; --accent-hover:#8c3d22; --accent-solid:#b4512f; --accent-solid-hover:#8c3d22; }
+body[data-theme='rose'] { --accent:#ad4968; --accent-soft:#f1dce3; --accent-border:#dfbdc9; --page:#fbf5f7; --accent-hover:#87344f; --accent-solid:#ad4968; --accent-solid-hover:#87344f; }
+body[data-theme='violet'] { --accent:#7352ad; --accent-soft:#e7def3; --accent-border:#cfc0e3; --page:#f8f5fb; --accent-hover:#583b8d; --accent-solid:#7352ad; --accent-solid-hover:#583b8d; }
+
+body:is([data-theme='ocean'], [data-theme='cyan'], [data-theme='mint'], [data-theme='amber'], [data-theme='coral'], [data-theme='rose'], [data-theme='violet']) {
+  --chrome-bg: var(--accent-soft);
+  --chrome-border: var(--accent-border);
+
+  background: var(--page);
+
+  .app-content { background: var(--page); }
+  .app-sider.ant-layout-sider { border-right-color: var(--accent-border); }
+  .brand__mark { color: var(--accent); background: var(--accent-soft); }
+  .privacy-status { border-color: var(--accent-border); background: color-mix(in srgb, var(--accent-soft) 32%, white); }
+  .user-card { border-top-color: var(--accent-border); }
+  .browser-tabs { --browser-tab-active-bg: var(--page); }
+  .new-tab { background: radial-gradient(circle at 50% 30%, var(--accent-soft), var(--page) 46%); }
+}
 
 .page {
   width: 100%;
