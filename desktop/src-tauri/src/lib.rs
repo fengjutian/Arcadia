@@ -1259,7 +1259,6 @@ fn browser_restore_scroll(
 }
 
 #[tauri::command]
-#[allow(dead_code)]
 fn browser_toolbar_menu_in_page(
     app: tauri::AppHandle,
     label: String,
@@ -1316,7 +1315,6 @@ fn browser_toolbar_menu_in_page(
 }
 
 #[tauri::command]
-#[allow(dead_code)]
 fn browser_toolbar_menu(
     app: tauri::AppHandle,
     label: String,
@@ -2263,6 +2261,7 @@ pub fn run() {
             browser_state,
             browser_diagnose_url,
             browser_restore_scroll,
+            browser_toolbar_menu,
             browser_toolbar_panel,
             browser_page_toast,
             browser_page_toast_close,

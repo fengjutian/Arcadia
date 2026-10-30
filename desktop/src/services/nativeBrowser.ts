@@ -278,6 +278,7 @@ export async function navigateHistory(tabId: string, delta: -1|1): Promise<void>
 export async function readNativeState(tabId: string): Promise<NativeBrowserState | null> { const label=labels.get(tabId);return label ? invoke<NativeBrowserState>('browser_state',{label}) : null }
 export async function diagnoseNativeNavigation(url:string): Promise<NetworkDiagnosis> { return invoke<NetworkDiagnosis>('browser_diagnose_url',{url}) }
 export async function restoreNativeScroll(tabId: string, x: number, y: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_restore_scroll',{label,x,y}) }
+export async function setNativeToolbarMenu(tabId: string, open: boolean, zoomPercent: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_toolbar_menu',{label,open,zoomPercent}) }
 export async function setNativeToolbarPanel(tabId: string, open: boolean, kind: 'downloads' | 'bookmarks' | 'resources', payload: unknown): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_toolbar_panel',{label,open,kind,payload:JSON.stringify(payload)}) }
 /**
  * Paints a toast inside the page instead of the host DOM. Resolves `false`
