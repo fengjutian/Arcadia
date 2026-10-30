@@ -72,12 +72,10 @@
   flex: 1 0 auto;
 }
 
-// Keep settings content readable on wide windows instead of stretching every
-// control and chart all the way to the right edge.
+// Settings cards fill the available pane while preserving the page inset.
 .settings-page .settings-card {
   width: 100%;
-  max-width: 1200px;
-  align-self: flex-start;
+  max-width: none;
 }
 
 .browser-appearance-settings { max-width: 780px; }
@@ -627,11 +625,27 @@ body[data-theme='dark'] {
     margin-bottom: 16px;
   }
 
+  > .ui-tabs__nav .ant-tabs-nav-wrap {
+    flex: none;
+    width: auto;
+    overflow: visible;
+  }
+
+  > .ui-tabs__nav .ant-tabs-nav-list {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    width: auto;
+    min-width: 0;
+  }
+
   > .ui-tabs__nav .ant-tabs-tab {
     flex: none;
-    min-width: 112px;
-    justify-content: center;
-    padding: 9px 18px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    justify-content: flex-start;
+    padding: 9px 20px;
   }
 
   > .ui-tabs__content,

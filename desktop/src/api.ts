@@ -559,12 +559,20 @@ export interface BrowserHistoryPage {
 export async function listBrowserHistoryPage(page = 1, pageSize = 20): Promise<BrowserHistoryPage> {
   const safePage = Math.max(1, Math.floor(page))
   const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)))
-  if (!isTauri()) {
+  const fallback = async (): Promise<BrowserHistoryPage> => {
     const entries = await listBrowserHistory()
     const offset = (safePage - 1) * safePageSize
     return { items: entries.slice(offset, offset + safePageSize), total: entries.length, page: safePage, pageSize: safePageSize }
   }
-  return invoke<BrowserHistoryPage>('local_list_history_page', { page: safePage, pageSize: safePageSize })
+  if (!isTauri()) return fallback()
+  try {
+    return await invoke<BrowserHistoryPage>('local_list_history_page', { page: safePage, pageSize: safePageSize })
+  } catch (error) {
+    // During frontend hot reload the running Tauri binary can temporarily be
+    // older than this API. Preserve the existing history list until restart.
+    if (String(error).includes('Command not found') || String(error).includes('not allowed')) return fallback()
+    throw error
+  }
 }
 
 export async function addBrowserHistory(entry: HistoryEntry): Promise<void> {
