@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Boxes, ChevronRight, Database, Play, PlugZap, Plus, RefreshCw, Server, Wrench } from 'lucide-react'
+import { Boxes, ChevronRight, Database, Play, PlugZap, Plus, RefreshCw, Server, Store, Wrench } from 'lucide-react'
 import {
   callMcpTool,
   discoverMcpServer,
@@ -12,11 +12,12 @@ import {
 } from '../../api'
 import { Alert, Button, Card, Input, Modal, Segmented, Spin, Switch, Tag, Typography, message } from '../../components/ui'
 import { parseArguments, parseStringMap } from '../../features/mcp/config'
+import { SkillHubPage } from '../skillhub/SkillHubPage'
 
 type McpTool = { name: string; description?: string; inputSchema?: unknown }
 type McpResource = { uri?: string; name?: string; description?: string }
 
-export function McpPage() {
+export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [messageApi, contextHolder] = message.useMessage()
   const [servers, setServers] = useState<McpServer[]>([])
   const [selectedId, setSelectedId] = useState<string>()
@@ -34,6 +35,7 @@ export function McpPage() {
   const [env, setEnv] = useState('')
   const [headers, setHeaders] = useState('')
   const [enabled, setEnabled] = useState(true)
+  const [section, setSection] = useState<'servers' | 'skillhub'>('servers')
 
   const selected = useMemo(() => servers.find(server => server.id === selectedId), [selectedId, servers])
 
@@ -105,14 +107,19 @@ export function McpPage() {
     finally { setBusy(false) }
   }
 
-  return <section className="page mcp-page">
+  return <section className={`page mcp-page${section === 'skillhub' ? ' mcp-page--market' : ''}`}>
     {contextHolder}
     <header className="mcp-page__header">
       <div><span className="eyebrow">MODEL CONTEXT PROTOCOL</span><Typography.Title level={1}>MCP 工作台</Typography.Title><Typography.Text type="secondary">连接外部工具与数据源，每次工具调用都需要你的明确授权。</Typography.Text></div>
-      <Button type="primary" icon={<Plus size={16}/>} onClick={() => setAdding(true)}>添加 Server</Button>
+      {section === 'servers' && <Button type="primary" icon={<Plus size={16}/>} onClick={() => setAdding(true)}>添加 Server</Button>}
     </header>
 
-    <div className="mcp-workspace">
+    <nav className="mcp-section-nav" aria-label="MCP 工作台功能">
+      <button type="button" className={section === 'servers' ? 'is-active' : ''} onClick={() => setSection('servers')}><Server size={17}/><span>Server</span></button>
+      <button type="button" className={section === 'skillhub' ? 'is-active' : ''} onClick={() => setSection('skillhub')}><Store size={17}/><span>SkillHub 技能市场</span></button>
+    </nav>
+
+    {section === 'skillhub' ? <SkillHubPage onOpenUrl={onOpenUrl}/> : <div className="mcp-workspace">
       <aside className="mcp-servers">
         <div className="mcp-section-title"><span><Server size={17}/>Servers</span><button type="button" aria-label="刷新 Server" onClick={() => void reload()}><RefreshCw size={15}/></button></div>
         {servers.length === 0
@@ -142,7 +149,7 @@ export function McpPage() {
           {result !== undefined && <section className="mcp-result"><div className="mcp-section-title"><span>调用结果</span></div><pre>{JSON.stringify(result, null, 2)}</pre></section>}
         </>}
       </main>
-    </div>
+    </div>}
 
     <Modal open={adding} title="添加 MCP Server" width={640} okText="添加" okButtonProps={{ loading: busy }} onOk={() => void addServer()} onCancel={() => setAdding(false)}>
       <div className="mcp-add-form">
