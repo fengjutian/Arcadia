@@ -452,6 +452,29 @@ export async function callMcpTool(serverId: string, name: string, args: Record<s
   return invoke('mcp_call_tool', { serverId, name, arguments: args, approved })
 }
 
+export interface SkillHubSkill {
+  slug: string
+  name: string
+  description: string
+  version: string
+  downloads: number
+  stars: number
+  category?: string
+  source?: string
+  iconUrl?: string
+  ownerName?: string
+  canonicalName?: string
+  publisherName?: string
+  publisherVerified: boolean
+}
+
+export interface SkillHubSearchResult { total: number; skills: SkillHubSkill[] }
+
+export async function searchSkillHub(keyword = '', page = 1, pageSize = 24): Promise<SkillHubSearchResult> {
+  if (!isTauri()) return { total: 0, skills: [] }
+  return invoke<SkillHubSearchResult>('skillhub_search', { keyword, page, pageSize })
+}
+
 export type AgentRunStatus = 'pending' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled'
 export interface AgentRun {
   id: string

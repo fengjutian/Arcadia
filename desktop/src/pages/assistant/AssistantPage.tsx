@@ -435,10 +435,6 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
           content: turn.role === 'assistant' ? stripSourceBlocks(turn.content) : turn.content,
         })), 12_000)
       const provider = providers.find(item => item.id === providerId)
-      // Reuse the user-facing local search index here. It includes CJK,
-      // Pinyin and initials, while the chunk-level RAG FTS currently does not.
-      const keywordMatches = await searchDocuments(prompt).catch(() => [])
-
       // Prefer the Rust `rag_answer` pipeline: it builds the evidence pack,
       // calls the model, validates citations, and applies one repair pass on
       // the Rust side.
@@ -511,6 +507,9 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
       // Fallback: legacy local-RAG path used when `ragAnswer` is unavailable
       // (no Tauri, embedding model missing, or answer is invalid). Kept so
       // the page still works in browser-only mode.
+      // Reuse the user-facing local search index here. It includes CJK,
+      // Pinyin and initials, while the chunk-level RAG FTS currently does not.
+      const keywordMatches = await searchDocuments(prompt).catch(() => [])
       let rankedDocumentIds: string[] | undefined = keywordMatches.map(item => item.id)
       if (provider?.embeddingModel) {
         try {

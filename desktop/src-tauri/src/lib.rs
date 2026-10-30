@@ -9,6 +9,7 @@ pub mod downloads;
 pub mod event_bus;
 pub mod local_store;
 pub mod mcp;
+pub mod skillhub;
 pub mod permission_guard;
 pub mod plugins;
 pub mod privacy;
@@ -2317,6 +2318,7 @@ pub fn run() {
             mcp::mcp_list_tools,
             mcp::mcp_list_resources,
             mcp::mcp_call_tool,
+            skillhub::skillhub_search,
             plugins::installer::install_plugin,
             plugins::installer::list_plugins,
             plugins::installer::list_plugin_audit,

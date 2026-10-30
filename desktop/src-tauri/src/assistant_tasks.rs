@@ -56,7 +56,7 @@ pub async fn assistant_task_start(
     let task_app = app.clone();
     tauri::async_runtime::spawn(async move {
         let outcome = match crate::rag::commands::rag_answer(task_app.clone(), request).await {
-            Ok(mut result) if result.citation_status == CitationStatus::NotRequired => {
+            Ok(mut result) if matches!(result.citation_status, CitationStatus::NotRequired | CitationStatus::Invalid) => {
                 match general_request {
                     Some(request) => crate::ai_chat_impl(task_app.clone(), provider_id, request).await.map(|response| {
                         // Mark this as a complete answer so the frontend does not start a

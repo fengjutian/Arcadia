@@ -8,6 +8,7 @@ const LibraryPage=lazy(()=>import('../pages/library/LibraryPage').then(module=>(
 const SearchPage=lazy(()=>import('../pages/search/SearchPage').then(module=>({default:module.SearchPage})))
 const AssistantPage=lazy(()=>import('../pages/assistant/AssistantPage').then(module=>({default:module.AssistantPage})))
 const McpPage=lazy(()=>import('../pages/mcp/McpPage').then(module=>({default:module.McpPage})))
+const SkillHubPage=lazy(()=>import('../pages/skillhub/SkillHubPage').then(module=>({default:module.SkillHubPage})))
 const SettingsPage=lazy(()=>import('../pages/settings/SettingsPage').then(module=>({default:module.SettingsPage})))
 
 export function AppRouter() {
@@ -31,9 +32,13 @@ export function AppRouter() {
     }} />,
     ai: <AssistantPage onNavigate={changeView} />,
     mcp: <McpPage />,
+    skillhub: <SkillHubPage onOpenUrl={url => {
+      window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
+      changeView('browser')
+    }} />,
     settings: <SettingsPage />,
   }
-  const secondaryViews: Exclude<View, 'browser'>[] = ['library', 'search', 'ai', 'mcp', 'settings']
+  const secondaryViews: Exclude<View, 'browser'>[] = ['library', 'search', 'ai', 'mcp', 'skillhub', 'settings']
   return <AppLayout view={view} onViewChange={changeView}><Suspense fallback={<div className="route-loading"><Spin size="large"/></div>}>
     <div className={`route-view${view === 'browser' ? '' : ' is-hidden'}`} data-view="browser"><BrowserPage visible={view === 'browser'} onSearchKnowledge={query => { setKnowledgeQuery(query); changeView('search') }}/></div>
     {secondaryViews.map(pageView => mountedViews.has(pageView) && (

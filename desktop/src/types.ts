@@ -1,4 +1,4 @@
-export type View = 'browser'|'library'|'search'|'ai'|'mcp'|'settings'
+export type View = 'browser'|'library'|'search'|'ai'|'mcp'|'skillhub'|'settings'
 export interface BrowserTab { id:string; url:string; title:string; favicon?:string; loading:boolean; active:boolean; pinned:boolean; private?:boolean; muted?:boolean; audible?:boolean; crashed?:boolean; groupId?:string; suspended?:boolean; scrollX?:number; scrollY?:number; scrollDepth?:number; canGoBack?: boolean; canGoForward?: boolean; error?: BrowserTabError }
 export interface ReadingActivity { url:string; title:string; firstVisitedAt:number; lastVisitedAt:number; activeSeconds:number; maxScrollDepth:number; visitCount:number; excerpt?:string; markdown?:string; capturedAt?:number }
 export type BrowserTabError = { kind: 'load-failed' | 'web-mode-required' | 'unsupported-protocol' | 'offline' | 'dns' | 'timeout' | 'tls' | 'connection-refused' | 'network' | 'http-client' | 'http-server' | 'site-blocked' | 'tab-view-missing'; message: string; httpStatus?:number; host?:string; ruleHost?:string; entryId?:string }
