@@ -65,9 +65,31 @@ export interface NativeDownloadUpdate {
 }
 export const EVENT_PAYLOAD_VERSION = 2
 const labels = new Map<string, string>()
+const tabOperationTails = new Map<string, Promise<void>>()
+const lastAppliedBounds = new Map<string, BrowserBounds>()
+const desiredVisibility = new Map<string, boolean>()
 const isTauri = () => '__TAURI_INTERNALS__' in window
 export const isNativeBrowserAvailable = (): boolean => isTauri()
 const labelFor = (tabId: string) => `browser-${tabId.replace(/[^a-zA-Z0-9-]/g, '-')}`
+
+function enqueueTabOperation<T>(tabId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = tabOperationTails.get(tabId) ?? Promise.resolve()
+  const result = previous.catch(() => undefined).then(operation)
+  const tail = result.then(() => undefined, () => undefined)
+  tabOperationTails.set(tabId, tail)
+  void tail.finally(() => {
+    if (tabOperationTails.get(tabId) === tail) tabOperationTails.delete(tabId)
+  })
+  return result
+}
+
+function sameBounds(left: BrowserBounds | undefined, right: BrowserBounds): boolean {
+  return !!left
+    && left.x === right.x
+    && left.y === right.y
+    && left.width === right.width
+    && left.height === right.height
+}
 
 /**
  * Forget the cached label and best-effort destroy the native view. Used when
@@ -77,6 +99,8 @@ const labelFor = (tabId: string) => `browser-${tabId.replace(/[^a-zA-Z0-9-]/g, '
 async function forgetNativeTab(tabId: string): Promise<void> {
   const label = labels.get(tabId) ?? labelFor(tabId)
   labels.delete(tabId)
+  lastAppliedBounds.delete(tabId)
+  desiredVisibility.delete(tabId)
   try { await invoke('browser_close_tab', { label }) } catch { /* already gone */ }
   try { await (await Webview.getByLabel(label))?.close() } catch { /* already gone */ }
 }
@@ -101,12 +125,14 @@ async function rebuildWhenViewMissing<T>(tabId: string, action: () => Promise<T>
  * callers that care — `openNativeTab` / `ensureNativeTab` — can rebuild.
  */
 async function applyBounds(tabId: string, bounds: BrowserBounds): Promise<void> {
+  if (sameBounds(lastAppliedBounds.get(tabId), bounds)) return
   const label = labels.get(tabId)
   if (!label) return
   const view = await Webview.getByLabel(label)
   if (!view) return
   await view.setPosition(new LogicalPosition(bounds.x, bounds.y))
   await view.setSize(new LogicalSize(Math.max(1, bounds.width), Math.max(1, bounds.height)))
+  lastAppliedBounds.set(tabId, { ...bounds })
 }
 
 async function openNativeTabOnce(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
@@ -142,44 +168,68 @@ async function ensureNativeTabOnce(tabId: string, url: string, bounds: BrowserBo
 
 export async function openNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   if (!isTauri()) return false
-  return rebuildWhenViewMissing(tabId, () => openNativeTabOnce(tabId, url, bounds, options))
+  return enqueueTabOperation(tabId, () => rebuildWhenViewMissing(tabId, () => openNativeTabOnce(tabId, url, bounds, options)))
 }
 
 export async function ensureNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   if (!isTauri()) return false
-  return rebuildWhenViewMissing(tabId, () => ensureNativeTabOnce(tabId, url, bounds, options))
+  return enqueueTabOperation(tabId, () => rebuildWhenViewMissing(tabId, () => ensureNativeTabOnce(tabId, url, bounds, options)))
 }
 
 export async function showNativeTab(tabId: string): Promise<void> {
-  const label = labels.get(tabId)
-  if (!label) return
-  try {
-    await (await Webview.getByLabel(label))?.show()
-  } catch (error) {
-    if (!isMissingWebviewError(error)) throw error
-    labels.delete(tabId)
-  }
+  desiredVisibility.set(tabId, true)
+  return enqueueTabOperation(tabId, async () => {
+    if (desiredVisibility.get(tabId) !== true) return
+    const label = labels.get(tabId)
+    if (!label) return
+    try {
+      await (await Webview.getByLabel(label))?.show()
+    } catch (error) {
+      if (!isMissingWebviewError(error)) throw error
+      labels.delete(tabId)
+      lastAppliedBounds.delete(tabId)
+    }
+  })
 }
 export async function hideNativeTab(tabId: string): Promise<void> {
-  const label = labels.get(tabId)
-  if (!label) return
-  try {
-    await (await Webview.getByLabel(label))?.hide()
-  } catch (error) {
-    if (!isMissingWebviewError(error)) throw error
-    labels.delete(tabId)
-  }
+  desiredVisibility.set(tabId, false)
+  return enqueueTabOperation(tabId, async () => {
+    const label = labels.get(tabId)
+    if (!label) return
+    try {
+      await (await Webview.getByLabel(label))?.hide()
+    } catch (error) {
+      if (!isMissingWebviewError(error)) throw error
+      labels.delete(tabId)
+      lastAppliedBounds.delete(tabId)
+    }
+  })
 }
-export async function closeNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId); if(label) { try { await invoke('browser_close_tab',{label}) } catch { /* webview already gone: fall back to a direct close */ await (await Webview.getByLabel(label))?.close() } } labels.delete(tabId) }
-export async function resizeNativeTab(tabId: string, bounds: BrowserBounds): Promise<void> {
-  try {
-    await applyBounds(tabId, bounds)
-  } catch (error) {
-    // Layout callbacks are fire-and-forget (`void resizeNativeTab(...)`), so a
-    // dead view must not surface as an unhandled rejection.
-    if (!isMissingWebviewError(error)) throw error
+export async function closeNativeTab(tabId: string): Promise<void> {
+  desiredVisibility.set(tabId, false)
+  return enqueueTabOperation(tabId, async () => {
+    const label = labels.get(tabId)
+    if (label) {
+      try { await invoke('browser_close_tab', { label }) }
+      catch { await (await Webview.getByLabel(label))?.close() }
+    }
     labels.delete(tabId)
-  }
+    lastAppliedBounds.delete(tabId)
+    desiredVisibility.delete(tabId)
+  })
+}
+export async function resizeNativeTab(tabId: string, bounds: BrowserBounds): Promise<void> {
+  return enqueueTabOperation(tabId, async () => {
+    try {
+      await applyBounds(tabId, bounds)
+    } catch (error) {
+      // Layout callbacks are fire-and-forget (`void resizeNativeTab(...)`), so a
+      // dead view must not surface as an unhandled rejection.
+      if (!isMissingWebviewError(error)) throw error
+      labels.delete(tabId)
+      lastAppliedBounds.delete(tabId)
+    }
+  })
 }
 export async function reloadNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_reload',{label}) }
 export async function stopNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_stop',{label}) }

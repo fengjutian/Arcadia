@@ -6,6 +6,7 @@ import { ArrowUpOutlined, CheckCircleOutlined, ClockCircleOutlined, CopyOutlined
 import { aiChat, getSession, listAIProviders, ragRetrieve, saveDocument, searchDocuments, setSession, type RagRetrieveResponse } from '../../api'
 import type { AIProvider, ChatMessage } from '../../types'
 import { buildAiSearchRequest, citedSourceIds, sourcesFromDocuments, sourcesFromRetrieval, type AiSearchSource } from './aiSearchPrompt'
+import { compareAnswerVersions } from './aiSearchVersionDiff'
 import {
   answerAsMarkdown,
   extractFollowUpQuestions,
@@ -44,6 +45,7 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<AnswerPreview | null>(null)
   const [versionTurnId, setVersionTurnId] = useState<string | null>(null)
+  const [comparisonTarget, setComparisonTarget] = useState<{ turnId:string; versionId:string } | null>(null)
   const previewFrameRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -100,6 +102,22 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
     { role: 'user', content: turn.question },
     { role: 'assistant', content: turn.answer },
   ]).slice(-6), [turns])
+  const versionComparison = useMemo(() => {
+    if (!comparisonTarget) return null
+    const turn = turns.find(item => item.id === comparisonTarget.turnId)
+    const version = turn?.previousVersions?.find(item => item.id === comparisonTarget.versionId)
+    if (!turn || !version) return null
+    return {
+      turn,
+      version,
+      diff:compareAnswerVersions({
+        previousAnswer:version.answer,
+        currentAnswer:turn.answer,
+        previousSourceUrls:version.sources.map(source => source.url),
+        currentSourceUrls:turn.sources.map(source => source.url),
+      }),
+    }
+  }, [comparisonTarget, turns])
 
   async function generateAnswer(prompt: string, conversationHistory: readonly ChatMessage[]) {
     const provider = providers.find(item => item.id === providerId)
@@ -368,11 +386,42 @@ export function AiSearchPanel({ initialQuery = '', onOpenUrl }: { initialQuery?:
           <div><b>版本 {index + 1}</b><time>{formatVersionTime(version.createdAt)}</time></div>
           <p>{version.answer.replace(/[#*_`>\[\]]/g, '').slice(0, 240)}{version.answer.length > 240 ? '…' : ''}</p>
           <span>{version.sources.length} 个来源</span>
-          <Button size="small" onClick={() => versionTurnId && restoreVersion(versionTurnId, version.id)}>恢复此版本</Button>
+          <div className="ai-search-versions__actions">
+            <Button size="small" onClick={() => versionTurnId && setComparisonTarget({ turnId:versionTurnId, versionId:version.id })}>与当前比较</Button>
+            <Button size="small" onClick={() => versionTurnId && restoreVersion(versionTurnId, version.id)}>恢复此版本</Button>
+          </div>
         </article>)}
       </div>
     </Modal>
+    <Modal
+      open={versionComparison !== null}
+      title="版本差异"
+      width="min(1120px, 96vw)"
+      className="ai-search-diff-modal"
+      footer={<Button onClick={() => setComparisonTarget(null)}>关闭</Button>}
+      onCancel={() => setComparisonTarget(null)}
+      destroyOnHidden
+    >
+      {versionComparison && <>
+        <div className="ai-search-diff__summary">
+          <Tag color="green">新增 {versionComparison.diff.addedLines} 行</Tag>
+          <Tag color="red">删除 {versionComparison.diff.removedLines} 行</Tag>
+          <span>来源 +{versionComparison.diff.addedSources.length} / -{versionComparison.diff.removedSources.length}</span>
+        </div>
+        <div className="ai-search-diff">
+          <VersionDiffColumn title={`历史版 · ${formatVersionTime(versionComparison.version.createdAt)}`} lines={versionComparison.diff.previous}/>
+          <VersionDiffColumn title="当前版" lines={versionComparison.diff.current}/>
+        </div>
+      </>}
+    </Modal>
   </div>
+}
+
+function VersionDiffColumn({ title, lines }: { title: string; lines: Array<{ text:string; status:'same' | 'added' | 'removed' }> }) {
+  return <section className="ai-search-diff__column">
+    <h3>{title}</h3>
+    <div>{lines.map((line, index) => <pre key={`${index}-${line.text}`} className={`is-${line.status}`}><span>{index + 1}</span>{line.text || ' '}</pre>)}</div>
+  </section>
 }
 
 function AiSearchAnswerContent({ answer, busy, onAnswer }: { answer: string; busy: boolean; onAnswer: (value: string) => void }) {

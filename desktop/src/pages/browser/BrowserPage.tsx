@@ -298,6 +298,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }
 
   useEffect(() => {
+    let cancelled = false
     if (!hasNativeTab(active.id)) return
     // The native child WebView paints above the React surface, so any error
     // view (site block, crash, load failure) must hide it.
@@ -311,13 +312,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     }
     const next = bounds()
     const inset = toolbarOverlay ? TOOLBAR_OVERLAY_INSET[toolbarOverlay] ?? 0 : 0
-    if (next && inset > 0) {
-      void resizeNativeTab(active.id, { ...next, width: Math.max(1, next.width - inset) })
-        .then(() => showNativeTab(active.id))
-      return
-    }
-    if (next) void resizeNativeTab(active.id, next).then(() => showNativeTab(active.id))
-    else void showNativeTab(active.id)
+    void (async () => {
+      if (next) await resizeNativeTab(active.id, inset > 0 ? { ...next, width: Math.max(1, next.width - inset) } : next)
+      if (cancelled || activeTabIdRef.current !== active.id || !visibleRef.current) return
+      await showNativeTab(active.id)
+    })()
+    return () => { cancelled = true }
   }, [active.error, active.id, modalOverlayCount, readerArticle, toolbarOverlay, visible])
 
   useEffect(() => {
@@ -692,7 +692,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         const rect = element.getBoundingClientRect()
         const nextBounds = { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
         if (hasNativeTab(source.id)) {
-          void resizeNativeTab(source.id, nextBounds).then(() => showNativeTab(source.id))
+          void (async () => {
+            await resizeNativeTab(source.id, nextBounds)
+            if (!disposed && comparisonRef.current?.visibleIds.includes(source.id)) await showNativeTab(source.id)
+          })()
         } else if (source.url) {
           void openNativeTab(source.id, source.url, nextBounds).then(() => showNativeTab(source.id)).catch(() => undefined)
         }
@@ -754,14 +757,22 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   useEffect(() => {
     if (!surfaceRef.current || !visible) return
+    let frame: number | null = null
     const observer = new ResizeObserver(() => {
-      const next = bounds()
-      if (!next || modalOverlayCount > 0 || toolbarOverlay === 'tab-menu') return
-      const inset = toolbarOverlay ? TOOLBAR_OVERLAY_INSET[toolbarOverlay] ?? 0 : 0
-      void resizeNativeTab(active.id, { ...next, width: Math.max(1, next.width - inset) })
+      if (frame !== null) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = null
+        const next = bounds()
+        if (!next || modalOverlayCount > 0 || toolbarOverlay === 'tab-menu') return
+        const inset = toolbarOverlay ? TOOLBAR_OVERLAY_INSET[toolbarOverlay] ?? 0 : 0
+        void resizeNativeTab(active.id, { ...next, width: Math.max(1, next.width - inset) })
+      })
     })
     observer.observe(surfaceRef.current)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
   }, [active.id, aiOpen, findOpen, modalOverlayCount, toolbarOverlay, visible])
 
   useEffect(() => () => {
