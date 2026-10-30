@@ -912,6 +912,30 @@ async fn browser_set_muted(
 }
 
 #[tauri::command]
+fn browser_set_bounds(app: tauri::AppHandle, label: String, bounds: BrowserBounds) -> Result<(), String> {
+    validate_browser_label(&label)?;
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    webview
+        .set_position(tauri::LogicalPosition::new(bounds.x, bounds.y))
+        .map_err(|error| error.to_string())?;
+    webview
+        .set_size(tauri::LogicalSize::new(bounds.width.max(1.0), bounds.height.max(1.0)))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn browser_set_visible(app: tauri::AppHandle, label: String, visible: bool) -> Result<(), String> {
+    validate_browser_label(&label)?;
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    if visible { webview.show() } else { webview.hide() }
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn browser_navigate(
     app: tauri::AppHandle,
     label: String,
@@ -2264,6 +2288,8 @@ pub fn run() {
             browser_create,
             browser_set_ad_blocking,
             browser_set_muted,
+            browser_set_bounds,
+            browser_set_visible,
             browser_navigate,
             browser_reload,
             browser_stop,

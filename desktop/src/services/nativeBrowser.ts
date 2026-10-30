@@ -1,5 +1,4 @@
 import { invoke } from '@tauri-apps/api/core'
-import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Webview } from '@tauri-apps/api/webview'
 import { readSitePermissions } from '../features/browser/sitePermissions'
@@ -132,10 +131,7 @@ async function applyBounds(tabId: string, bounds: BrowserBounds): Promise<void> 
   if (sameBounds(lastAppliedBounds.get(tabId), bounds)) return
   const label = labels.get(tabId)
   if (!label) return
-  const view = await Webview.getByLabel(label)
-  if (!view) return
-  await view.setPosition(new LogicalPosition(bounds.x, bounds.y))
-  await view.setSize(new LogicalSize(Math.max(1, bounds.width), Math.max(1, bounds.height)))
+  await invoke('browser_set_bounds', { label, bounds })
   lastAppliedBounds.set(tabId, { ...bounds })
 }
 
@@ -195,7 +191,7 @@ export async function showNativeTab(tabId: string): Promise<void> {
     const label = labels.get(tabId)
     if (!label) return
     try {
-      await (await Webview.getByLabel(label))?.show()
+      await invoke('browser_set_visible', { label, visible: true })
     } catch (error) {
       if (!isMissingWebviewError(error)) throw error
       labels.delete(tabId)
@@ -209,7 +205,7 @@ export async function hideNativeTab(tabId: string): Promise<void> {
     const label = labels.get(tabId)
     if (!label) return
     try {
-      await (await Webview.getByLabel(label))?.hide()
+      await invoke('browser_set_visible', { label, visible: false })
     } catch (error) {
       if (!isMissingWebviewError(error)) throw error
       labels.delete(tabId)

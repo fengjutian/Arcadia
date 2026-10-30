@@ -1493,7 +1493,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }), [advancedSettings.idleSuspendMinutes, advancedSettings.maxLiveWebviews, bookmarkActions.bookmarks, downloadQueue.maxConcurrent, downloadQueue.pending.length, downloads, mediaResources, memory, nativeMode, resourceStats])
 
   useEffect(() => {
-    if (!nativeMode) return
+    // Always intercept the desktop toolbar button before the React Dropdown
+    // sees it. Keying this off `nativeMode` caused a race while a child
+    // WebView was registering: the host menu opened underneath the native
+    // page, so its left side was visually covered.
+    if (!isNativeBrowserAvailable()) return
     const triggerKinds: Record<string, 'downloads' | 'bookmarks' | 'resources'> = {
       下载: 'downloads',
       收藏夹: 'bookmarks',
@@ -1546,7 +1550,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     }
     document.addEventListener('click', openNativeMenu, true)
     return () => document.removeEventListener('click', openNativeMenu, true)
-  }, [active.id, browserAppearance.defaultZoom, messageApi, nativeMode])
+  }, [active.id, browserAppearance.defaultZoom, messageApi])
 
   const resourcePanel = (
     <div className="resource-panel" role="status">
