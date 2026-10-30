@@ -635,6 +635,7 @@ function OpenSourceSettingsPanel() {
       {OPEN_SOURCE_COMPONENTS.map(component => <a key={component.name} className="open-source-item" href={component.url} target="_blank" rel="noreferrer">
         <div><strong>{component.name}</strong><Tag>{component.category}</Tag></div>
         <p>{component.description}</p>
+        <span className="open-source-item__url">{component.url}</span>
         <small>{component.license}</small>
       </a>)}
     </div>

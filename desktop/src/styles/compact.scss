@@ -2887,6 +2887,10 @@ body[data-theme='dark'] .assistant-page {
 
 .app-sider--collapsed .rail-button__label { display: none; }
 
+// The collapsed rail does not show account details. Remove its reserved row so
+// the utility button can sit consistently near the bottom edge.
+.app-sider--collapsed .user-card { display: none; }
+
 // Geometry of the self-drawn window chrome (decorations:false). The app paints
 // its own minimise/maximise/close buttons over the top-right corner, so any
 // content that reaches that corner — the tab strip, right-anchored drawers — has
