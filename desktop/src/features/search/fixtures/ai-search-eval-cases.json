@@ -1,0 +1,51 @@
+[
+  {
+    "id": "zh-cited-comparison",
+    "question": "比较全文检索和向量检索的适用场景",
+    "sources": [
+      { "documentId": "fts", "title": "全文检索", "url": "https://docs.example.com/fts", "excerpt": "全文检索适合精确关键词和可解释排序。" },
+      { "documentId": "vector", "title": "向量检索", "url": "https://research.example.net/vector", "excerpt": "向量检索适合语义相似问题。" }
+    ],
+    "answer": "全文检索适合关键词明确、需要可解释排序的查询。[S1]\n\n向量检索更适合措辞不同但语义接近的查询。[S2]",
+    "expect": { "minScore": 90, "maxInvalidCitations": 0, "sourceCount": 2, "minDomains": 2, "validVisuals": 0 }
+  },
+  {
+    "id": "tracking-url-dedup",
+    "question": "总结同一篇文章",
+    "sources": [
+      { "documentId": "one", "title": "原文", "url": "https://example.com/article?utm_source=feed#intro", "excerpt": "同一文章的第一个记录。" },
+      { "documentId": "two", "title": "重复记录", "url": "https://www.example.com/article?ref=home", "excerpt": "同一文章的第二个记录。" }
+    ],
+    "answer": "这篇文章的核心结论已经由本地资料支持。[S1]",
+    "expect": { "minScore": 85, "maxInvalidCitations": 0, "sourceCount": 1, "minDomains": 1, "validVisuals": 0 }
+  },
+  {
+    "id": "invalid-citation-detection",
+    "question": "说明数据库迁移风险",
+    "sources": [
+      { "documentId": "migration", "title": "迁移说明", "url": "https://db.example.com/migration", "excerpt": "迁移需要事务和回滚策略。" }
+    ],
+    "answer": "数据库迁移需要事务、备份和明确的回滚策略，否则失败时可能损坏数据。[S9]",
+    "expect": { "maxScore": 60, "maxInvalidCitations": 0, "expectedInvalidCitation": "S9", "sourceCount": 1, "minDomains": 1, "validVisuals": 0 }
+  },
+  {
+    "id": "valid-flow-dsl",
+    "question": "展示检索回答流程",
+    "sources": [
+      { "documentId": "pipeline", "title": "检索管线", "url": "https://architecture.example.com/pipeline", "excerpt": "查询先检索证据，再生成答案。" }
+    ],
+    "answer": "回答过程先查找证据，再交给模型生成带引用的答案。[S1]\n\n```flow\n问题 -> 证据: 检索\n证据 -> 答案: 生成\n```",
+    "expect": { "minScore": 90, "maxInvalidCitations": 0, "sourceCount": 1, "minDomains": 1, "validVisuals": 1 }
+  },
+  {
+    "id": "source-domain-diversity",
+    "question": "汇总多个来源的发布信息",
+    "sources": [
+      { "documentId": "a1", "title": "发布一", "url": "https://news.example.com/one", "excerpt": "第一条发布信息。" },
+      { "documentId": "a2", "title": "发布二", "url": "https://news.example.com/two", "excerpt": "第二条发布信息。" },
+      { "documentId": "b1", "title": "独立报道", "url": "https://independent.example.org/report", "excerpt": "来自另一网站的报道。" }
+    ],
+    "answer": "多份资料确认了本次发布的主要功能和时间安排。[S1][S3]",
+    "expect": { "minScore": 80, "maxInvalidCitations": 0, "sourceCount": 3, "minDomains": 2, "validVisuals": 0 }
+  }
+]

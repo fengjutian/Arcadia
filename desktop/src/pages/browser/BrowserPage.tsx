@@ -5,7 +5,7 @@ import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -15,6 +15,7 @@ import { reorderTabs } from '../../features/browser/reorderTabs'
 import { groupTabsByOrigin, idsToCloseForSameDomain } from '../../features/browser/tabGrouping'
 import { planLruSweep, type DownloadActivity } from '../../features/browser/lruPolicy'
 import { computeResourceStats } from '../../features/browser/resourceStats'
+import { mediaKindLabel, normalizeMediaResources, type MediaResourceCandidate } from '../../features/browser/mediaResources'
 import { useProcessMemory } from '../../features/browser/useProcessMemory'
 import { formatBytes as formatProcessBytes } from '../../services/processMemory'
 import { interpretShortcut, readShortcutOverrides } from '../../features/browser/shortcuts'
@@ -130,6 +131,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
   const [blockEvents, setBlockEvents] = useState<Awaited<ReturnType<typeof privacyListBlockEvents>>>([])
+  const [mediaResources, setMediaResources] = useState<MediaResourceCandidate[]>([])
+  const [resourceScanBusy, setResourceScanBusy] = useState(false)
   const [bulkSummaryOpen, setBulkSummaryOpen] = useState(false)
   const [bulkSummaryBusy, setBulkSummaryBusy] = useState(false)
   const [bulkSummaryProgress, setBulkSummaryProgress] = useState<BulkProgressEntry[]>([])
@@ -202,7 +205,28 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   useEffect(() => {
     setPasswordCandidate(null)
     setPasswordFillRequest(null)
+    setMediaResources([])
   }, [active.id, active.url])
+
+  async function scanCurrentResources() {
+    if (!hasNativeTab(active.id)) { messageApi.info('资源探测需要桌面浏览器标签页'); return }
+    setResourceScanBusy(true)
+    try {
+      const found = normalizeMediaResources(await scanNativeResources(active.id))
+      setMediaResources(found)
+      messageApi.info(found.length ? `发现 ${found.length} 个媒体或文档资源` : '当前页面暂未发现可下载资源')
+    } catch (error) { messageApi.error(`资源扫描失败：${String(error)}`) }
+    finally { setResourceScanBusy(false) }
+  }
+
+  async function downloadMediaResource(resource: MediaResourceCandidate) {
+    try {
+      await startDownload({ id: crypto.randomUUID(), url: resource.url, fileName: resource.fileName,
+        dangerType: classifyDownload({ fileName: resource.fileName }),
+        sourceOrigin: new URL(active.url || resource.url).origin, sourceTabLabel: active.id })
+      messageApi.success('资源已加入下载队列')
+    } catch (error) { messageApi.error(`下载失败：${String(error)}`) }
+  }
 
   useEffect(() => {
     const onAppearanceChange = (event: Event) => setBrowserAppearance((event as CustomEvent<BrowserAppearanceSettings>).detail ?? readBrowserAppearance())
@@ -1256,6 +1280,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     void onNativeToolbarMenuAction(({ tabId, action, value }) => {
       if (disposed || tabId !== activeTabIdRef.current) return
       if (action === 'bookmark-open' && value) void navigate(value)
+      else if (action === 'resource-scan') void scanCurrentResources()
+      else if (action === 'resource-download' && value) {
+        const resource = mediaResources.find(item => item.url === value)
+        if (resource) void downloadMediaResource(resource)
+      }
       else if (action !== '__dismiss__') runBrowserMenuAction(action)
       if (!action.startsWith('zoom-') || action === 'zoom-reset') setToolbarOverlay(null)
     }).then(stop => {
@@ -1375,7 +1404,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       })),
     },
     resources: {
+      subtitle: mediaResources.length ? `发现 ${mediaResources.length} 项` : '手动扫描当前页',
       sections: [
+        { title: '媒体资源', items: mediaResources.slice(0, 10).map(item => ({ label: `${mediaKindLabel[item.kind]} · ${item.fileName}`, value: item.size ? formatProcessBytes(item.size) : '未知大小', url: item.url })) },
         { title: '标签页', items: [
           { label: '总标签页', value: resourceStats.totalTabs },
           { label: '活跃 WebView', value: resourceStats.liveTabs },
@@ -1392,9 +1423,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           { label: '缺页中断', value: memory?.pageFaultCount == null ? '—' : memory.pageFaultCount.toLocaleString('zh-CN') },
         ]},
       ],
+      canScan: nativeMode,
       hint: `LRU 阈值 ${advancedSettings.maxLiveWebviews} 个 WebView；空闲 ${advancedSettings.idleSuspendMinutes} 分钟自动休眠。`,
     },
-  }), [advancedSettings.idleSuspendMinutes, advancedSettings.maxLiveWebviews, bookmarkActions.bookmarks, downloadQueue.maxConcurrent, downloadQueue.pending.length, downloads, memory, resourceStats])
+  }), [advancedSettings.idleSuspendMinutes, advancedSettings.maxLiveWebviews, bookmarkActions.bookmarks, downloadQueue.maxConcurrent, downloadQueue.pending.length, downloads, mediaResources, memory, nativeMode, resourceStats])
 
   useEffect(() => {
     if (!nativeMode) return
@@ -1436,7 +1468,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   const resourcePanel = (
     <div className="resource-panel" role="status">
-      <Typography.Text type="secondary" className="resource-panel__title">资源面板</Typography.Text>
+      <div className="resource-panel__header"><Typography.Text type="secondary" className="resource-panel__title">媒体资源</Typography.Text><Button size="small" loading={resourceScanBusy} onClick={() => void scanCurrentResources()}>扫描当前页</Button></div>
+      <ul className="resource-panel__media">
+        {mediaResources.slice(0, 20).map(resource => <li key={resource.url} className="resource-panel__media-item"><div><Tag>{mediaKindLabel[resource.kind]}</Tag><b title={resource.url}>{resource.fileName}</b><small>{resource.size ? formatProcessBytes(resource.size) : '未知大小'}</small></div><Space size={2}><Button type="text" size="small" icon={<CopyOutlined/>} aria-label="复制资源链接" onClick={() => void navigator.clipboard.writeText(resource.url)}/><Button type="text" size="small" icon={<DownloadOutlined/>} aria-label="下载资源" onClick={() => void downloadMediaResource(resource)}/></Space></li>)}
+        {!mediaResources.length && <li className="resource-panel__empty">扫描页面中已加载的视频、音频、清单、字幕与文档。</li>}
+      </ul>
+      <Typography.Text type="secondary" className="resource-panel__title resource-panel__title--sub">性能与隐私</Typography.Text>
       <ul>
         <li><span>总标签页</span><b>{resourceStats.totalTabs}</b></li>
         <li><span>活跃 WebView</span><b>{resourceStats.liveTabs}</b></li>
