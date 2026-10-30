@@ -5,7 +5,6 @@ import { Webview } from '@tauri-apps/api/webview'
 import { readSitePermissions } from '../features/browser/sitePermissions'
 import { isAdBlockerEnabled } from '../features/plugins/adBlocker'
 import { isMissingWebviewError } from '../features/browser/tabViewErrors'
-import { diagnosticLog } from '../shared/diagnostics'
 
 export interface BrowserBounds { x: number; y: number; width: number; height: number }
 export interface NativeBrowserState { url: string; title: string; favicon?: string; loading: boolean; scrollX: number; scrollY: number; scrollDepth?: number; canGoBack: boolean; canGoForward: boolean }
@@ -279,27 +278,6 @@ export async function navigateHistory(tabId: string, delta: -1|1): Promise<void>
 export async function readNativeState(tabId: string): Promise<NativeBrowserState | null> { const label=labels.get(tabId);return label ? invoke<NativeBrowserState>('browser_state',{label}) : null }
 export async function diagnoseNativeNavigation(url:string): Promise<NetworkDiagnosis> { return invoke<NetworkDiagnosis>('browser_diagnose_url',{url}) }
 export async function restoreNativeScroll(tabId: string, x: number, y: number): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_restore_scroll',{label,x,y}) }
-export async function setNativeToolbarMenu(tabId: string, open: boolean, zoomPercent = 100): Promise<void> {
-  diagnosticLog('browser.menu.requested', 'info', { tabId, open, zoomPercent })
-  const label = labels.get(tabId)
-  if (!label) throw new Error('native webview is not available')
-  try {
-    // A Windows native popup can report success without painting above the
-    // child WebView. Render in the page first so the click always has visible
-    // feedback; retain the OS menu as a fallback for non-scriptable pages.
-    await invoke('browser_toolbar_menu_in_page', { label, open, zoomPercent })
-    diagnosticLog('browser.menu.page.completed', 'info', { tabId, open })
-  } catch (pageError) {
-    diagnosticLog('browser.menu.page.failed', 'warn', { tabId, open, error: pageError })
-    try {
-      await invoke('browser_toolbar_menu', { label, open, zoomPercent })
-      diagnosticLog('browser.menu.native.completed', 'info', { tabId, open })
-    } catch (nativeError) {
-      diagnosticLog('browser.menu.failed', 'error', { tabId, open, pageError, nativeError })
-      throw new Error(`toolbar menu failed (page: ${String(pageError)}; native: ${String(nativeError)})`)
-    }
-  }
-}
 export async function setNativeToolbarPanel(tabId: string, open: boolean, kind: 'downloads' | 'bookmarks' | 'resources', payload: unknown): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_toolbar_panel',{label,open,kind,payload:JSON.stringify(payload)}) }
 /**
  * Paints a toast inside the page instead of the host DOM. Resolves `false`

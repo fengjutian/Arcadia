@@ -1296,6 +1296,7 @@ fn browser_toolbar_menu_in_page(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 fn browser_toolbar_menu(
     app: tauri::AppHandle,
     label: String,
@@ -2242,8 +2243,6 @@ pub fn run() {
             browser_state,
             browser_diagnose_url,
             browser_restore_scroll,
-            browser_toolbar_menu,
-            browser_toolbar_menu_in_page,
             browser_toolbar_panel,
             browser_page_toast,
             browser_page_toast_close,
@@ -2453,6 +2452,21 @@ fn browser_emit_event(
     let object = payload
         .as_object_mut()
         .ok_or_else(|| "browser page event payload must be an object".to_string())?;
+    if event == "browser://toolbar-menu-action" {
+        let action = object
+            .get("action")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| "toolbar action is required".to_string())?;
+        // Remote pages may only report interactions from the small native
+        // bookmark/resource panels. Privileged browser-menu actions are owned
+        // by the trusted main WebView and must never be page-forgeable.
+        if !matches!(
+            action,
+            "__dismiss__" | "bookmark-open" | "resource-scan" | "resource-download"
+        ) {
+            return Err("toolbar action is not allowlisted".into());
+        }
+    }
     // Never trust a page-supplied label: bind the event to its actual caller.
     object.insert("tabLabel".into(), serde_json::Value::String(label));
     app.emit_to("main", &event, payload)
