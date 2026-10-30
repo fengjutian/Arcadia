@@ -20,6 +20,6 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   <title>{pageTitle}</title><meta name="description" content={description}/><link rel="canonical" href={canonical}/>
   <meta property="og:title" content={pageTitle}/><meta property="og:description" content={description}/><meta property="og:type" content="website"/><meta property="og:url" content={canonical}/><meta property="og:image" content={new URL(image, Astro.site)}/>
   <meta name="twitter:card" content="summary_large_image"/><meta name="twitter:title" content={pageTitle}/><meta name="twitter:description" content={description}/><meta name="twitter:image" content={new URL(image, Astro.site)}/><meta name="theme-color" content="#0e110f"/>
-  <script type="application/ld+json" set:html={JSON.stringify({ '@context':'https://schema.org', '@type':'SoftwareApplication', name:site.name, applicationCategory:'ProductivityApplication', operatingSystem:'Windows, macOS, Linux', description:site.description, url:Astro.site, codeRepository:site.repository })}></script>
+  <script type="application/ld+json" set:html={JSON.stringify({ '@context':'https://schema.org', '@type':'SoftwareApplication', name:site.name, applicationCategory:'ProductivityApplication', operatingSystem:'Windows 10, Windows 11', softwareVersion:'0.6.0', description:site.description, url:Astro.site, codeRepository:site.repository })}></script>
   <link rel="icon" href="/favicon.svg"/>
 </head><body><Header/><main><slot/></main><Footer/></body></html>

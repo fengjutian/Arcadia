@@ -5,19 +5,19 @@ import { getCollection } from 'astro:content';
 const products = await getCollection('products', ({data}) => data.featured);
 ---
 <BaseLayout>
-  <section class="relative overflow-hidden border-b border-[var(--line)]">
+  <section class="hero-section relative overflow-hidden border-b border-[var(--line)]">
     <div class="absolute inset-0 grid-lines opacity-25 [mask-image:linear-gradient(to_bottom,black,transparent)]"></div>
-    <div class="shell relative grid min-h-[calc(100vh-72px)] items-center gap-14 py-20 lg:grid-cols-[1.08fr_.92fr]">
-      <div>
+    <div class="shell hero-shell relative grid items-center gap-12 py-16 md:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(480px,.9fr)] lg:gap-16 lg:py-24">
+      <div class="hero-copy">
         <p class="eyebrow">Arcadia 0.6.0 · Windows desktop</p>
-        <h1 class="display mt-8">浏览之后，<br/>留下<span class="text-[var(--acid)]">可用的知识。</span></h1>
-        <p class="muted mt-8 max-w-2xl text-lg">一个本地优先的桌面知识浏览器：原生多标签浏览、Reader、知识库、全文检索、引用问答与隐私控制，共用一条连续工作流。</p>
+        <h1 class="display hero-title mt-7"><span>浏览之后，</span><span>留下<span class="text-[var(--acid)]">可用的</span></span><span class="text-[var(--acid)]">知识。</span></h1>
+        <p class="hero-description muted mt-7 max-w-2xl text-lg">一个本地优先的桌面知识浏览器。原生多标签浏览、Reader、知识库、全文检索、引用问答与隐私控制，共用一条连续工作流。</p>
         <div class="mt-9 flex flex-wrap gap-3"><a href="/download/" class="btn btn-primary">查看 0.6.0</a><a href="/products/arcadia/" class="btn">完整功能</a></div>
-        <div class="mt-10 flex flex-wrap gap-x-7 gap-y-2 text-sm muted"><span>本地 SQLite</span><span>OpenAI Compatible / Ollama</span><span>WASM 插件隔离</span></div>
+        <div class="hero-meta mt-10 grid max-w-2xl grid-cols-1 gap-px bg-[var(--line)] sm:grid-cols-3"><span><b>LOCAL</b>本地 SQLite</span><span><b>AI PROVIDER</b>OpenAI / Ollama</span><span><b>EXTENSIBLE</b>WASM 插件隔离</span></div>
       </div>
-      <div class="relative mx-auto w-full max-w-[540px] border border-[var(--line)] bg-[var(--panel)] p-3 shadow-2xl shadow-black/15">
+      <div class="hero-preview relative mx-auto w-full max-w-[620px] border border-[var(--line)] bg-[var(--panel)] p-3 shadow-2xl shadow-black/15">
         <div class="mb-3 flex items-center gap-2 border-b border-[var(--line)] px-2 pb-3"><span class="size-2 rounded-full bg-[#ff6b62]"></span><span class="size-2 rounded-full bg-[#ffc952]"></span><span class="size-2 rounded-full bg-[var(--acid)]"></span><span class="ml-3 flex-1 bg-[var(--subtle)] px-3 py-1 text-xs muted">arcadia / reader</span></div>
-        <div class="grid min-h-[410px] grid-cols-[72px_1fr]"><div class="border-r border-[var(--line)] pt-4 text-center text-xs muted"><img src="/favicon.svg" width="36" height="36" alt="" class="mx-auto mb-6"/><div class="space-y-5"><div>▣</div><div>⌕</div><div>◇</div><div>✦</div></div></div><div class="p-6"><p class="text-xs text-[var(--acid)]">READER MODE</p><h2 class="mt-4 text-3xl font-semibold leading-tight tracking-tight">从当前网页，进入你的本地知识库</h2><div class="mt-7 space-y-3"><div class="h-2 w-full bg-[var(--skeleton)]"></div><div class="h-2 w-11/12 bg-[var(--skeleton)]"></div><div class="h-2 w-4/5 bg-[var(--skeleton)]"></div></div><div class="mt-8 border-l-2 border-[var(--acid)] bg-[var(--subtle)] p-4"><p class="text-xs muted">AI 摘要</p><p class="mt-2 text-sm">先提取正文，再基于页面内容进行摘要、翻译或问答；保存后仍可搜索并追溯来源。</p></div><div class="mt-6 flex flex-wrap gap-2"><span class="border border-[var(--line)] px-3 py-1 text-xs">保存到知识库</span><span class="border border-[var(--line)] px-3 py-1 text-xs">基于页面提问</span></div></div></div>
+        <div class="grid min-h-[440px] grid-cols-[72px_1fr]"><div class="border-r border-[var(--line)] pt-5 text-center text-xs muted"><img src="/favicon.svg" width="38" height="38" alt="" class="mx-auto mb-7"/><div class="space-y-6"><div>▣</div><div>⌕</div><div>◇</div><div>✦</div></div></div><div class="p-7 md:p-9"><p class="text-xs text-[var(--acid)]">READER MODE</p><h2 class="mt-4 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">从当前网页，进入你的本地知识库</h2><div class="mt-8 space-y-3"><div class="h-2 w-full bg-[var(--skeleton)]"></div><div class="h-2 w-11/12 bg-[var(--skeleton)]"></div><div class="h-2 w-4/5 bg-[var(--skeleton)]"></div></div><div class="mt-9 border-l-2 border-[var(--acid)] bg-[var(--subtle)] p-5"><p class="text-xs muted">AI 摘要</p><p class="mt-2 text-sm">先提取正文，再基于页面内容进行摘要、翻译或问答；保存后仍可搜索并追溯来源。</p></div><div class="mt-7 flex flex-wrap gap-2"><span class="border border-[var(--line)] px-3 py-1 text-xs">保存到知识库</span><span class="border border-[var(--line)] px-3 py-1 text-xs">基于页面提问</span></div></div></div>
       </div>
     </div>
   </section>
