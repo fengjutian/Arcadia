@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Webview } from '@tauri-apps/api/webview'
 import { readSitePermissions } from '../features/browser/sitePermissions'
@@ -73,6 +74,7 @@ const suspendedTabs = new Set<string>()
 const isTauri = () => '__TAURI_INTERNALS__' in window
 export const isNativeBrowserAvailable = (): boolean => isTauri()
 const labelFor = (tabId: string) => `browser-${tabId.replace(/[^a-zA-Z0-9-]/g, '-')}`
+const isUnknownCommand = (error: unknown) => /command not found|not allowed/i.test(String(error))
 
 function enqueueTabOperation<T>(tabId: string, operation: () => Promise<T>): Promise<T> {
   const previous = tabOperationTails.get(tabId) ?? Promise.resolve()
@@ -122,7 +124,15 @@ async function rebuildWhenViewMissing<T>(tabId: string, action: () => Promise<T>
 async function applyBounds(tabId: string, bounds: BrowserBounds): Promise<void> {
   const label = labels.get(tabId)
   if (!label) return
-  await invoke('browser_set_bounds', { label, bounds })
+  try {
+    await invoke('browser_set_bounds', { label, bounds })
+  } catch (error) {
+    if (!isUnknownCommand(error)) throw error
+    const view = await Webview.getByLabel(label)
+    if (!view) return
+    await view.setPosition(new LogicalPosition(bounds.x, bounds.y))
+    await view.setSize(new LogicalSize(Math.max(1, bounds.width), Math.max(1, bounds.height)))
+  }
   lastAppliedBounds.set(tabId, { ...bounds })
 }
 
@@ -182,7 +192,11 @@ export async function showNativeTab(tabId: string): Promise<void> {
     const label = labels.get(tabId)
     if (!label) return
     try {
-      await invoke('browser_set_visible', { label, visible: true })
+      try { await invoke('browser_set_visible', { label, visible: true }) }
+      catch (error) {
+        if (!isUnknownCommand(error)) throw error
+        await (await Webview.getByLabel(label))?.show()
+      }
     } catch (error) {
       if (!isMissingWebviewError(error)) throw error
       labels.delete(tabId)
@@ -196,7 +210,11 @@ export async function hideNativeTab(tabId: string): Promise<void> {
     const label = labels.get(tabId)
     if (!label) return
     try {
-      await invoke('browser_set_visible', { label, visible: false })
+      try { await invoke('browser_set_visible', { label, visible: false }) }
+      catch (error) {
+        if (!isUnknownCommand(error)) throw error
+        await (await Webview.getByLabel(label))?.hide()
+      }
     } catch (error) {
       if (!isMissingWebviewError(error)) throw error
       labels.delete(tabId)
