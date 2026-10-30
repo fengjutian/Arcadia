@@ -2,6 +2,8 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { UIProvider } from './components/ui'
 import { AppRouter } from './app/AppRouter'
 import { readThemePreference, THEME_CHANGE_EVENT, type ThemePreference } from './features/settings/theme'
+import { APPEARANCE_CHANGE_EVENT, IMAGE_THEMES, readAppearancePreference, readImageTheme, readThemeKind, VISUAL_THEME_CHANGE_EVENT, type AppearancePreference, type ImageThemeId, type ThemeKind } from './features/settings/visualTheme'
+import { loadBingDailyImage, readCachedBingDailyImage } from './features/settings/bingDailyTheme'
 import { readAdvancedSettings } from './features/settings/advanced'
 import { useTaskWorker } from './features/tasks/useTaskWorker'
 
@@ -22,6 +24,10 @@ const PALETTES = {
 
 export default function App() {
   const [preference, setPreference] = useState<ThemePreference>(readThemePreference)
+  const [appearance, setAppearance] = useState<AppearancePreference>(readAppearancePreference)
+  const [themeKind, setThemeKind] = useState<ThemeKind>(readThemeKind)
+  const [imageTheme, setImageTheme] = useState<ImageThemeId>(readImageTheme)
+  const [bingImage, setBingImage] = useState(readCachedBingDailyImage)
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   useTaskWorker()
@@ -36,6 +42,21 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    const handleAppearance = (event: Event) => setAppearance((event as CustomEvent<AppearancePreference>).detail)
+    const handleVisualTheme = (event: Event) => {
+      const next = (event as CustomEvent<{ kind: ThemeKind; image: ImageThemeId }>).detail
+      setThemeKind(next.kind)
+      setImageTheme(next.image)
+    }
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, handleAppearance)
+    window.addEventListener(VISUAL_THEME_CHANGE_EVENT, handleVisualTheme)
+    return () => {
+      window.removeEventListener(APPEARANCE_CHANGE_EVENT, handleAppearance)
+      window.removeEventListener(VISUAL_THEME_CHANGE_EVENT, handleVisualTheme)
+    }
+  }, [])
+
+  useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const handleSystemTheme = (event: MediaQueryListEvent) => setSystemDark(event.matches)
     setSystemDark(media.matches)
@@ -43,13 +64,26 @@ export default function App() {
     return () => media.removeEventListener('change', handleSystemTheme)
   }, [])
 
-  const resolvedPreference = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference
+  const colorPreference = preference === 'dark' || preference === 'system' ? 'green' : preference
+  const darkAppearance = appearance === 'dark' || (appearance === 'system' && systemDark)
+  const resolvedPreference = darkAppearance ? 'dark' : colorPreference
+
+  useEffect(() => {
+    if (imageTheme !== 'bing') return
+    void loadBingDailyImage().then(image => { if (image) setBingImage(image) })
+  }, [imageTheme])
 
   useEffect(() => {
     document.body.dataset.theme = resolvedPreference
-    document.body.dataset.themePreference = preference
+    document.body.dataset.themePreference = appearance
+    document.body.dataset.themeKind = themeKind
+    document.body.dataset.imageTheme = imageTheme
+    const imageUrl = imageTheme === 'bing' && bingImage?.url
+      ? bingImage.url
+      : (IMAGE_THEMES.find(item => item.id === imageTheme) ?? IMAGE_THEMES[0]).url
+    document.body.style.setProperty('--app-theme-image', `url("${imageUrl}")`)
     document.documentElement.style.colorScheme = resolvedPreference === 'dark' ? 'dark' : 'light'
-  }, [preference, resolvedPreference])
+  }, [appearance, bingImage, imageTheme, resolvedPreference, themeKind])
 
   useEffect(() => {
     document.body.dataset.reduceMotion = readAdvancedSettings().reduceMotion ? 'true' : 'false'

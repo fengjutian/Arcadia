@@ -4,7 +4,7 @@ import mistyLake from '../../assets/themes/misty-lake.webp'
 
 export type AppearancePreference = 'system' | 'light' | 'dark'
 export type ThemeKind = 'color' | 'image'
-export type ImageThemeId = 'alpine' | 'aurora' | 'forest'
+export type ImageThemeId = 'alpine' | 'aurora' | 'forest' | 'bing'
 
 export const APPEARANCE_CHANGE_EVENT = 'arcadia-appearance-change'
 export const VISUAL_THEME_CHANGE_EVENT = 'arcadia-visual-theme-change'
@@ -35,7 +35,7 @@ export function readThemeKind(): ThemeKind {
 
 export function readImageTheme(): ImageThemeId {
   const value = localStorage.getItem(IMAGE_THEME_KEY)
-  return value === 'aurora' || value === 'forest' ? value : 'alpine'
+  return value === 'aurora' || value === 'forest' || value === 'bing' ? value : 'alpine'
 }
 
 function notifyVisualTheme() {

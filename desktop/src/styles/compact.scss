@@ -1443,6 +1443,26 @@ body[data-theme='dark'] {
   background-repeat: no-repeat;
 }
 
+body[data-theme-kind='image'] {
+  .browser-tabs {
+    background-image: linear-gradient(rgba(255,255,255,.46), rgba(255,255,255,.62)), var(--app-theme-image);
+    background-position: center 18%;
+    background-size: cover;
+  }
+
+  .new-tab:not(.has-background) {
+    background-image: linear-gradient(rgba(247,244,237,.34), rgba(247,244,237,.54)), var(--app-theme-image) !important;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+  }
+}
+
+body[data-theme='dark'][data-theme-kind='image'] {
+  .browser-tabs { background-image: linear-gradient(rgba(9,14,12,.42), rgba(9,14,12,.64)), var(--app-theme-image); }
+  .new-tab:not(.has-background) { background-image: linear-gradient(rgba(9,14,12,.38), rgba(9,14,12,.62)), var(--app-theme-image) !important; }
+}
+
 .new-tab__background-actions {
   position: absolute;
   z-index: 2;

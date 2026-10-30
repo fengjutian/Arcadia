@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod bookmarks;
+pub mod bing;
 pub mod browser;
 pub mod capabilities;
 pub mod certificate_guard;
@@ -2173,6 +2174,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            bing::bing_daily_image,
             browser_create,
             browser_set_ad_blocking,
             browser_set_muted,

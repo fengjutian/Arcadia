@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, List, message, Popconfirm, Segmented, Select, Space, Spin, Statistic, Switch, Tabs, Tag, Typography } from '../../components/ui'
-import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, ThunderboltOutlined } from '../../components/ui/icons'
+import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, MoonOutlined, PictureOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInDb, clearReadingSnapshots, deleteAIProvider, deleteMcpServer, discoverMcpServer, dispatchPluginEvent, exportBackup, getAIProvider, getBrowserShortcutsEnabled, getReadingSnapshotStats, importBackup, installPlugin, listAIProviders, listBrowserHistory, listMcpResources, listMcpServers, listMcpTools, listPluginAudit, listPlugins, privacyCapabilityReport, privacyGetStats, privacyListBlocklists, privacyListBlockEvents, privacySetBlocklistEnabled, purgeReadingSnapshots, ragCancelJob, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragRetryJob, replaceSitePermissions, saveAIProvider, saveMcpServer, aiTestProvider, setBrowserShortcutsEnabled, setPluginEnabled, setPluginPermission, uninstallPlugin, type AIProviderInput, type InstalledPlugin, type McpServer, type McpTransport, type PluginAuditEntry, type PluginPermission, type ReadingSnapshotStats } from '../../api'
@@ -8,6 +8,8 @@ import { normalizeOrigin, readSitePermissions, writeSitePermissions, type SitePe
 import { KnowledgeBaseStatusPanel } from '../../features/settings/KnowledgeBaseStatusPanel'
 import { SiteBlacklistPanel } from '../../features/privacy/SiteBlacklistPanel'
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../features/settings/theme'
+import { IMAGE_THEMES, readAppearancePreference, readImageTheme, readThemeKind, writeAppearancePreference, writeImageTheme, writeThemeKind, type AppearancePreference, type ImageThemeId, type ThemeKind } from '../../features/settings/visualTheme'
+import { loadBingDailyImage, readBingDailyRefresh, readCachedBingDailyImage, writeBingDailyRefresh, type BingDailyImage } from '../../features/settings/bingDailyTheme'
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS, writeSearchEngineConfig } from '../../features/browser/searchEngine'
 import { isSearchTemplateValid } from '../../features/browser/navigation'
 import { HISTORY_CHANGE_EVENT, type HistoryEntry } from '../../features/history/dedupeHistory'
@@ -89,8 +91,6 @@ const THEME_OPTIONS: Array<{
   { value: 'green', label: '自然绿', description: '柔和、专注的默认外观', swatch: ['#dce8df', '#347851'] },
   { value: 'beige', label: '暖米色', description: '适合长时间阅读', swatch: ['#eee2d1', '#8a6846'] },
   { value: 'light', label: '经典浅色', description: '清爽的中性界面', swatch: ['#e7ece9', '#3f6f5a'] },
-  { value: 'dark', label: '深色', description: '减少暗光环境的亮度', swatch: ['#24372c', '#65a77d'] },
-  { value: 'system', label: '跟随系统', description: '自动匹配系统浅色或深色外观', swatch: ['#f4f5f4', '#202823'] },
   { value: 'github', label: 'GitHub', description: '熟悉的蓝色开发者风格', swatch: ['#ddf4ff', '#0969da'] },
   { value: 'ocean', label: '海洋蓝', description: '沉稳清晰的蓝色界面', swatch: ['#dbeaf8', '#2563a8'] },
   { value: 'cyan', label: '青蓝', description: '清透现代的青色界面', swatch: ['#d7eff1', '#087f8c'] },
@@ -102,15 +102,71 @@ const THEME_OPTIONS: Array<{
 ]
 
 function GeneralSettings() {
-  const [theme, setTheme] = useState<ThemePreference>(readThemePreference)
+  const initialTheme = readThemePreference()
+  const [theme, setTheme] = useState<ThemePreference>(initialTheme === 'dark' || initialTheme === 'system' ? 'green' : initialTheme)
+  const [appearance, setAppearance] = useState<AppearancePreference>(readAppearancePreference)
+  const [themeKind, setThemeKind] = useState<ThemeKind>(readThemeKind)
+  const [imageTheme, setImageTheme] = useState<ImageThemeId>(readImageTheme)
+  const [bingImage, setBingImage] = useState<BingDailyImage | null>(readCachedBingDailyImage)
+  const [bingLoading, setBingLoading] = useState(false)
+  const [bingDailyRefresh, setBingDailyRefresh] = useState(readBingDailyRefresh)
+
+  useEffect(() => {
+    if (themeKind !== 'image') return
+    void loadBingDailyImage().then(image => { if (image) setBingImage(image) })
+  }, [themeKind])
 
   function changeTheme(next: string | number) {
     const preference = next as ThemePreference
     setTheme(preference)
+    setThemeKind('color')
     writeThemePreference(preference)
+    writeThemeKind('color')
+  }
+
+  function changeAppearance(next: string | number) {
+    const value = next as AppearancePreference
+    setAppearance(value)
+    writeAppearancePreference(value)
+  }
+
+  function changeThemeKind(value: ThemeKind) {
+    setThemeKind(value)
+    writeThemeKind(value)
+  }
+
+  function changeImageTheme(value: ImageThemeId) {
+    setImageTheme(value)
+    setThemeKind('image')
+    writeImageTheme(value)
+  }
+
+  async function selectBingTheme(force = false) {
+    setBingLoading(true)
+    const image = await loadBingDailyImage(force)
+    setBingLoading(false)
+    if (image) setBingImage(image)
+    changeImageTheme('bing')
+  }
+
+  function changeBingDailyRefresh(enabled: boolean) {
+    setBingDailyRefresh(enabled)
+    writeBingDailyRefresh(enabled)
+  }
+
+  function restoreDefaults() {
+    setTheme('green')
+    setAppearance('system')
+    setThemeKind('color')
+    writeThemePreference('green')
+    writeAppearancePreference('system')
+    writeThemeKind('color')
   }
 
   const selected = THEME_OPTIONS.find(option => option.value === theme) ?? THEME_OPTIONS[0]
+  const selectedImage = IMAGE_THEMES.find(item => item.id === imageTheme) ?? IMAGE_THEMES[0]
+  const selectedImageUrl = imageTheme === 'bing' && bingImage ? bingImage.url : selectedImage.url
+  const selectedImageLabel = imageTheme === 'bing' ? (bingImage?.title ?? 'Bing 每日一图') : selectedImage.label
 
   return <Card title="外观" className="settings-card theme-settings">
     <div className="theme-settings__heading">
@@ -118,14 +174,24 @@ function GeneralSettings() {
         <Typography.Title level={5}>主题</Typography.Title>
         <Typography.Paragraph type="secondary">选择喜欢的颜色主题。更改会立即生效，并自动保存。</Typography.Paragraph>
       </div>
-      <Button icon={<ReloadOutlined/>} disabled={theme === 'green'} onClick={() => changeTheme('green')}>恢复默认值</Button>
+      <Button icon={<ReloadOutlined/>} disabled={theme === 'green' && appearance === 'system' && themeKind === 'color'} onClick={restoreDefaults}>恢复默认值</Button>
     </div>
+
+    <section className="appearance-setting">
+      <div className="appearance-setting__copy"><span>◐</span><div><strong>整体外观</strong><small>应用于标签页、页面、对话框和其他菜单。</small></div></div>
+      <Segmented value={appearance} onChange={changeAppearance} options={[
+        { label: '▰ 系统', value: 'system' },
+        { label: <Space><SunOutlined/>浅色</Space>, value: 'light' },
+        { label: <Space><MoonOutlined/>深色</Space>, value: 'dark' },
+      ]}/>
+    </section>
 
     <div className="theme-mode-tabs" aria-label="主题类型">
-      <button type="button" className="is-active"><BgColorsOutlined/>颜色主题</button>
+      <button type="button" className={themeKind === 'color' ? 'is-active' : ''} onClick={() => changeThemeKind('color')}><BgColorsOutlined/>颜色主题</button>
+      <button type="button" className={themeKind === 'image' ? 'is-active' : ''} onClick={() => changeThemeKind('image')}><PictureOutlined/>图像主题</button>
     </div>
 
-    <div className="theme-palette" role="radiogroup" aria-label="选择颜色主题">
+    {themeKind === 'color' ? <div className="theme-palette" role="radiogroup" aria-label="选择颜色主题">
       {THEME_OPTIONS.map(option => <button
         key={option.value}
         type="button"
@@ -137,9 +203,33 @@ function GeneralSettings() {
         onClick={() => changeTheme(option.value)}
         style={{ '--theme-swatch-soft': option.swatch[0], '--theme-swatch-accent': option.swatch[1] } as CSSProperties}
       ><span/><small>{option.label}</small></button>)}
-    </div>
+    </div> : <div className="image-theme-panel">
+      <div className="image-theme-toolbar"><span>应用的主题：<strong>{selectedImageLabel}</strong></span><label>每日刷新 <Switch checked={bingDailyRefresh} onChange={changeBingDailyRefresh}/></label></div>
+      <div className="image-theme-grid" role="radiogroup" aria-label="选择图像主题">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={imageTheme === 'bing'}
+        className={`image-theme-card${imageTheme === 'bing' ? ' is-selected' : ''}`}
+        onClick={() => void selectBingTheme()}
+      >{bingImage ? <img src={bingImage.url} alt=""/> : <span className="image-theme-card__placeholder"><PictureOutlined/></span>}<span><strong>{bingLoading ? '正在获取…' : bingImage?.title ?? 'Bing 每日一图'}</strong><small>{bingImage?.copyright ?? '联网后自动获取 Bing 当日壁纸'}</small></span></button>
+      {IMAGE_THEMES.map(option => <button
+        key={option.id}
+        type="button"
+        role="radio"
+        aria-checked={imageTheme === option.id}
+        className={`image-theme-card${imageTheme === option.id ? ' is-selected' : ''}`}
+        onClick={() => changeImageTheme(option.id)}
+      ><img src={option.url} alt=""/><span><strong>{option.label}</strong><small>{option.description}</small></span></button>)}
+      </div>
+      {imageTheme === 'bing' && <Button size="small" loading={bingLoading} onClick={() => void selectBingTheme(true)}>立即刷新 Bing 图片</Button>}
+    </div>}
 
-    <div className={`theme-preview theme-preview--${theme}`} aria-label={`${selected.label}主题预览`}>
+    <div
+      className={`theme-preview theme-preview--${theme}${themeKind === 'image' ? ' is-image-theme' : ''}`}
+      style={themeKind === 'image' ? ({ '--theme-image': `url("${selectedImageUrl}")` } as CSSProperties) : undefined}
+      aria-label={themeKind === 'image' ? '图像主题预览' : `${selected.label}主题预览`}
+    >
       <div className="theme-preview__chrome">
         <span className="theme-preview__tab">新标签页</span>
         <i/><i/><i/>
@@ -147,7 +237,7 @@ function GeneralSettings() {
       <div className="theme-preview__toolbar"><span/><b/></div>
       <div className="theme-preview__body">
         <aside><i/><i className="is-active"/><i/><i/></aside>
-        <main><strong>{selected.label}</strong><small>{selected.description}</small><div><span/><span/><span/></div></main>
+        <main><strong>{themeKind === 'image' ? selectedImageLabel : selected.label}</strong><small>{themeKind === 'image' ? '图像主题已应用到浏览器标签区和新标签页' : selected.description}</small><div><span/><span/><span/></div></main>
       </div>
     </div>
   </Card>
