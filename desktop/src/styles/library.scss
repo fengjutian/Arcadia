@@ -531,6 +531,12 @@
   color: #b17a1e;
 }
 
+.document-card__delete:hover,
+.document-card__delete:focus-visible {
+  color: #c94b45;
+  background: rgba(201, 75, 69, .1);
+}
+
 .document-card__join {
   display: flex;
   flex-direction: column;

@@ -962,28 +962,6 @@
   svg { width: 14px; height: 14px; }
 }
 
-.result-card__open {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  color: #a69e93;
-  opacity: 0;
-  transform: translateX(-3px);
-  transition: opacity .16s ease, transform .16s ease, background-color .16s ease, color .16s ease;
-
-  svg { width: 12px; height: 12px; }
-}
-
-.result-card:hover .result-card__open,
-.result-card:focus-visible .result-card__open {
-  background: color-mix(in srgb, var(--accent-soft) 75%, transparent);
-  color: var(--accent);
-  opacity: 1;
-  transform: none;
-}
-
 .result-card__title {
   display: -webkit-box;
   overflow: hidden;

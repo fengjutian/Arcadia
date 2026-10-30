@@ -1,5 +1,5 @@
 import { AutoComplete, Button, Input, message, Modal, Popconfirm, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
-import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, InboxOutlined, RightOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
+import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, InboxOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
@@ -443,7 +443,6 @@ function ResultCard({ title, titleText, url, snippet, snippetIsUrl, tags = [], a
             onKeyDown={event => event.stopPropagation()}
           />
         </Popconfirm>}
-        <span className="result-card__open" aria-hidden="true"><RightOutlined/></span>
       </span>
     </div>
     <h3 className="result-card__title" title={titleText}>{title}</h3>
