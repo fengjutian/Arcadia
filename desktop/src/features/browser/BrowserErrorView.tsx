@@ -1,5 +1,5 @@
 import { Button, Space, Typography } from '../../components/ui'
-import { CheckCircleOutlined, CopyOutlined, PlusOutlined, ReloadOutlined } from '../../components/ui/icons'
+import { CheckCircleOutlined, CopyOutlined, LockOutlined, PlusOutlined, ReloadOutlined } from '../../components/ui/icons'
 import type { BrowserTab } from '../../types'
 
 export function BrowserErrorView({ tab, onRetry, onNewTab, onCopy, onUnblock }: {
@@ -12,11 +12,13 @@ export function BrowserErrorView({ tab, onRetry, onNewTab, onCopy, onUnblock }: 
   const error = tab.error
   const kind = error?.kind ?? 'load-failed'
   const blocked = kind === 'site-blocked'
+  const privateMode = tab.private === true
   const host = error?.host ?? ''
   const ruleHost = error?.ruleHost ?? ''
   const message = error?.message ?? '未知错误'
   const title = blocked ? '已封杀该网站'
-    : kind === 'web-mode-required' ? '请在 Tauri 桌面应用中打开网页'
+    : kind === 'web-mode-required' && privateMode ? '此页面暂时无法在私密模式中打开'
+    : kind === 'web-mode-required' ? '当前环境无法打开此网页'
     : kind === 'tab-view-missing' ? '标签页视图已失效'
     : kind === 'unsupported-protocol' ? '应用不支持该协议'
     : kind === 'offline' ? '设备当前离线'
@@ -27,11 +29,13 @@ export function BrowserErrorView({ tab, onRetry, onNewTab, onCopy, onUnblock }: 
     : kind === 'http-client' || kind === 'http-server' ? `服务器返回错误${error?.httpStatus ? `（${error.httpStatus}）` : ''}`
     : '无法加载该网页'
   const eyebrow = blocked ? '网站封杀'
-    : kind === 'web-mode-required' ? '需要桌面应用'
+    : kind === 'web-mode-required' && privateMode ? '私密浏览'
+    : kind === 'web-mode-required' ? '浏览服务不可用'
     : kind === 'tab-view-missing' ? '需要重建视图'
     : kind === 'unsupported-protocol' ? '协议被拦截'
     : '加载失败'
-  return <div className={`browser-error${blocked ? ' browser-error--blocked' : ''}`}>
+  return <div className={`browser-error${blocked ? ' browser-error--blocked' : ''}${privateMode ? ' browser-error--private' : ''}`}>
+    {privateMode && <div className="browser-private-mark"><LockOutlined/><span>私密浏览</span></div>}
     <Typography.Text className="eyebrow">{eyebrow}</Typography.Text>
     <Typography.Title level={3}>{title}</Typography.Title>
     {blocked
@@ -43,7 +47,9 @@ export function BrowserErrorView({ tab, onRetry, onNewTab, onCopy, onUnblock }: 
           </Typography.Paragraph>
           <Typography.Paragraph type="secondary">可在「设置 → 隐私 → 网站封杀」中管理名单；解除封杀后即可重新访问。</Typography.Paragraph>
         </>
-      : <Typography.Paragraph type="secondary">{message}</Typography.Paragraph>}
+      : kind === 'web-mode-required' && privateMode
+        ? <Typography.Paragraph type="secondary">此标签不会保存浏览历史、关闭记录、站点权限或表单数据。你可以返回私密新标签页后重试。</Typography.Paragraph>
+        : <Typography.Paragraph type="secondary">{message}</Typography.Paragraph>}
     {tab.url && <Typography.Text code className="browser-error__url">{tab.url}</Typography.Text>}
     <Space wrap>
       {blocked && onUnblock && <Button type="primary" icon={<CheckCircleOutlined/>} onClick={onUnblock}>解除封杀并访问</Button>}

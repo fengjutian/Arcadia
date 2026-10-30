@@ -3688,3 +3688,39 @@ body[data-theme='github'] {
 .browser-error--blocked {
   .eyebrow { color: #b4552f !important; }
 }
+
+.browser-private-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-bottom: 1px solid #d8c9ea;
+  background: #f5effc;
+  color: #5e3d82;
+  font-size: 12px;
+
+  strong { font-size: 12px; }
+  span { color: #79678d; }
+}
+
+.browser-private-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  border: 1px solid #d7c6e8;
+  border-radius: 999px;
+  background: #f5effc;
+  color: #68458c;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.browser-error--private .eyebrow { color: #68458c !important; }
+.browser-page--private .browser-toolbar { border-bottom-color: #d8c9ea; }
+body[data-theme='dark'] .browser-private-bar,
+body[data-theme='dark'] .browser-private-mark { border-color: #59426f; background: #2a2033; color: #c9a9e7; }
+body[data-theme='dark'] .browser-private-bar span { color: #ae97c3; }

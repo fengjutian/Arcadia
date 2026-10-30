@@ -841,8 +841,10 @@ async fn browser_create(
             true
         });
     let window = app
-        .get_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
+        .windows()
+        .into_values()
+        .next()
+        .ok_or_else(|| "browser window not found".to_string())?;
     window
         .add_child(
             builder,

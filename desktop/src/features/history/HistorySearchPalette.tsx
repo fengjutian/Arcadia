@@ -73,12 +73,13 @@ export function HistorySearchPalette({ open, history, onClose, onOpen, onRemove,
     footer={null}
     closable={false}
     destroyOnHidden
-    width={680}
+    width={760}
+    className="history-search-modal"
     onCancel={onClose}
     styles={{ body: { padding: 0 } }}
     title={null}
   >
-    <div className="tab-search-palette">
+    <div className="tab-search-palette history-search-palette">
       <div className="history-search-palette__toolbar">
         <Input
           ref={inputRef}
@@ -98,6 +99,7 @@ export function HistorySearchPalette({ open, history, onClose, onOpen, onRemove,
           ? <div className="tab-search-palette__empty">没有匹配的历史记录</div>
           : <List
               dataSource={rows}
+              size="small"
               renderItem={(row, index) => <HistoryRow item={row} active={highlight === index} onHover={() => setHighlight(index)} onOpen={() => { onOpen(row); onClose() }} onRemove={() => onRemove(row)} />}
             />}
         {rows.length > 0 && current && <Typography.Text type="secondary" className="tab-search-palette__hint">
@@ -125,8 +127,8 @@ function HistoryRow({ item, active, onHover, onOpen, onRemove }: HistoryRowProps
   >
     <List.Item.Meta
       avatar={<GlobalOutlined />}
-      title={<>{highlight(item.title || item.url, item.titleHighlights)} <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>{formatVisited(item.visitedAt)}</Typography.Text></>}
-      description={highlight(item.url, item.urlHighlights)}
+      title={<div className="history-search-row__title"><span>{highlight(item.title || item.url, item.titleHighlights)}</span><Typography.Text type="secondary">{formatVisited(item.visitedAt)}</Typography.Text></div>}
+      description={<div className="history-search-row__url" title={item.url}>{highlight(item.url, item.urlHighlights)}</div>}
     />
   </List.Item>
 }
