@@ -2517,6 +2517,9 @@ async fn browser_permission_request(
     if current_origin != origin {
         return Err("permission origin does not match the calling page".into());
     }
+    let private = privacy::platform::tab_origin(webview.label())
+        .map(|state| state.private)
+        .unwrap_or(false);
     let waiters = app.state::<PermissionWaiters>();
     let receiver = waiters.register(request_id.clone());
     let _ = app.emit_to(
@@ -2527,6 +2530,7 @@ async fn browser_permission_request(
             request_id: request_id.clone(),
             origin: origin.clone(),
             kind: kind.clone(),
+            private,
         },
     );
     let timeout = Duration::from_millis(timeout_ms.unwrap_or(15_000).clamp(1_000, 30_000));

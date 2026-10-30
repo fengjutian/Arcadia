@@ -20,8 +20,10 @@ export function PermissionPromptBar({ prompt }: PermissionPromptBarProps) {
   if (!pending) return null
   const { origin, kindLabel, originLabel } = describePrompt(pending)
   return (
-    <div className="browser-permission-prompt" role="status">
-      <SafetyCertificateOutlined className="browser-permission-prompt__icon" />
+    <div className="browser-permission-prompt" role="alert" aria-live="polite">
+      <span className="browser-permission-prompt__icon" aria-hidden="true">
+        <SafetyCertificateOutlined />
+      </span>
       <div className="browser-permission-prompt__body">
         <Typography.Text strong>
           {originLabel} 请求使用 {kindLabel}
@@ -30,7 +32,7 @@ export function PermissionPromptBar({ prompt }: PermissionPromptBarProps) {
           来源：{origin}
         </Typography.Text>
       </div>
-      <Space size={4}>
+      <Space className="browser-permission-prompt__actions" size={6}>
         <Button
           size="small"
           icon={<CheckCircleOutlined />}

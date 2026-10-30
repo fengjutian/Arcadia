@@ -125,6 +125,7 @@ mod windows_guard {
                             request_id,
                             origin,
                             kind: kind_name.to_string(),
+                            private: private_mode,
                         },
                     );
                     Ok(())

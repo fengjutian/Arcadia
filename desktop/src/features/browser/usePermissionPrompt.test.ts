@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { describePrompt, forceAllDenyFor, resetOrigin } from './usePermissionPrompt'
+import { describePrompt, forceAllDenyFor, resetOrigin, shouldPersistPermissionDecision } from './usePermissionPrompt'
 import type { PermissionRequest } from '../../services/nativeBrowser'
 import { readSitePermissions, writeSitePermissions } from './sitePermissions'
 
@@ -29,6 +29,21 @@ describe('describePrompt', () => {
       const label = describePrompt({ ...SAMPLE, kind }).kindLabel
       expect(label.length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('shouldPersistPermissionDecision', () => {
+  it('persists allow/deny only for "always" decisions on supported kinds', () => {
+    expect(shouldPersistPermissionDecision(SAMPLE, 'allow-always')).toBe('allow')
+    expect(shouldPersistPermissionDecision(SAMPLE, 'deny-always')).toBe('deny')
+    expect(shouldPersistPermissionDecision(SAMPLE, 'allow-once')).toBeNull()
+    expect(shouldPersistPermissionDecision(SAMPLE, 'deny-once')).toBeNull()
+    expect(shouldPersistPermissionDecision({ ...SAMPLE, kind: 'media' }, 'allow-always')).toBeNull()
+  })
+
+  it('never persists rules for private-tab requests', () => {
+    expect(shouldPersistPermissionDecision({ ...SAMPLE, private: true }, 'allow-always')).toBeNull()
+    expect(shouldPersistPermissionDecision({ ...SAMPLE, private: true }, 'deny-always')).toBeNull()
   })
 })
 
