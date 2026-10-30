@@ -18,6 +18,7 @@ pub mod session_lock;
 pub mod site_blacklist;
 pub mod webview_compat;
 pub mod webview_process_guard;
+pub mod webview_suspend;
 
 use rusqlite::params;
 use serde::de::DeserializeOwned;
@@ -1409,8 +1410,9 @@ fn browser_toolbar_panel(
         if(!data.items?.length)empty('暂无下载');
         for(const item of data.items||[]){{const node=document.createElement('div');node.className='row stack';const title=document.createElement('b');title.textContent=item.name;const status=document.createElement('span');status.textContent=item.detail||item.status;node.append(title,status);panel.append(node)}}
       }} else {{
-        head('资源面板',data.subtitle||'');
-        for(const section of data.sections||[]){{const title=document.createElement('div');title.className='section';title.textContent=section.title;panel.append(title);for(const item of section.items||[])row(item.label,String(item.value))}}
+        head('媒体资源与性能',data.subtitle||'');
+        if(data.canScan){{const scan=document.createElement('button');scan.type='button';scan.textContent='扫描当前页资源';scan.onclick=()=>{{emit('resource-scan');close(false)}};panel.append(scan)}}
+        for(const section of data.sections||[]){{const title=document.createElement('div');title.className='section';title.textContent=section.title;panel.append(title);for(const item of section.items||[]){{if(item.url){{const button=document.createElement('button');button.type='button';button.className='stack';const name=document.createElement('b');name.textContent=item.label;const meta=document.createElement('span');meta.textContent=String(item.value||'');button.append(name,meta);button.onclick=()=>{{emit('resource-download',item.url);close(false)}};panel.append(button)}}else row(item.label,String(item.value))}}}}
         if(data.hint){{const hint=document.createElement('p');hint.className='muted';hint.textContent=data.hint;panel.append(hint)}}
       }}
       Object.assign(host.style,{{position:'fixed',top:'8px',right:'8px',zIndex:'2147483647'}});document.documentElement.append(host);
@@ -2239,6 +2241,8 @@ pub fn run() {
             browser_password_fill,
             browser_password_candidate,
             browser_close_tab,
+            webview_suspend::browser_suspend,
+            webview_suspend::browser_resume,
             local_store::browser_password_save,
             local_store::browser_password_list,
             local_store::browser_password_delete,

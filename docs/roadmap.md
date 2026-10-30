@@ -24,6 +24,7 @@
 - [x] 站点权限提示（三态）与权限等待超时
 - [x] 证书错误拦截：Windows 走 `ICoreWebView2_14::add_ServerCertificateErrorDetected` 真实订阅；macOS / Linux 为 no-op
 - [x] 下载中心：`reqwest` 流式 + Range 续传 + 危险文件判定 + 暂停/取消/重试
+- [x] 媒体资源探测 MVP：Resource Timing + DOM 媒体元素扫描、分类去重、复制链接与下载中心联动
 - [x] ~~启动/监管 Go sidecar~~ — 已取消，Go 后端整条删除（见 §决策记录）
 
 ## Iteration 2：Reader 与持久化
