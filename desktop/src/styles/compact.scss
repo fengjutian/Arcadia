@@ -1444,7 +1444,7 @@ body[data-theme='dark'] {
 }
 
 body[data-theme-kind='image'] {
-  .browser-tabs {
+  .app-topbar {
     background-image: linear-gradient(rgba(255,255,255,.46), rgba(255,255,255,.62)), var(--app-theme-image);
     background-position: center 18%;
     background-size: cover;
@@ -1459,7 +1459,7 @@ body[data-theme-kind='image'] {
 }
 
 body[data-theme='dark'][data-theme-kind='image'] {
-  .browser-tabs { background-image: linear-gradient(rgba(9,14,12,.42), rgba(9,14,12,.64)), var(--app-theme-image); }
+  .app-topbar { background-image: linear-gradient(rgba(9,14,12,.42), rgba(9,14,12,.64)), var(--app-theme-image); }
   .new-tab:not(.has-background) { background-image: linear-gradient(rgba(9,14,12,.38), rgba(9,14,12,.62)), var(--app-theme-image) !important; }
 }
 
