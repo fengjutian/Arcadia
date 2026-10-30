@@ -1717,6 +1717,14 @@ async fn ai_chat(
     provider_id: String,
     request: ChatRequest,
 ) -> Result<ChatResponse, String> {
+    ai_chat_impl(app, provider_id, request).await
+}
+
+pub(crate) async fn ai_chat_impl(
+    app: tauri::AppHandle,
+    provider_id: String,
+    request: ChatRequest,
+) -> Result<ChatResponse, String> {
     let database = local_store::connection(&app)?;
     let (provider_type, base_url, model, timeout_seconds): (String, String, String, i64) = database
         .prepare("SELECT provider_type,base_url,model,timeout_seconds FROM ai_providers WHERE id=?")

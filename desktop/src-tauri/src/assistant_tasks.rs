@@ -4,7 +4,10 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
-use crate::rag::{citation::RagAnswer, commands::RagAnswerRequest};
+use crate::{
+    providers::ChatRequest,
+    rag::{citation::{CitationStatus, RagAnswer}, commands::RagAnswerRequest},
+};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +34,11 @@ impl AssistantTaskRegistry {
 }
 
 #[tauri::command]
-pub async fn assistant_task_start(app: AppHandle, request: RagAnswerRequest) -> Result<String, String> {
+pub async fn assistant_task_start(
+    app: AppHandle,
+    request: RagAnswerRequest,
+    general_request: Option<ChatRequest>,
+) -> Result<String, String> {
     if request.provider_id.trim().is_empty() {
         return Err("provider_id is required".into());
     }
@@ -44,10 +51,25 @@ pub async fn assistant_task_start(app: AppHandle, request: RagAnswerRequest) -> 
         error: None,
     });
 
+    let provider_id = request.provider_id.clone();
     let task_id = id.clone();
     let task_app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let outcome = crate::rag::commands::rag_answer(task_app.clone(), request).await;
+        let outcome = match crate::rag::commands::rag_answer(task_app.clone(), request).await {
+            Ok(mut result) if result.citation_status == CitationStatus::NotRequired => {
+                match general_request {
+                    Some(request) => crate::ai_chat_impl(task_app.clone(), provider_id, request).await.map(|response| {
+                        // Mark this as a complete answer so the frontend does not start a
+                        // second, reload-sensitive request after the background task ends.
+                        result.answer = response.content;
+                        result.citation_status = CitationStatus::Valid;
+                        result
+                    }),
+                    None => Ok(result),
+                }
+            }
+            other => other,
+        };
         let (task, title, body) = match outcome {
             Ok(result) => (
                 AssistantTask { id: task_id.clone(), status: "completed", result: Some(result), error: None },

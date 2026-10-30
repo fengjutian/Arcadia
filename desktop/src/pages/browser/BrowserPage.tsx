@@ -707,7 +707,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     const sources: ComparisonSource[] = engineIds.flatMap(engineId => {
       const engine = SEARCH_ENGINE_PRESETS.find(item => item.id === engineId)
       if (!engine) return []
-      return [{ id: `compare-${crypto.randomUUID()}`, kind: 'web' as const, label: engine.label, url: renderSearchTemplate(engine.template, query) }]
+      return [{ id: `compare-${crypto.randomUUID()}`, kind: 'web' as const, label: engine.label, engineId: engine.id, url: renderSearchTemplate(engine.template, query) }]
     })
     if (includeAi) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'ai', label: 'AI 搜索' })
     if (includeKnowledge) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'knowledge', label: '本地知识库' })
@@ -730,6 +730,24 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       comparisonRef.current = next
       return next
     })
+  }
+
+  function searchAgainInComparison(query: string) {
+    const current = comparisonRef.current
+    if (!current) return
+    current.sources.filter(source => source.kind === 'web').forEach(source => { void closeNativeTab(source.id) })
+    const idMap = new Map<string, string>()
+    const sources = current.sources.map(source => {
+      const id = `compare-${crypto.randomUUID()}`
+      idMap.set(source.id, id)
+      if (source.kind !== 'web') return { ...source, id }
+      const engine = SEARCH_ENGINE_PRESETS.find(item => item.id === source.engineId)
+        ?? SEARCH_ENGINE_PRESETS.find(item => item.label === source.label)
+      return { ...source, id, url: engine ? renderSearchTemplate(engine.template, query) : source.url }
+    })
+    const next = { ...current, query, sources, visibleIds: current.visibleIds.map(id => idMap.get(id) ?? id) }
+    comparisonRef.current = next
+    setComparison(next)
   }
 
   useEffect(() => {
@@ -2226,7 +2244,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       </div>
     )}
     <div className="browser-content"><div className="web-surface" ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
-      ? <SearchComparisonWorkspace query={comparison.query} sources={comparison.sources} visibleIds={comparison.visibleIds} onShow={showComparisonSource} onClose={closeComparison}/>
+      ? <SearchComparisonWorkspace query={comparison.query} sources={comparison.sources} visibleIds={comparison.visibleIds} onShow={showComparisonSource} onSearch={searchAgainInComparison} onClose={closeComparison}/>
       : readerArticle
       ? <ReaderArticleView article={readerArticle}/>
       : active.crashed

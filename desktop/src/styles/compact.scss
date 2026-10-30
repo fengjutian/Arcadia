@@ -1752,20 +1752,28 @@ body[data-theme='dark'][data-theme-kind='image'] {
 .search-comparison__toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 8px 12px;
+  gap: 10px;
+  min-height: 62px;
+  padding: 10px 16px;
   border-bottom: 1px solid #dce1de;
-  background: rgba(255,255,255,.94);
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 1px 8px rgba(22, 44, 32, .04);
 }
 
-.search-comparison__query { display: flex; align-items: center; gap: 8px; min-width: 150px; color: #26312b; }
-.search-comparison__query svg { color: var(--accent); }
-.search-comparison__query small { color: #87928b; white-space: nowrap; }
-.search-comparison__hidden { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; color: #7a857e; font-size: 12px; }
+.search-comparison__search { display: flex; align-items: center; gap: 9px; flex: 1 1 460px; max-width: 680px; min-width: 240px; height: 40px; padding: 0 5px 0 13px; border: 1px solid #d4ddd7; border-radius: 12px; background: #f7f9f7; transition: border-color .18s ease, box-shadow .18s ease, background .18s ease; }
+.search-comparison__search:focus-within { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(31, 122, 87, .1); }
+.search-comparison__search > svg { flex: none; color: var(--accent); font-size: 16px; }
+.search-comparison__search input { flex: 1; min-width: 60px; border: 0; outline: 0; background: transparent; color: #243129; font: inherit; }
+.search-comparison__search input::placeholder { color: #929c96; }
+.search-comparison__source-count { flex: none; padding-right: 4px; color: #7f8a83; font-size: 12px; white-space: nowrap; }
+.search-comparison__submit { flex: none; height: 30px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+.search-comparison__submit:hover:not(:disabled) { background: var(--accent-hover); }
+.search-comparison__submit:disabled { background: #dfe5e1; color: #9aa39d; cursor: default; }
+.search-comparison__hidden { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; color: #7a857e; font-size: 12px; }
 .search-comparison__hidden > span { flex: none; }
 .search-comparison__hidden button { flex: none; padding: 4px 9px; border: 1px solid #d5dcd7; border-radius: 999px; background: #f8faf8; color: #56625b; cursor: pointer; }
 .search-comparison__hidden button:hover { border-color: var(--accent); color: var(--accent-hover); }
+.search-comparison__close { flex: none; border-radius: 9px; color: #56625b; }
 .search-comparison__grid { display: grid; min-height: 0; gap: 1px; background: #cfd6d2; }
 .search-comparison__pane { display: grid; grid-template-rows: 38px minmax(0, 1fr); min-width: 0; min-height: 0; background: #fff; }
 .search-comparison__pane-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; border-bottom: 1px solid #e1e5e2; background: #fafbfa; }
@@ -1789,8 +1797,19 @@ body[data-theme='dark'] .search-comparison__toolbar,
 body[data-theme='dark'] .search-comparison__pane,
 body[data-theme='dark'] .search-comparison__pane-body { border-color: #39443e; background: #1c2520; }
 body[data-theme='dark'] .search-comparison__pane-title { border-color: #39443e; background: #222c26; color: #e3e9e5; }
-body[data-theme='dark'] .search-comparison__query { color: #e3e9e5; }
+body[data-theme='dark'] .search-comparison__search { border-color: #3a4941; background: #202a24; }
+body[data-theme='dark'] .search-comparison__search:focus-within { border-color: var(--accent); background: #18211c; }
+body[data-theme='dark'] .search-comparison__search input { color: #e3e9e5; }
+body[data-theme='dark'] .search-comparison__submit:disabled { background: #354039; color: #7e8982; }
+body[data-theme='dark'] .search-comparison__hidden button { border-color: #46524b; background: #26312b; color: #c1cac4; }
 body[data-theme='dark'] .search-comparison__grid { background: #39443e; }
+
+@media (max-width: 900px) {
+  .search-comparison__toolbar { flex-wrap: wrap; padding: 9px 12px; }
+  .search-comparison__search { order: 1; max-width: none; }
+  .search-comparison__close { order: 2; }
+  .search-comparison__hidden { order: 3; flex-basis: 100%; }
+}
 
 .search-engine-settings__presets {
   display: grid;

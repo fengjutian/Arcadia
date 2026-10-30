@@ -461,7 +461,16 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         dimensions: undefined,
       }
       let rag: RagAnswerResponse | null = null
-      const taskId = await startAssistantTask(providerId, ragQuery, { temperature: 0.2, maxTokens: 1024 }).catch(() => null)
+      const generalRequest = buildGeneralAnswerPrompt(
+        prompt,
+        history.map(entry => ({ role: entry.role as 'user' | 'assistant', content: entry.content })),
+      )
+      const taskId = await startAssistantTask(
+        providerId,
+        ragQuery,
+        generalRequest,
+        { temperature: 0.2, maxTokens: 1024 },
+      ).catch(() => null)
       if (taskId) {
         patchTurn(pendingId, { backgroundTaskId: taskId })
         rag = await waitForAssistantTask(taskId)
