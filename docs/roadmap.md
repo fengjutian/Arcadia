@@ -102,8 +102,8 @@
 
 - [~] 借鉴：Arc 让笔记贴着浏览发生；本项目已实现划词笔记，但只完成了一半。
 - 现状：`features/notes/notes.ts` 把高亮存在 `localStorage`（上限 500 条），不进 SQLite、不进 FTS、不进备份、不参与 RAG。
-- 已落地（2026-11-02）：迁移 #32 `page_notes` + `page_notes_fts`；命令 `local_list/save/delete/clear_page_notes`；`features/notes/noteStore.ts` 负责读写、旧 `localStorage` 一次性迁移与失败回滚；BrowserPage 改为异步加载并逐条持久化；备份（`local_export/import_backup`）新增 `notes` 字段并兼容旧备份。Rust 测试 `page_notes_roundtrip_through_fts` 与备份回环测试覆盖。
-- 待补：SearchPage 检索笔记、RAG 引用笔记来源、颜色与文本锚点的写入 UI、独立笔记浏览页。
+- 已落地（2026-11-02）：迁移 #32 `page_notes` + `page_notes_fts`；命令 `local_list/save/delete/clear_page_notes` 与 `local_search_page_notes`；`features/notes/noteStore.ts` 负责读写、旧 `localStorage` 一次性迁移与失败回滚；BrowserPage 改为异步加载并逐条持久化；SearchPage 新增「笔记」结果分组（FTS 命中、高亮引文与批注、点击回到原文）；备份（`local_export/import_backup`）新增 `notes` 字段并兼容旧备份。Rust 测试 `page_notes_roundtrip_through_fts` 与备份回环测试覆盖。
+- 待补：RAG 把笔记作为可引用来源（需要 chunk/索引与 citation 标签）、颜色与文本锚点的写入 UI、独立笔记浏览页。
 - 做法：迁移到 SQLite 并随文档关联；写入 FTS5 与向量索引；保存网页时把该页笔记挂到文档；备份/导出覆盖笔记；一次性迁移旧 `localStorage` 数据。
 - 验收：重启与备份恢复后笔记仍在；可按笔记正文检索；RAG 引用可标注笔记来源；迁移可重复执行且幂等。
 - 增补（借 Chrome highlights）：高亮记录 `quote / prefix / suffix / color`，用文本锚点而非 XPath，保证页面改版后仍可定位。
