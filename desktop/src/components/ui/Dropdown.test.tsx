@@ -12,6 +12,7 @@ describe('Dropdown overlay lifecycle', () => {
   let container: HTMLDivElement
   let root: Root
   let deltas: number[]
+  let onOverlay: (event: Event) => void
 
   beforeEach(() => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -19,36 +20,42 @@ describe('Dropdown overlay lifecycle', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     deltas = []
-    window.addEventListener(UI_MODAL_OVERLAY_EVENT, event => deltas.push((event as CustomEvent<number>).detail))
+    onOverlay = event => deltas.push((event as CustomEvent<number>).detail)
+    window.addEventListener(UI_MODAL_OVERLAY_EVENT, onOverlay)
   })
 
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
-    window.removeEventListener(UI_MODAL_OVERLAY_EVENT, () => undefined)
-    deltas = []
+    window.removeEventListener(UI_MODAL_OVERLAY_EVENT, onOverlay)
   })
 
   function mount(node: ReactNode) {
     act(() => root.render(node))
   }
 
-  it('publishes +1 while the menu is open and -1 when it closes', async () => {
-    mount(<Dropdown menu={{ items: [{ key: 'save', label: 'Save' }] }}><button type="button">open</button></Dropdown>)
-    const trigger = container.querySelector('button')
-    expect(trigger).not.toBeNull()
+  function menu() {
+    return <Dropdown menu={{ items: [{ key: 'save', label: 'Save' }] }}><button type="button">open</button></Dropdown>
+  }
 
+  async function openMenu() {
+    const trigger = container.querySelector('button')!
     await act(async () => {
-      trigger!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
-      trigger!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
-      trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+      trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+      trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
+      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
     })
+  }
+
+  it('publishes +1 while the menu is open and -1 when it closes', async () => {
+    mount(menu())
+    await openMenu()
 
     expect(deltas).toEqual([1])
     expect(document.querySelector('.ui-dropdown')).not.toBeNull()
 
     await act(async () => {
-      document.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+      document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
     })
 
     expect(deltas).toEqual([1, -1])
@@ -56,11 +63,8 @@ describe('Dropdown overlay lifecycle', () => {
   })
 
   it('keeps the lifecycle balanced when the menu unmounts while open', async () => {
-    mount(<Dropdown menu={{ items: [{ key: 'save', label: 'Save' }] }}><button type="button">open</button></Dropdown>)
-    await act(async () => {
-      container.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
-      container.querySelector('button')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
-    })
+    mount(menu())
+    await openMenu()
     expect(deltas).toEqual([1])
 
     act(() => root.render(<div/>))

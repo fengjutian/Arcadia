@@ -26,6 +26,7 @@ import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
 import { normalizeSleepHost, readSleepExceptions, toggleSleepException, writeSleepExceptions } from '../../features/browser/sleepSettings'
+import { isAutoReaderSite, normalizeReaderHost, readReaderSites, toggleReaderSite, writeReaderSites, READER_FONT_SIZES, READER_WIDTHS, clampReaderFontSize, clampReaderWidth, readerStyleFor, writeReaderSiteStyle } from '../../features/browser/siteReaderPrefs'
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
 import { scheduleExtrasSync } from '../../features/search/extrasSync'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
@@ -137,6 +138,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [commandOpen, setCommandOpen] = useState(false)
   const [sleepExceptions, setSleepExceptions] = useState<string[]>(readSleepExceptions)
   const sleepExceptionsRef = useRef<string[]>(sleepExceptions)
+  const [readerSites, setReaderSites] = useState<string[]>(readReaderSites)
+  const readerSitesRef = useRef<string[]>(readerSites)
+  const autoReaderAttemptsRef = useRef<Set<string>>(new Set())
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
   const [blockEvents, setBlockEvents] = useState<Awaited<ReturnType<typeof privacyListBlockEvents>>>([])
@@ -892,6 +896,14 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         }
       }))
       if (typeof patch.url === 'string') setAddress(patch.url)
+      // Site-level Reader preference: open Reader once per URL after the page
+      // finishes loading, never for private tabs and never twice.
+      if (typeof patch.url === 'string' && patch.loading === false && !patch.error
+        && !readerArticle && !autoReaderAttemptsRef.current.has(patch.url)
+        && isAutoReaderSite(patch.url, readerSitesRef.current)) {
+        autoReaderAttemptsRef.current.add(patch.url)
+        void openReader()
+      }
     },
     onReopen: () => {
       const tab = tabsRef.current.find(item => item.id === active.id)
@@ -1339,6 +1351,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     writeSleepExceptions(next)
   }
 
+  function updateReaderSites(next: string[]) {
+    readerSitesRef.current = next
+    setReaderSites(next)
+    writeReaderSites(next)
+  }
+
   /** Explicit "sleep this tab now": keep the record, release the WebView. */
   async function suspendTabNow(tab: BrowserTab) {
     if (!hasNativeTab(tab.id) || isNativeTabSuspended(tab.id)) return
@@ -1494,6 +1512,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
 
   const browserMenu: MenuProps['items'] = ([
     { key: 'find', label:translate("在页面中查找"),extra:'Ctrl+F',onClick:()=>runBrowserMenuAction('find')},
+    { key: 'reader-auto', label: isAutoReaderSite(active.url, readerSites) ? translate("取消此站点自动阅读") : translate("此站点自动进入阅读模式"), disabled: !normalizeReaderHost(active.url), onClick: () => updateReaderSites(toggleReaderSite(readerSites, active.url)) },
     { key: 'tab-search', label:translate("命令栏"),extra:'Ctrl+K',onClick:()=>runBrowserMenuAction('tab-search')},
     { key: 'history-search', label:translate("查找历史与收藏"),onClick:()=>runBrowserMenuAction('history-search')},
     { key: 'bookmark-add', label:translate("收藏当前页"),extra:'Ctrl+D',onClick:()=>runBrowserMenuAction('bookmark-add')},

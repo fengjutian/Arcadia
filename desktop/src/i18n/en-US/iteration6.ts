@@ -123,6 +123,8 @@ export const iteration6: Messages = {
   '{value0} 次访问 · {value1} 个站点': '{value0} visits across {value1} sites',
   '当前 Space 范围内没有文档': 'No documents in the current Space scope',
   '在左侧 Space 菜单的「知识范围」里切回全部知识库，或把文档加入该集合。': 'Switch the Space back to all knowledge from its "Knowledge scope" menu, or add documents to that collection.',
+  '此站点自动进入阅读模式': 'Always open this site in Reader',
+  '取消此站点自动阅读': 'Stop opening this site in Reader',
   '不使用 Space': 'Leave Space',
   '知识范围': 'Knowledge scope',
   '全部知识库': 'All knowledge',

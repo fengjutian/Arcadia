@@ -75,7 +75,7 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1`、`6.2`、`6.3`、`6.4`、`6.6`、`6.8`、`6.13`、`6.14`、`6.15` 已完成；其余未开始。布局与滚动所有权已收口。
+> 状态以各条目勾选为准：`6.1`、`6.2`、`6.3`、`6.4`、`6.6`、`6.8`、`6.13`、`6.14`、`6.15` 已完成；`6.9` 部分落地；其余未开始。布局与滚动所有权已收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
@@ -156,7 +156,9 @@
 
 ### 6.9 按站点阅读偏好（Boosts 的安全子集）
 
-- [ ] 借鉴：Arc 的 Boosts 支持按站点定制外观，但本项目只取不执行脚本的部分。
+- [~] 借鉴：Arc 的 Boosts 支持按站点定制外观，但本项目只取不执行脚本的部分。
+- 已落地（2026-11-02，V1）：站点级「自动进入阅读模式」——`arcadia.reader.sites.v1` 保存 host 列表，浏览器菜单可添加/取消；页面加载完成后按 host 自动打开 Reader，同一 URL 只尝试一次，私密标签不触发。纯函数 `siteReaderPrefs` 覆盖 host 归一化、去重、容错与 toggle。
+- 待补：站点级字号/宽度/主题覆盖、纯 CSS 隐藏元素（需插件 grant）。
 - 做法：站点级 Reader 偏好（字号、宽度、主题、是否自动进 Reader）与纯 CSS 隐藏元素；后者走插件 grant，与 `browserAppearance`、`typography` 衔接。
 - 验收：站点级覆盖优先于全局；只注入 CSS，不执行站点提供的脚本；可一键恢复默认。
 
@@ -249,7 +251,7 @@
 
 ## 测试现状
 
-`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **94 个文件 / 683 用例全部通过**（含 i18n 完整性、布局契约、Space 范围/命名空间/迁移、睡眠规则与新标签页模型）。Rust 侧最近一次全量：269 通过、1 个既有的 CJK 拼音索引用例在本机环境失败（`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`，与近期改动无关）。
+`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **96 个文件 / 689 用例全部通过**（含 i18n 完整性、布局契约、Space 范围/命名空间/迁移、站点阅读偏好、睡眠规则与新标签页模型）。Rust 侧最近一次全量：269 通过、1 个既有的 CJK 拼音索引用例在本机环境失败（`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`，与近期改动无关）。
 
 直接用 `cargo test` 会让测试二进制在加载阶段以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出：`tauri` 默认特性 `common-controls-v6` 与 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6` 都会静态导入 `comctl32!TaskDialogIndirect`，该导出只存在于 comctl32 v6 组件，需要应用清单声明 `Microsoft.Windows.Common-Controls`。应用主程序由 `tauri-build` 注入清单，测试 harness 没有。
 
