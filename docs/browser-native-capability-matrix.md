@@ -51,7 +51,8 @@ assert that the Rust side matches.
 | Process-level WebView memory (per tab) | ❌ Not supported in stable | needs `webview2-com` | 单标签页的内存占用需要 `ICoreWebView2Process`（`WorkingSetSize`、`PrivateMemoryUsage`），依赖与证书拦截相同的手工 COM cast，尚未接线。因此资源面板报告标签数与 LRU 状态，而不是每个 WebView 的字节数。 |
 | WebView2 navigation error status | ⚠️ Partial | `wry::WebviewBuilder.on_page_load` | `NavigationCompleted` event with `WebErrorStatus` is reachable via `wry`'s `on_page_load` callback in newer versions. Currently not wired — relies on WebView2's automatic error page. Future: parse `WEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_*` and emit `browser://certificate-error`. |
 | Webview backend label | ✅ Direct | `cfg(target_os)` | `"webview2"` on Windows, `"wkwebview"` on macOS, `"webkitgtk"` on Linux. |
-| Tauri runtime version | ✅ Direct | `env!("CARGO_PKG_VERSION")` | Useful for diagnostics only; do not gate features on it. |
+| WebView2 engine version | ✅ Supported (Windows) / ❌ Not supported (macOS, Linux) | `webview2-com` 0.38.2 + `GetAvailableCoreWebView2BrowserVersionString` | 不需要先创建 WebView 就能查询，返回 Evergreen Runtime 的版本串（如 `156.0.4314.58`）。`chromium_major` 取首段，即 Chromium 里程碑，直接对应 Chrome 同主版本。字符串由 loader 用 `CoTaskMemAlloc` 分配，`CoTaskMemPWSTR` 接管并在 Drop 时释放。WKWebView / WebKitGTK 版本随 OS 走，暂无等价探针，返回 `None`。**Evergreen 会自动升级，所以这是"当前实际值"而非固定值**；前端不要据此写死 CSS/JS 假设。 |
+| Tauri runtime version | ✅ Direct | `build.rs` 从 `Cargo.lock` 解析后注入 `ARCADIA_TAURI_VERSION` | `env!("CARGO_PKG_VERSION")` 是**本 crate**的版本（`0.6.0`），曾被误当作 Tauri 版本；现由 `build.rs` 读取 lockfile 中 `tauri` 包的版本并注入。Useful for diagnostics only; do not gate features on it. |
 
 ## Backend label matrix
 
@@ -88,6 +89,8 @@ interface BrowserCapabilities {
   clearSiteData: boolean
   certificateErrorInterceptor: boolean
   webviewBackend?: 'webview2' | 'wkwebview' | 'webkitgtk' | 'unknown'
+  webviewVersion?: string
+  chromiumMajor?: number
   tauriRuntimeVersion?: string
 }
 ```

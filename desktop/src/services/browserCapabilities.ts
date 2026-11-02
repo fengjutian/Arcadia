@@ -22,10 +22,14 @@ export interface BrowserCapabilities {
   clearSiteData: boolean
   /** True when TLS/certificate errors can be intercepted and answered from code. */
   certificateErrorInterceptor: boolean
-  /** Backend `Tauri` runtime version, useful for diagnostics. */
+  /** Resolved Tauri crate version (from `Cargo.lock`), not the app version. */
   tauriRuntimeVersion?: string
   /** `webview2` on Windows, `wkwebview` on macOS, `webkitgtk` on Linux. */
   webviewBackend?: string
+  /** Host engine version, e.g. `156.0.4314.58` for the installed WebView2 runtime. */
+  webviewVersion?: string
+  /** Chromium milestone parsed from `webviewVersion`, e.g. `156`. */
+  chromiumMajor?: number
 }
 
 const isTauri = () => '__TAURI_INTERNALS__' in window

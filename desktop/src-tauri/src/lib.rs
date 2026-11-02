@@ -167,35 +167,6 @@ impl DownloadIndex {
     }
 }
 
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-struct BrowserCapabilities {
-    /// True when granular byte-level download progress is observable.
-    download_progress_bytes: bool,
-    /// True when downloads can be paused/resumed through Tauri/WebView APIs.
-    download_pause_resume: bool,
-    /// True when in-flight downloads can be cancelled from the host.
-    download_cancel: bool,
-    /// True when a native permission-requested event is observable.
-    native_permission_events: bool,
-    /// True when a native context menu can be hooked to the webview.
-    native_context_menu: bool,
-    /// True when site data can be cleared through the host webview profile.
-    clear_site_data: bool,
-    /// True when TLS/certificate errors can be intercepted from code.
-    certificate_error_interceptor: bool,
-    /// Best-effort backend label for diagnostics ("webview2", "wkwebview", ...).
-    webview_backend: Option<&'static str>,
-    /// Tauri crate version compiled into the binary.
-    tauri_runtime_version: Option<&'static str>,
-}
-
-#[allow(dead_code)]
-type _UnusedCapabilitiesAlias = capabilities::BrowserCapabilities;
-#[allow(dead_code)]
-type _UnusedCapabilitiesAlias2 = capabilities::BrowserCapabilities;
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SitePermissionRule {
