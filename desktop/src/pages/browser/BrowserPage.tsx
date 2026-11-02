@@ -1520,16 +1520,22 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     await unblockAndVisit(currentBlock.id, active.url)
   }
 
-  async function navigate(input: string) {
+  /**
+   * Navigate the active tab. `target` lets a caller that already resolved the
+   * destination tab (the new-tab reuse path, reached from a long-lived event
+   * listener whose render state is stale) address it explicitly.
+   */
+  async function navigate(input: string, target?: { id: string; private?: boolean }) {
     const trimmedInput = input.trim()
     const normalizedInput = /^[a-z]:[\\/]/i.test(trimmedInput)
       ? `file:///${trimmedInput.replace(/\\/g, '/')}`
       : trimmedInput
     const resolved = resolveNavigationInput(normalizedInput, { searchTemplate })
     if (!resolved) return
-    if (comparisonRef.current?.hostTabId === active.id) closeComparison()
+    const tabId = target?.id ?? active.id
+    const tabPrivate = target ? target.private === true : active.private
+    if (comparisonRef.current?.hostTabId === tabId) closeComparison()
     const url = trackingCleanerEnabled && /^https?:\/\//i.test(resolved) ? cleanTrackingParameters(resolved) : resolved
-    const tabId = active.id
     if (!isNativeBrowserAvailable()) {
       window.open(url, '_blank', 'noopener,noreferrer')
       setTabs(current => current.map(tab => tab.id === tabId ? { ...newTab(tab.id), active: true } : tab))
@@ -1546,7 +1552,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     const nextBounds = bounds()
     if (!nextBounds) return
     try {
-      const opened = await openNativeTab(tabId, url, nextBounds, { private: active.private })
+      const opened = await openNativeTab(tabId, url, nextBounds, { private: tabPrivate })
       if (!opened) {
         setTabs(current => current.map(tab => tab.id === tabId ? { ...tab, loading: false, error: { kind: 'web-mode-required', message:translate("网页浏览仅在 Tauri 桌面应用中可用。")}}:tab))
         return
@@ -2327,14 +2333,14 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       ? reusableNewTabId(tabsRef.current, activeTabIdRef.current, { background, private: options.private })
       : undefined
     if (reusableId && requestedUrl) {
-      void navigate(requestedUrl)
+      void navigate(requestedUrl, { id: reusableId })
       return reusableId
     }
     const tab = options.private ? makePrivateTab() : newTab()
     tab.lastActiveAt = Date.now()
     const currentId = activeTabIdRef.current
     if (!background && currentId) void hideNativeTab(currentId)
-    if (url) { tab.url = url; tab.title =translate("正在加载\u2026");tab.loading=true}
+    if (requestedUrl) { tab.url = requestedUrl; tab.title =translate("正在加载\u2026");tab.loading=true}
     setTabs(current => {
       const next = current.map(        (item                      )=>({...item,active:false}))
       return [...next, tab]
@@ -2343,15 +2349,15 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       activeTabIdRef.current = tab.id
       lastActiveAtRef.current.set(tab.id, Date.now())
       setActiveTabId(tab.id)
-      setAddress(url ?? '')
+      setAddress(requestedUrl ?? '')
       setReaderArticle(null)
     }
-    if (url) {
+    if (requestedUrl) {
       void new Promise(resolve => requestAnimationFrame(resolve)).then(async () => {
         const nextBounds = bounds()
         if (!nextBounds) return
         try {
-          const opened = await openNativeTab(tab.id, url, nextBounds, { private: tab.private })
+          const opened = await openNativeTab(tab.id, requestedUrl, nextBounds, { private: tab.private })
           if (!opened) {
             setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: { kind: 'web-mode-required', message:translate("网页浏览仅在 Tauri 桌面应用中可用。")}}:item))
             return
