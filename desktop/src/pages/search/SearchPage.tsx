@@ -4,7 +4,7 @@ import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, In
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { deleteDocument, deleteReadingSnapshot, searchDocuments, listReadingActivity, getSearchSuggestions, getSession, setSession, type DocumentSearchHit } from '../../api'
+import { deleteDocument, deleteReadingSnapshot, searchDocuments, searchPageNotes, listReadingActivity, getSearchSuggestions, getSession, setSession, type DocumentSearchHit, type PageNote } from '../../api'
 import type { ReadingActivity } from '../../types'
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { renderHighlightedSnippet } from '../../features/search/renderSnippet'
@@ -26,6 +26,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const advancedQuery = useMemo(() => parseAdvancedSearch(debouncedQuery), [debouncedQuery])
   const [documents, setDocuments] = useState<DocumentSearchHit[]>([])
   const [reading, setReading] = useState<ReadingActivity[]>([])
+  const [notes, setNotes] = useState<PageNote[]>([])
   const [selected, setSelected] = useState<DocumentSearchHit | null>(null)
   const [selectedReading, setSelectedReading] = useState<ReadingActivity | null>(null)
   const [loading, setLoading] = useState(true)
@@ -74,11 +75,15 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     let current = true
     setLoading(true)
     const startedAt = performance.now()
-    void Promise.all([searchDocuments(advancedQuery.text), listReadingActivity()])
-      .then(([items, activity]) => {
+    const noteResults = advancedQuery.text.trim()
+      ? searchPageNotes(advancedQuery.text)
+      : Promise.resolve<PageNote[]>([])
+    void Promise.all([searchDocuments(advancedQuery.text), listReadingActivity(), noteResults])
+      .then(([items, activity, noteItems]) => {
         if (!current) return
         setDocuments(items)
         setReading(activity)
+        setNotes(noteItems)
         setUnavailable(false)
         setLoadError(null)
         setDurationMs(Math.round(performance.now() - startedAt))
@@ -92,6 +97,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
         console.error(t("[search] 读取本地知识库失败"),error)
         setDocuments([])
         setReading([])
+        setNotes([])
         setUnavailable(true)
         setLoadError(detail ||t("未知错误"))
       })
@@ -156,7 +162,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const terms = useMemo(() => debouncedQuery.trim().split(/\s+/).filter(Boolean), [debouncedQuery])
   const hasQuery = debouncedQuery.trim().length > 0
   const hasFilters = tagFilter.length > 0 || starredOnly || includeArchived || readOnly
-  const total = filtered.length + unsavedReading.length
+  const total = filtered.length + unsavedReading.length + notes.length
   const showEmpty = !loading && total === 0
 
   const sortOptions = useMemo(() => hasQuery ? [{ label:t("相关度"),value:'relevance'as const},...SORT_OPTIONS]:SORT_OPTIONS,[hasQuery])
@@ -177,6 +183,11 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     if (debouncedQuery.trim()) rememberQuery(debouncedQuery)
     if (item.markdown) setSelectedReading(item)
     else onOpenUrl?.(item.url)
+  }, [debouncedQuery, rememberQuery, onOpenUrl])
+
+  const openNote = useCallback((note: PageNote) => {
+    if (debouncedQuery.trim()) rememberQuery(debouncedQuery)
+    onOpenUrl?.(note.url)
   }, [debouncedQuery, rememberQuery, onOpenUrl])
 
   const removeDocument = useCallback(async (item: DocumentSearchHit) => {
@@ -307,6 +318,24 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
                   onDelete={() => removeDocument(item)}
                 />
               })}
+            </div>
+          </section>}
+
+          {notes.length > 0 && <section className="search-section search-section--notes">
+            <SectionHeading title={t("笔记")} count={notes.length} hint={t("网页高亮与摘录，来自划词笔记")}/>
+            <div className="result-grid">
+              {notes.map(note => <ResultCard
+                key={note.id}
+                title={<Highlight text={note.title || note.url} terms={terms}/>}
+                titleText={note.title || note.url}
+                url={note.url}
+                snippet={<span className="search-note-snippet">
+                  <span className="search-note-snippet__quote"><Highlight text={note.quote} terms={terms}/></span>
+                  {note.comment && <span className="search-note-snippet__comment">{note.comment}</span>}
+                </span>}
+                actionLabel={t("打开原文：{value0}",{value0:note.title||note.url})}
+                onOpen={() => openNote(note)}
+              />)}
             </div>
           </section>}
 

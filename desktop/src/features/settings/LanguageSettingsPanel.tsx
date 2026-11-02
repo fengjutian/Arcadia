@@ -1,5 +1,6 @@
 import { Card, Select, Typography } from '../../components/ui'
 import { changeLocale, getLocale, LOCALE_LABELS, SUPPORTED_LOCALES, t, type Locale } from '../../i18n'
+import { rememberViewForReload } from '../../app/returnView'
 
 /**
  * Language picker for Settings → General.
@@ -22,7 +23,9 @@ export function LanguageSettingsPanel() {
         ariaLabel={t('界面语言')}
         options={SUPPORTED_LOCALES.map(value => ({ value, label: LOCALE_LABELS[value] }))}
         onChange={next => {
-          if (next !== current) changeLocale(next as Locale)
+          if (next === current) return
+          rememberViewForReload('settings')
+          changeLocale(next as Locale)
         }}
         style={{ width: 180 }}
       />

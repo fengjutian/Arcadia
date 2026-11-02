@@ -2478,6 +2478,7 @@ pub fn run() {
             local_store::local_delete_archived_tab,
             local_store::local_clear_archived_tabs,
             local_store::local_list_page_notes,
+            local_store::local_search_page_notes,
             local_store::local_save_page_note,
             local_store::local_delete_page_note,
             local_store::local_clear_page_notes,

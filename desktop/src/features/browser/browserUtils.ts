@@ -3,6 +3,7 @@
  * Extracted from BrowserPage so the logic can be unit-tested without React.
  */
 import type { BrowserTab } from '../../types'
+import { t } from '../../i18n'
 
 export const TAB_GROUP_PALETTE = ['#a7dfbd', '#9bc6e8', '#dfc0a7', '#c8a7df', '#dfb5b5', '#bce0c6']
 
@@ -41,7 +42,7 @@ export const QUICK_SITES: QuickSite[] = [
 export const newTab = (id: string = crypto.randomUUID()): BrowserTab => ({
   id,
   url: '',
-  title: '新标签页',
+  title: t('新标签页'),
   loading: false,
   active: true,
   pinned: false,

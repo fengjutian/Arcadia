@@ -177,3 +177,7 @@ body[data-theme='dark'] .workspaces-editor__desc{color:#9aa69e}
 .library-archive-group__title span{font-weight:500;color:#9aa49d}
 .library-archive-row{display:flex;align-items:center;gap:6px}
 .library-archive-row .library-activity{flex:1;min-width:0}
+/* Page notes in search results */
+.search-note-snippet{display:flex;flex-direction:column;gap:4px}
+.search-note-snippet__quote{font-style:italic;color:#303a34}
+.search-note-snippet__comment{font-size:12px;color:#4c9167}

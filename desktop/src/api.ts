@@ -695,6 +695,11 @@ export async function listPageNotes(): Promise<PageNote[]> {
   return isTauri() ? invoke('local_list_page_notes') : []
 }
 
+/** FTS-backed note search used by the Search page. */
+export async function searchPageNotes(query: string, limit = 50): Promise<PageNote[]> {
+  return isTauri() ? invoke('local_search_page_notes', { query, limit }) : []
+}
+
 export async function savePageNote(note: PageNote): Promise<void> {
   if (isTauri()) await invoke('local_save_page_note', { note })
 }

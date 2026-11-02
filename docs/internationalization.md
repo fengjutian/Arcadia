@@ -7,7 +7,7 @@ Arcadia 桌面端第一批支持两种界面语言：
 | 简体中文 | `zh-CN` | 默认语言，也是消息 id 的源语言 |
 | English | `en-US` | 英文界面 |
 
-语言可在 **设置 → 通用 → 语言** 中切换。选择会写入 `localStorage`（`arcadia-locale`），随后窗口重新加载；主窗口与浮动助手窗口通过 `storage` 事件保持同步。
+语言可在 **设置 → 通用 → 语言** 中切换。选择会写入 `localStorage`（`arcadia-locale`），随后窗口重新加载；重新加载后会回到设置页，主窗口与浮动助手窗口通过 `storage` 事件保持同步。首次启动默认使用简体中文，不做系统语言自动探测。
 
 ## 设计
 
@@ -33,7 +33,7 @@ export const example: Messages = {
 
 ### 为什么切换语言要重新加载
 
-不少模块在导入时构造常量（快捷键表、主题预设、搜索引擎列表、设置页签等）并调用 `t()`。这些常量不会因 React 重渲染而重新求值，所以语言选择会持久化后调用 `window.location.reload()`。`setLocale(locale)` 只切换内存状态，供测试或外部命令使用；`changeLocale(locale)` 才会重新加载。
+不少模块在导入时构造常量（快捷键表、主题预设、搜索引擎列表、设置页签等）并调用 `t()`。这些常量不会因 React 重渲染而重新求值，所以语言选择会持久化后调用 `window.location.reload()`。`setLocale(locale)` 只切换内存状态，供测试或外部命令使用；`changeLocale(locale)` 才会重新加载。设置页在触发切换前通过 `rememberViewForReload('settings')` 记录路由，重新加载后由 `AppRouter` 一次性恢复，因此用户不会在切换语言后突然回到浏览器页。
 
 ## 代码结构
 

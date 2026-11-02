@@ -88,13 +88,13 @@ describe('api', () => {
 
     it('exportBackup returns an empty backup in non-Tauri mode without invoking', async () => {
       const result = await exportBackup()
-      expect(result).toEqual({ version: 1, exportedAt: '', documents: [], session: [] })
+      expect(result).toEqual({ version: 1, exportedAt: '', documents: [], session: [], notes: [] })
       expect(invoke).not.toHaveBeenCalled()
     })
 
     it('importBackup returns zero summary in non-Tauri mode without invoking', async () => {
-      const summary = await importBackup({ version: 1, exportedAt: '', documents: [], session: [] })
-      expect(summary).toEqual({ documentsInserted: 0, documentsSkipped: 0, sessionInserted: 0 })
+      const summary = await importBackup({ version: 1, exportedAt: '', documents: [], session: [], notes: [] })
+      expect(summary).toEqual({ documentsInserted: 0, documentsSkipped: 0, sessionInserted: 0, notesInserted: 0 })
       expect(invoke).not.toHaveBeenCalled()
     })
   })

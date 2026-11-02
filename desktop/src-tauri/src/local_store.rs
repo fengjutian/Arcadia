@@ -3895,9 +3895,52 @@ fn query_page_notes(database: &Connection, limit: i64) -> Result<Vec<LocalPageNo
         .map_err(|error| error.to_string())
 }
 
+fn search_page_notes(
+    database: &Connection,
+    query: &str,
+    limit: i64,
+) -> Result<Vec<LocalPageNote>, String> {
+    let needle = query.trim();
+    if needle.is_empty() {
+        return query_page_notes(database, limit);
+    }
+    let fts_query = build_fts5_query(needle);
+    if fts_query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let columns = PAGE_NOTE_COLUMNS
+        .split(',')
+        .map(|column| format!("n.{}", column.trim()))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut statement = database
+        .prepare(&format!(
+            "SELECT {columns} FROM page_notes_fts f
+             JOIN page_notes n ON n.rowid = f.rowid
+             WHERE page_notes_fts MATCH ?1
+             ORDER BY bm25(page_notes_fts)
+             LIMIT ?2"
+        ))
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![fts_query, limit.clamp(1, 500)], page_note_from_row)
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub fn local_list_page_notes(app: tauri::AppHandle) -> Result<Vec<LocalPageNote>, String> {
     query_page_notes(&connection(&app)?, 1000)
+}
+
+#[tauri::command]
+pub fn local_search_page_notes(
+    app: tauri::AppHandle,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<LocalPageNote>, String> {
+    search_page_notes(&connection(&app)?, &query, i64::from(limit.unwrap_or(100)))
 }
 
 #[tauri::command]
@@ -4489,6 +4532,19 @@ mod tests {
             exported_at: "1".into(),
             documents,
             session,
+            notes: vec![LocalPageNote {
+                id: "note-1".into(),
+                url: "https://example.com".into(),
+                title: "Title".into(),
+                quote: "quoted".into(),
+                comment: "comment".into(),
+                color: "yellow".into(),
+                prefix: None,
+                suffix: None,
+                document_id: None,
+                created_at: 1,
+                updated_at: 1,
+            }],
         };
 
         // Import into a fresh database.
@@ -4498,6 +4554,12 @@ mod tests {
         assert_eq!(summary.documents_inserted, 1);
         assert_eq!(summary.documents_skipped, 0);
         assert_eq!(summary.session_inserted, 1);
+        assert_eq!(summary.notes_inserted, 1);
+
+        let restored_note: String = target
+            .query_row("SELECT quote FROM page_notes WHERE id='note-1'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(restored_note, "quoted");
 
         let restored_title: String = target
             .query_row(
@@ -4526,6 +4588,7 @@ mod tests {
             exported_at: "0".into(),
             documents: vec![],
             session: vec![],
+            notes: vec![],
         };
         let result = local_import_backup_for_test(&mut database, backup);
         assert!(result.is_err());
@@ -5069,10 +5132,19 @@ mod tests {
             ).map_err(|error| error.to_string())?;
             session_inserted += 1;
         }
+        let mut notes_inserted = 0;
+        for note in backup.notes {
+            if validate_page_note(&note).is_err() {
+                continue;
+            }
+            insert_page_note(database, &note)?;
+            notes_inserted += 1;
+        }
         Ok(LocalImportSummary {
             documents_inserted,
             documents_skipped,
             session_inserted,
+            notes_inserted,
         })
     }
 
@@ -5859,12 +5931,16 @@ mod tests {
             )
             .unwrap();
         assert_eq!(matched, 1, "quotes must be searchable");
+        assert_eq!(search_page_notes(&database, "cosine", 10).unwrap().len(), 1);
+        assert_eq!(search_page_notes(&database, "核心", 10).unwrap().len(), 1, "comments must be searchable");
+        assert!(search_page_notes(&database, "unrelated-token", 10).unwrap().is_empty());
 
         let mut edited = note.clone();
         edited.quote = "dot product".into();
         edited.comment = "换一个说法".into();
         edited.updated_at = 1_700_000_100_000;
         insert_page_note(&database, &edited).unwrap();
+        assert!(search_page_notes(&database, "核心", 10).unwrap().is_empty(), "edited notes must drop their old comment tokens");
         let stale: i64 = database
             .query_row(
                 "SELECT COUNT(*) FROM page_notes_fts WHERE page_notes_fts MATCH ?1",

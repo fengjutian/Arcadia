@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Spin } from '../components/ui'
 import { AppLayout } from '../layouts/AppLayout'
+import { takeViewAfterReload } from './returnView'
 import type { View } from '../types'
 
 const BrowserPage=lazy(()=>import('../pages/browser/BrowserPage').then(module=>({default:module.BrowserPage})))
@@ -11,8 +12,8 @@ const McpPage=lazy(()=>import('../pages/mcp/McpPage').then(module=>({default:mod
 const SettingsPage=lazy(()=>import('../pages/settings/SettingsPage').then(module=>({default:module.SettingsPage})))
 
 export function AppRouter() {
-  const [view, setView] = useState<View>('browser')
-  const [mountedViews, setMountedViews] = useState<Set<View>>(() => new Set(['browser']))
+  const [view, setView] = useState<View>(() => takeViewAfterReload() ?? 'browser')
+  const [mountedViews, setMountedViews] = useState<Set<View>>(() => new Set([view]))
   const [knowledgeQuery, setKnowledgeQuery] = useState('')
   const changeView = (next: View) => {
     setMountedViews(current => {

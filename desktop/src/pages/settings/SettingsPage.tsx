@@ -181,7 +181,7 @@ function GeneralSettings() {
   const selectedImageUrl = imageTheme === 'bing' && bingImage ? bingImage.url : selectedImage.url
   const selectedImageLabel = imageTheme === 'bing' ?( bingImage?.title ??t("Bing 每日一图")):selectedImage.label
 
-  return <><Card title={t("外观")} className="settings-card theme-settings">
+  return <><LanguageSettingsPanel/><Card title={t("外观")} className="settings-card theme-settings">
     <div className="theme-settings__heading">
       <div>
         <Typography.Title level={5}>{t("主题")}</Typography.Title>
@@ -265,7 +265,6 @@ function GeneralSettings() {
       </div>
     </div>
   </Card>
-  <LanguageSettingsPanel/>
   </>
 }
 
