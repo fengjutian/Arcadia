@@ -14,7 +14,9 @@
     "tauri:build:windows": "tauri build --bundles msi,nsis",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "test": "vitest run",
-    "test:rust": "node scripts/run-rust-tests.mjs"
+    "test:rust": "node scripts/run-rust-tests.mjs",
+    "cef:fetch": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-cef.ps1",
+    "check:cef": "cargo check --features cef --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.32",

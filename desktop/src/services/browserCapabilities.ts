@@ -30,6 +30,13 @@ export interface BrowserCapabilities {
   webviewVersion?: string
   /** Chromium milestone parsed from `webviewVersion`, e.g. `156`. */
   chromiumMajor?: number
+  /**
+   * Engine actually hosting tabs. `wry` is the system WebView (WebView2 on
+   * Windows); `cef` is the self-hosted Chromium build (`--features cef`).
+   */
+  pageEngine?: 'wry' | 'cef'
+  /** Why `pageEngine` is `wry` when a CEF build was expected. */
+  pageEngineFallback?: string | null
 }
 
 const isTauri = () => '__TAURI_INTERNALS__' in window

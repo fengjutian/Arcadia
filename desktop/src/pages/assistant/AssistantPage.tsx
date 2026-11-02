@@ -49,7 +49,7 @@ import {
 } from '@assistant-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listDocuments, ragAnswer, saveDocument, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse } from '../../api'
+import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listDocuments, ragAnswer, saveDocument, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse, type RagCitation } from '../../api'
 import type { RagQuery } from '../../api'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
 import { PeekDrawer, type PeekTarget } from '../../features/peek/PeekDrawer'
@@ -88,6 +88,8 @@ interface AssistantTurn {
   docIds?: number[]
   /** Real ids returned by the RAG pipeline, preferred over `docIds`. */
   documentIds?: string[]
+  /** Full citation payload, including note/clip sources with no document row. */
+  citations?: RagCitation[]
   notFound: boolean
   pending: boolean
   interrupted?: boolean
@@ -275,6 +277,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         patchTurn(turn.id, {
           content: rag.answer,
           documentIds: Array.from(new Set(rag.citations.map(citation => citation.documentId).filter(Boolean))),
+          citations: rag.citations,
           pending: false,
           interrupted: false,
           backgroundTaskId: undefined,
@@ -503,6 +506,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
           patchTurn(pendingId, {
             content: rag.answer,
             documentIds: Array.from(new Set(rag.citations.map(citation => citation.documentId).filter(Boolean))),
+            citations: rag.citations,
             docIds: undefined,
             notFound: false,
             pending: false,
@@ -897,6 +901,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
           }
 
           const cited = resolveCitedDocs(turn)
+          const extraCitations = (turn.citations ?? []).filter(citation => !documentsById.has(citation.documentId))
           const answer = stripSourceBlocks(turn.content)
           const noticeOnly = !turn.pending &&                                          (Boolean(turn.error)||turn.notFound||(turn.interrupted===true&&!answer))
           return(
@@ -972,7 +977,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                    }
                 </div>
 
-                {!turn.pending && !turn.error && cited.length > 0 &&(
+                {!turn.pending && !turn.error && (cited.length + extraCitations.length) > 0 &&(
                   <div className="assistant-citations">
                     <span className="assistant-citations__label">{t("引用")}</span>
                     {cited.map((doc, index) =>(
@@ -985,6 +990,20 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                       >
                         <span className="assistant-citation__index">{index + 1}</span>
                         <span className="assistant-citation__title">{doc.title}</span>
+                      </button>)
+                     )}
+                    {extraCitations.map((citation, index) =>(
+                      <button
+                        type="button"
+                        className="assistant-citation assistant-citation--source"
+                        key={citation.citationId}
+                        title={citation.url}
+                        onClick={() => {
+                          if (citation.url) window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url: citation.url } }))
+                        }}
+                      >
+                        <span className="assistant-citation__index">{cited.length + index + 1}</span>
+                        <span className="assistant-citation__title">{citation.title || citation.url}</span>
                       </button>)
                      )}
                   </div>)

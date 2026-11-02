@@ -35,10 +35,25 @@ pub struct BrowserCapabilities {
     /// Tauri crate version compiled into the binary (resolved from `Cargo.lock`
     /// by `build.rs`), not this crate's own version.
     pub tauri_runtime_version: Option<&'static str>,
+    /// Which page engine is actually hosting tabs: `"wry"` or `"cef"`.
+    pub page_engine: &'static str,
+    /// Why the preferred engine was not used, when wry took over.
+    pub page_engine_fallback: Option<String>,
 }
 
 #[tauri::command]
-pub fn browser_capabilities() -> BrowserCapabilities {
+pub fn browser_capabilities(app: tauri::AppHandle) -> BrowserCapabilities {
+    let (engine_kind, engine_fallback) = crate::engine::describe(&app);
+    capabilities_for(engine_kind.label(), engine_fallback)
+}
+
+/// Pure snapshot of the capability surface for a given engine choice.
+///
+/// Split out so tests do not need a live `AppHandle`.
+fn capabilities_for(
+    page_engine: &'static str,
+    page_engine_fallback: Option<String>,
+) -> BrowserCapabilities {
     let webview_version = webview_runtime_version();
     let chromium_major = webview_version.as_deref().and_then(chromium_milestone);
     BrowserCapabilities {
@@ -53,6 +68,8 @@ pub fn browser_capabilities() -> BrowserCapabilities {
         webview_version,
         chromium_major,
         tauri_runtime_version: option_env!("ARCADIA_TAURI_VERSION"),
+        page_engine,
+        page_engine_fallback,
     }
 }
 
@@ -125,7 +142,7 @@ mod tests {
 
     #[test]
     fn capability_flags_match_matrix_expectations() {
-        let caps = browser_capabilities();
+        let caps = capabilities_for("wry", None);
         assert!(
             caps.download_progress_bytes,
             "download progress is always observable"
@@ -156,7 +173,7 @@ mod tests {
 
     #[test]
     fn tauri_runtime_version_is_the_dependency_not_this_crate() {
-        let caps = browser_capabilities();
+        let caps = capabilities_for("wry", None);
         let version = caps
             .tauri_runtime_version
             .expect("build.rs must pin ARCADIA_TAURI_VERSION from Cargo.lock");
@@ -183,7 +200,7 @@ mod tests {
 
     #[test]
     fn webview_version_is_probed_only_where_the_platform_reports_it() {
-        let caps = browser_capabilities();
+        let caps = capabilities_for("wry", None);
         if cfg!(target_os = "windows") {
             // WebView2 Runtime is a documented prerequisite on Windows
             // (README "环境要求"), so a missing probe result is a real defect.

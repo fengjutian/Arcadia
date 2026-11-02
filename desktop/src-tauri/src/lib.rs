@@ -1969,10 +1969,10 @@ pub fn run() {
         .manage(session_lock::SessionBootState::default())
         .setup(|app| {
             // Install the tab-hosting engine before the first command can run.
-            // A CEF build would swap this constructor (and nothing else in the
-            // command layer would change).
-            app.manage(engine::PageEngineState::new(Arc::new(
-                engine::WryPageEngine::new(app.handle().clone()),
+            // `select` prefers CEF when the feature is compiled in and degrades
+            // to wry (recording why) when it cannot start.
+            app.manage(engine::PageEngineState::new(engine::select::select(
+                app.handle(),
             )));
             // Set the runtime window icon explicitly as well as the bundled executable
             // icon. This keeps `tauri dev` and packaged Windows builds consistent.

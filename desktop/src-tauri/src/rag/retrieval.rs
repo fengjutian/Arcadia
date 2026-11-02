@@ -268,11 +268,11 @@ pub async fn orchestrate_with_embedder(
     // fragment without turning it into a document.
     if query.document_ids.is_none() {
         let conn = database.lock().await;
-        let extras = extra_source_hits(&conn, &query.query, 4);
+        let extras = extra_source_hits(&conn, &query.query, 6);
         drop(conn);
         if !extras.is_empty() {
             hits.extend(extras);
-            hits.truncate(query.top_k + 4);
+            hits.truncate(query.top_k + 6);
         }
     }
 
@@ -633,7 +633,7 @@ fn extra_source_hits(conn: &Connection, query_text: &str, limit: usize) -> Vec<R
     if fts_query.is_empty() {
         return Vec::new();
     }
-    let per_source = (limit / 2).max(1) as i64;
+    let per_source = (limit / 3).max(1) as i64;
     let mut hits = Vec::new();
 
     if let Ok(mut statement) = conn.prepare(
@@ -678,6 +678,27 @@ fn extra_source_hits(conn: &Connection, query_text: &str, limit: usize) -> Vec<R
             for (id, url, title, source_title, content) in rows.flatten() {
                 let label = if title.trim().is_empty() { source_title } else { title };
                 hits.push(synthetic_hit("clip", &id, label, url, content, "剪藏"));
+            }
+        }
+    }
+
+    if let Ok(mut statement) = conn.prepare(
+        "SELECT a.id,a.url,a.title
+         FROM tab_archive_fts f JOIN tab_archive a ON a.rowid = f.rowid
+         WHERE tab_archive_fts MATCH ?1
+         ORDER BY bm25(tab_archive_fts)
+         LIMIT ?2",
+    ) {
+        if let Ok(rows) = statement.query_map(rusqlite::params![fts_query, per_source], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        }) {
+            for (id, url, title) in rows.flatten() {
+                let text = format!("{title}\n{url}");
+                hits.push(synthetic_hit("archive", &id, title, url, text, "归档"));
             }
         }
     }
@@ -768,12 +789,18 @@ mod tests {
              VALUES('clip-1','selection','cosine distance','Clip','https://example.com/b','Source','',NULL,1,1)",
             [],
         ).unwrap();
+        conn.execute(
+            "INSERT INTO tab_archive(id,url,title,favicon,archived_at,visited_at,source,workspace_id)
+             VALUES('archive-1','https://example.com/c','Archived cosine page',NULL,1,1,'manual',NULL)",
+            [],
+        ).unwrap();
 
-        let hits = extra_source_hits(&conn, "cosine", 4);
-        assert_eq!(hits.len(), 2);
+        let hits = extra_source_hits(&conn, "cosine", 6);
+        assert_eq!(hits.len(), 3);
         let ids: Vec<&str> = hits.iter().map(|hit| hit.chunk.document_id.as_str()).collect();
         assert!(ids.contains(&"note:note-1"));
         assert!(ids.contains(&"clip:clip-1"));
+        assert!(ids.contains(&"archive:archive-1"));
         assert!(hits.iter().all(|hit| !hit.chunk.text.is_empty()));
     }
 }

@@ -27,9 +27,33 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 use url::Url;
 
+pub mod select;
 pub mod wry;
 
+#[cfg(feature = "cef")]
+pub mod cef;
+
 pub use wry::WryPageEngine;
+
+/// Backend actually hosting pages in this process.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineKind {
+    /// Platform WebView: WebView2 / WKWebView / WebKitGTK.
+    Wry,
+    /// Self-hosted Chromium (Windows, `--features cef`).
+    Cef,
+}
+
+impl EngineKind {
+    /// Stable identifier for the frontend and logs.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Wry => "wry",
+            Self::Cef => "cef",
+        }
+    }
+}
 
 /// Errors surfaced by a page engine.
 ///
@@ -228,12 +252,21 @@ pub trait PageEngine: Send + Sync {
     ) -> Result<()>;
 }
 
-/// Tauri-managed holder for the active engine.
-pub struct PageEngineState(pub Arc<dyn PageEngine>);
+/// Tauri-managed holder for the active engine and how it was chosen.
+pub struct PageEngineState {
+    pub kind: EngineKind,
+    pub engine: Arc<dyn PageEngine>,
+    /// Set when the preferred backend was unavailable and wry took over.
+    pub fallback_reason: Option<String>,
+}
 
 impl PageEngineState {
-    pub fn new(engine: Arc<dyn PageEngine>) -> Self {
-        Self(engine)
+    pub fn new(selection: select::Selection) -> Self {
+        Self {
+            kind: selection.kind,
+            engine: selection.engine,
+            fallback_reason: selection.fallback_reason,
+        }
     }
 }
 
@@ -242,7 +275,13 @@ impl PageEngineState {
 /// Cloning an `Arc` per call keeps command bodies free of `State` lifetimes,
 /// which matters because most of them hold the engine across `.await`.
 pub fn page_engine<R: Runtime>(app: &AppHandle<R>) -> Arc<dyn PageEngine> {
-    app.state::<PageEngineState>().0.clone()
+    app.state::<PageEngineState>().engine.clone()
+}
+
+/// Read-only view of the selection, for the capability surface.
+pub fn describe<R: Runtime>(app: &AppHandle<R>) -> (EngineKind, Option<String>) {
+    let state = app.state::<PageEngineState>();
+    (state.kind, state.fallback_reason.clone())
 }
 
 /// Convenience bridge for platform modules that must install native handlers.

@@ -290,6 +290,7 @@ npm run test:rust     # 247 个用例，见下方说明
 - [产品需求](docs/PRD.md)
 - [系统架构](docs/architecture.md)
 - [页面承载层 PageEngine](docs/page-engine.md)
+- [Windows CEF 接入方案](docs/cef-windows-plan.md)
 - [开发路线图](docs/roadmap.md)
 - [开发技术文档](docs/development-guide.md)
 - [国际化方案](docs/internationalization.md)

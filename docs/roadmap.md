@@ -75,7 +75,7 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1` 已完成；`6.2`、`6.3`、`6.6`、`6.13`、`6.14`、`6.15` 部分落地，其余未开始。按性价比排序：`6.2`–`6.3` 不依赖布局收口；`6.4` 起依赖布局收口。
+> 状态以各条目勾选为准：`6.1`、`6.15` 已完成；`6.2`、`6.3`、`6.6`、`6.13`、`6.14` 部分落地，其余未开始。按性价比排序：`6.2`–`6.3` 不依赖布局收口；`6.4` 起依赖布局收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
@@ -104,8 +104,8 @@
 
 - [~] 借鉴：Arc 让笔记贴着浏览发生；本项目已实现划词笔记，但只完成了一半。
 - 现状：`features/notes/notes.ts` 把高亮存在 `localStorage`（上限 500 条），不进 SQLite、不进 FTS、不进备份、不参与 RAG。
-- 已落地（2026-11-02）：迁移 #32 `page_notes` + `page_notes_fts`；命令 `local_list/save/delete/clear_page_notes` 与 `local_search_page_notes`；`features/notes/noteStore.ts` 负责读写、旧 `localStorage` 一次性迁移与失败回滚；BrowserPage 改为异步加载并逐条持久化；SearchPage 新增「笔记」结果分组（FTS 命中、高亮引文与批注、点击回到原文）；备份（`local_export/import_backup`）新增 `notes` 字段并兼容旧备份。Rust 测试 `page_notes_roundtrip_through_fts` 与备份回环测试覆盖。
-- 待补：RAG 把笔记作为可引用来源（需要 chunk/索引与 citation 标签）、颜色与文本锚点的写入 UI、独立笔记浏览页。
+- 已落地（2026-11-02）：迁移 #32 `page_notes` + `page_notes_fts`；命令 `local_list/save/delete/clear_page_notes` 与 `local_search_page_notes`；`features/notes/noteStore.ts` 负责读写、旧 `localStorage` 一次性迁移与失败回滚；BrowserPage 改为异步加载并逐条持久化；SearchPage 新增「笔记」结果分组（FTS 命中、高亮引文与批注、点击回到原文）；备份（`local_export/import_backup`）新增 `notes` 字段并兼容旧备份。RAG 检索新增笔记/剪藏召回（`retrieval::extra_source_hits`，合成 chunk id `note:<id>` / `clip:<id>`），AI 回答可引用；前端引用条支持无文档行的来源，点击打开原文。Rust 测试 `page_notes_roundtrip_through_fts`、`extra_source_hits_include_notes_and_clips`。
+- 待补：颜色与文本锚点的写入 UI、独立笔记浏览页、向量索引覆盖笔记。
 - 做法：迁移到 SQLite 并随文档关联；写入 FTS5 与向量索引；保存网页时把该页笔记挂到文档；备份/导出覆盖笔记；一次性迁移旧 `localStorage` 数据。
 - 验收：重启与备份恢复后笔记仍在；可按笔记正文检索；RAG 引用可标注笔记来源；迁移可重复执行且幂等。
 - 增补（借 Chrome highlights）：高亮记录 `quote / prefix / suffix / color`，用文本锚点而非 XPath，保证页面改版后仍可定位。
@@ -191,9 +191,8 @@
 
 ### 6.15 剪藏片段
 
-- [~] 借鉴：Edge Collections——把选区、图片、链接连同备注收进集合，而不是只能整篇保存。
-- 已落地（2026-11-02）：迁移 #34 `clips` + `clips_fts`；命令 `local_list/search/save/delete/clear_clips`；右键菜单新增「剪藏选中文字 / 剪藏此链接 / 剪藏此图片 / 剪藏整页」，自动带上来源 URL 与标题；命令栏新增「剪藏当前页」动作；知识库新增「剪藏」页签（按类型、来源、时间展示，可按集合筛选，可跳回原文、删除，按行归入集合，单条或筛选结果导出 Markdown 并保留出处）；SearchPage 新增「剪藏」结果分组，命中后走 Peek 预览。Rust 测试 `clips_roundtrip_through_fts`，前端 `features/clips/` 9 例。
-- 待补：RAG 把剪藏作为可引用来源（需要扩展 citation 类型）。
+- [x] 借鉴：Edge Collections——把选区、图片、链接连同备注收进集合，而不是只能整篇保存。
+- 已落地（2026-11-02）：迁移 #34 `clips` + `clips_fts`；命令 `local_list/search/save/delete/clear_clips`；右键菜单新增「剪藏选中文字 / 剪藏此链接 / 剪藏此图片 / 剪藏整页」，自动带上来源 URL 与标题；命令栏新增「剪藏当前页」动作；知识库新增「剪藏」页签（按类型、来源、时间展示，可按集合筛选，可跳回原文、删除，按行归入集合，单条或筛选结果导出 Markdown 并保留出处）；SearchPage 新增「剪藏」结果分组，命中后走 Peek 预览；RAG 可把剪藏作为引用来源。Rust 测试 `clips_roundtrip_through_fts`、`extra_source_hits_include_notes_and_clips`，前端 `features/clips/` 9 例。
 - 做法：统一「剪藏」对象（`kind / content / sourceUrl / note / collectionId`），落 SQLite、进 FTS5、可导出；选区来源复用右键菜单「加入笔记」。
 - 验收：四类剪藏均可创建；来源可回溯；导出 Markdown 保留出处；与整篇保存共用一套检索与引用。
 
@@ -226,7 +225,7 @@
   2. 布局与滚动所有权收口完成，§进行中 关闭。
   3. 数据层（SQLite / FTS5 / RAG / Agent）与 webview 承载层解耦，业务代码不直接调用 Tauri webview API。
   4. 内核能力缺口有书面清单：区分「产品必需」与「有了更好」。
-- 第二阶段做法：以 CEF（或等价的自托管 Chromium）作为 `PageEngine` 的第二个实现，与现有 wry 实现并存，用 feature flag 切换，两套都进 CI。
+- 第二阶段做法：以 CEF（或等价的自托管 Chromium）作为 `PageEngine` 的第二个实现，与现有 wry 实现并存，用 feature flag 切换，两套都进 CI。**已收敛为 Windows-only**：CEF 只随 Windows 构建分发，wry 始终保留为回落路径（初始化失败自动降级并上报原因）。详见 [Windows CEF 接入方案](cef-windows-plan.md)。
 - 启动条件（顺序不可颠倒）：
   1. ~~先把 webview 承载层收口成内部 trait（`create / eval / navigate / set_bounds / capture / focus`），把散落在 `lib.rs` 的 `get_webview`（40 处）与 `.eval()`（15 处）全部收进去。这一步无论最终换不换内核都该做。~~ **已完成（2026-11-02）**：`desktop/src-tauri/src/engine/` 提供 `PageEngine` trait 与 `WryPageEngine` 实现；业务命令只按 tab label 调用，`get_webview` 仅存在于 `engine/wry.rs`（1 处解析 + 2 处存在性检查），平台模块统一走 `with_platform_webview` 逃生口。行为与错误文案保持不变。
   2. 补齐运行时版本探测（`webview_version` / `chromium_major`），作为两套实现的行为基线。已实现，见 `browser_capabilities`。
