@@ -2066,6 +2066,7 @@ pub fn run() {
         .manage(AiStreamRegistry::default())
         .manage(assistant_tasks::AssistantTaskRegistry::default())
         .manage(plugins::WasmRuntime::default())
+        .manage(mcp::McpHost::default())
         .manage(PermissionWaiters::default())
         .manage(session_lock::SessionBootState::default())
         .manage(SiteRouteRegistry::default())
@@ -2287,7 +2288,14 @@ pub fn run() {
             mcp::mcp_discover,
             mcp::mcp_list_tools,
             mcp::mcp_list_resources,
+            mcp::mcp_list_prompts,
+            mcp::mcp_read_resource,
+            mcp::mcp_get_prompt,
             mcp::mcp_call_tool,
+            mcp::mcp_disconnect,
+            mcp::mcp_server_status,
+            mcp::mcp_list_audit,
+            mcp::mcp_clear_audit,
             skillhub::skillhub_search,
             plugins::installer::install_plugin,
             plugins::installer::list_plugins,
@@ -2417,8 +2425,16 @@ pub fn run() {
             webview_compat::toggle_fullscreen,
             webview_compat::pick_files
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running AI Knowledge Browser");
+        .build(tauri::generate_context!())
+        .expect("error while building AI Knowledge Browser")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Reap every stdio MCP child before the process disappears.
+                if let Some(host) = app.try_state::<mcp::McpHost>() {
+                    host.shutdown_all();
+                }
+            }
+        });
 }
 
 #[tauri::command]

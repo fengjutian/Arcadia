@@ -454,9 +454,61 @@ export async function listMcpResources(serverId: string): Promise<unknown> {
   return invoke('mcp_list_resources', { serverId })
 }
 
+export async function listMcpPrompts(serverId: string): Promise<unknown> {
+  if (!isTauri()) throw new Error('MCP requires the desktop app')
+  return invoke('mcp_list_prompts', { serverId })
+}
+
+export async function readMcpResource(serverId: string, uri: string): Promise<unknown> {
+  if (!isTauri()) throw new Error('MCP requires the desktop app')
+  return invoke('mcp_read_resource', { serverId, uri })
+}
+
+export async function getMcpPrompt(serverId: string, name: string, args?: Record<string, unknown>): Promise<unknown> {
+  if (!isTauri()) throw new Error('MCP requires the desktop app')
+  return invoke('mcp_get_prompt', { serverId, name, arguments: args })
+}
+
 export async function callMcpTool(serverId: string, name: string, args: Record<string, unknown>, approved: boolean): Promise<unknown> {
   if (!isTauri()) throw new Error('MCP requires the desktop app')
   return invoke('mcp_call_tool', { serverId, name, arguments: args, approved })
+}
+
+export async function disconnectMcpServer(serverId: string): Promise<void> {
+  if (!isTauri()) return
+  await invoke('mcp_disconnect', { serverId })
+}
+
+export interface McpServerStatus {
+  connected: boolean
+  protocolVersion?: string
+  serverInfo?: Record<string, unknown>
+}
+
+export async function getMcpServerStatus(serverId: string): Promise<McpServerStatus> {
+  if (!isTauri()) return { connected: false }
+  return invoke<McpServerStatus>('mcp_server_status', { serverId })
+}
+
+export interface McpAuditEntry {
+  id: string
+  serverId: string
+  method: string
+  targetName?: string
+  approved: boolean
+  success: boolean
+  error?: string
+  createdAt: string
+}
+
+export async function listMcpAudit(serverId?: string, limit = 100): Promise<McpAuditEntry[]> {
+  if (!isTauri()) return []
+  return invoke<McpAuditEntry[]>('mcp_list_audit', { serverId, limit })
+}
+
+export async function clearMcpAudit(serverId?: string): Promise<void> {
+  if (!isTauri()) return
+  await invoke('mcp_clear_audit', { serverId })
 }
 
 export interface SkillHubSkill {

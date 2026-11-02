@@ -1,33 +1,66 @@
 import { t } from '../../i18n'
 import { useEffect, useMemo, useState } from 'react'
-import { Boxes, ChevronRight, Database, Play, PlugZap, Plus, RefreshCw, Server, Store, Wrench } from 'lucide-react'
+import {
+  Boxes,
+  ChevronRight,
+  Database,
+  History,
+  MessageSquare,
+  Pencil,
+  Play,
+  PlugZap,
+  Plus,
+  RefreshCw,
+  Server,
+  Store,
+  Trash2,
+  Wrench,
+} from 'lucide-react'
 import {
   callMcpTool,
+  clearMcpAudit,
+  deleteMcpServer,
   discoverMcpServer,
+  disconnectMcpServer,
+  getMcpPrompt,
+  getMcpServerStatus,
+  listMcpAudit,
+  listMcpPrompts,
   listMcpResources,
   listMcpServers,
   listMcpTools,
+  readMcpResource,
   saveMcpServer,
+  type McpAuditEntry,
   type McpServer,
+  type McpServerStatus,
   type McpTransport,
 } from '../../api'
-import { Alert, Button, Card, Input, Modal, Segmented, Spin, Switch, Tag, Typography, message } from '../../components/ui'
-import { parseArguments, parseStringMap } from '../../features/mcp/config'
+import { Alert, Button, Card, Drawer, Input, Modal, Popconfirm, Segmented, Spin, Switch, Tag, Typography, message } from '../../components/ui'
+import { formatStringMap, parseArguments, parseStringMap } from '../../features/mcp/config'
 import { SkillHubPage } from '../skillhub/SkillHubPage'
 
 type McpTool = { name: string; description?: string; inputSchema?: unknown }
 type McpResource = { uri?: string; name?: string; description?: string }
+type McpPrompt = { name: string; description?: string; arguments?: Array<{ name: string; description?: string; required?: boolean }> }
+
+type Viewer = { title: string; body: string; kind: 'resource' | 'prompt' }
+
+const EMPTY_STATUS: McpServerStatus = { connected: false }
 
 export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [messageApi, contextHolder] = message.useMessage()
   const [servers, setServers] = useState<McpServer[]>([])
   const [selectedId, setSelectedId] = useState<string>()
+  const [statuses, setStatuses] = useState<Record<string, McpServerStatus>>({})
   const [tools, setTools] = useState<McpTool[]>([])
   const [resources, setResources] = useState<McpResource[]>([])
+  const [prompts, setPrompts] = useState<McpPrompt[]>([])
   const [toolArgs, setToolArgs] = useState<Record<string, string>>({})
   const [result, setResult] = useState<unknown>()
   const [busy, setBusy] = useState(false)
-  const [adding, setAdding] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string>()
   const [transport, setTransport] = useState<McpTransport>('stdio')
   const [name, setName] = useState('')
   const [command, setCommand] = useState('')
@@ -37,34 +70,72 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [headers, setHeaders] = useState('')
   const [enabled, setEnabled] = useState(true)
   const [section, setSection] = useState<'servers' | 'skillhub'>('servers')
+  const [viewer, setViewer] = useState<Viewer>()
+  const [auditOpen, setAuditOpen] = useState(false)
+  const [auditBusy, setAuditBusy] = useState(false)
+  const [auditEntries, setAuditEntries] = useState<McpAuditEntry[]>([])
 
   const selected = useMemo(() => servers.find(server => server.id === selectedId), [selectedId, servers])
+  const status = selectedId ? statuses[selectedId] ?? EMPTY_STATUS : EMPTY_STATUS
+
+  async function refreshStatuses(next: McpServer[]) {
+    const entries = await Promise.all(next.map(async server => {
+      const value = await getMcpServerStatus(server.id).catch(() => EMPTY_STATUS)
+      return [server.id, value] as const
+    }))
+    setStatuses(Object.fromEntries(entries))
+  }
 
   async function reload() {
     try {
       const next = await listMcpServers()
       setServers(next)
       setSelectedId(current => next.some(server => server.id === current) ? current : next[0]?.id)
+      await refreshStatuses(next)
     } catch (error) { messageApi.error(String(error)) }
   }
 
   useEffect(() => { void reload() }, [])
 
+  function clearCapabilities() {
+    setTools([])
+    setResources([])
+    setPrompts([])
+    setResult(undefined)
+  }
+
+  function selectServer(id: string) {
+    if (id === selectedId) return
+    setSelectedId(id)
+    clearCapabilities()
+  }
+
   async function connect(server: McpServer) {
     if (!server.enabled) return
     setSelectedId(server.id)
     setBusy(true)
-    setTools([])
-    setResources([])
-    setResult(undefined)
+    clearCapabilities()
     try {
       await discoverMcpServer(server.id)
-      const [toolResponse, resourceResponse] = await Promise.all([listMcpTools(server.id), listMcpResources(server.id)])
-      setTools((toolResponse as { tools?: McpTool[] }).tools ?? [])
-      setResources((resourceResponse as { resources?: McpResource[] }).resources ?? [])
+      const [toolResponse, resourceResponse, promptResponse] = await Promise.allSettled([
+        listMcpTools(server.id),
+        listMcpResources(server.id),
+        listMcpPrompts(server.id),
+      ])
+      if (toolResponse.status === 'fulfilled') setTools((toolResponse.value as { tools?: McpTool[] }).tools ?? [])
+      if (resourceResponse.status === 'fulfilled') setResources((resourceResponse.value as { resources?: McpResource[] }).resources ?? [])
+      if (promptResponse.status === 'fulfilled') setPrompts((promptResponse.value as { prompts?: McpPrompt[] }).prompts ?? [])
+      const nextStatus = await getMcpServerStatus(server.id).catch(() => EMPTY_STATUS)
+      setStatuses(current => ({ ...current, [server.id]: nextStatus }))
       messageApi.success(t("已连接 {value0}",{value0:server.name}))
     } catch (error) { messageApi.error(t("连接失败：{value0}",{value0:String(error)}))}
     finally { setBusy(false) }
+  }
+
+  async function disconnect(server: McpServer) {
+    try { await disconnectMcpServer(server.id) } catch (error) { messageApi.error(String(error)) }
+    setStatuses(current => ({ ...current, [server.id]: EMPTY_STATUS }))
+    clearCapabilities()
   }
 
   async function invoke(tool: McpTool) {
@@ -81,38 +152,135 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     finally { setBusy(false) }
   }
 
-  function resetForm() {
-    setName(''); setCommand(''); setUrl(''); setArgs(''); setEnv(''); setHeaders(''); setEnabled(true); setTransport('stdio')
+  async function showResource(resource: McpResource) {
+    if (!selected || !resource.uri) return
+    const title = resource.name ?? resource.uri
+    setViewer({ title, body: t("正在读取资源…"), kind: 'resource' })
+    try {
+      const value = await readMcpResource(selected.id, resource.uri)
+      setViewer({ title, body: JSON.stringify(value, null, 2), kind: 'resource' })
+    } catch (error) {
+      setViewer({ title, body: String(error), kind: 'resource' })
+    }
   }
 
-  async function addServer() {
+  async function showPrompt(prompt: McpPrompt) {
+    if (!selected) return
+    setViewer({ title: prompt.name, body: '…', kind: 'prompt' })
+    try {
+      const value = await getMcpPrompt(selected.id, prompt.name)
+      setViewer({ title: prompt.name, body: JSON.stringify(value, null, 2), kind: 'prompt' })
+    } catch (error) {
+      setViewer({ title: prompt.name, body: String(error), kind: 'prompt' })
+    }
+  }
+
+  function resetForm() {
+    setEditingId(undefined); setName(''); setCommand(''); setUrl(''); setArgs(''); setEnv(''); setHeaders(''); setEnabled(true); setTransport('stdio')
+  }
+
+  function openAdd() {
+    resetForm()
+    setModalOpen(true)
+  }
+
+  function openEdit(server: McpServer) {
+    setEditingId(server.id)
+    setName(server.name)
+    setTransport(server.transport)
+    setCommand(server.command ?? '')
+    setUrl(server.url ?? '')
+    setArgs(server.args.join('\n'))
+    setEnv(formatStringMap(server.env))
+    setHeaders(formatStringMap(server.headers))
+    setEnabled(server.enabled)
+    setModalOpen(true)
+  }
+
+  async function saveServer() {
     if (!name.trim()) { messageApi.error(t("请输入 Server 名称"));return}
     if (transport === 'stdio' && !command.trim()) { messageApi.error(t("请输入启动命令"));return}
     if (transport !== 'stdio' && !url.trim()) { messageApi.error(t("请输入服务地址"));return}
     setBusy(true)
     try {
       const saved = await saveMcpServer({
-        name: name.trim(), transport, enabled,
+        id: editingId,
+        name: name.trim(),
+        transport,
+        enabled,
         command: transport === 'stdio' ? command.trim() : undefined,
         url: transport === 'stdio' ? undefined : url.trim(),
         args: parseArguments(args),
         env: parseStringMap(env,t("环境变量")),
         headers: parseStringMap(headers,t("请求头")),
       })
+      if (editingId) {
+        await disconnectMcpServer(editingId).catch(() => undefined)
+        if (editingId === selectedId) clearCapabilities()
+        messageApi.success(t("MCP Server 已更新"))
+      } else {
+        messageApi.success(t("MCP Server 已添加"))
+      }
+      setModalOpen(false)
+      resetForm()
       await reload()
       setSelectedId(saved.id)
-      setAdding(false)
-      resetForm()
-      messageApi.success(t("MCP Server 已添加"))
     } catch (error) { messageApi.error(error instanceof Error ? error.message : String(error)) }
     finally { setBusy(false) }
   }
+
+  async function toggleServer(server: McpServer, value: boolean) {
+    try {
+      await saveMcpServer({
+        id: server.id,
+        name: server.name,
+        transport: server.transport,
+        command: server.command,
+        url: server.url,
+        args: server.args,
+        env: server.env,
+        headers: server.headers,
+        enabled: value,
+      })
+      if (!value) await disconnect(server)
+      await reload()
+    } catch (error) { messageApi.error(String(error)) }
+  }
+
+  async function removeServer(server: McpServer) {
+    try {
+      await disconnectMcpServer(server.id).catch(() => undefined)
+      await deleteMcpServer(server.id)
+      messageApi.success(t("MCP Server 已删除"))
+      if (selectedId === server.id) clearCapabilities()
+      await reload()
+    } catch (error) { messageApi.error(String(error)) }
+  }
+
+  async function openAudit() {
+    setAuditOpen(true)
+    setAuditBusy(true)
+    try { setAuditEntries(await listMcpAudit(selectedId)) }
+    catch (error) { messageApi.error(String(error)) }
+    finally { setAuditBusy(false) }
+  }
+
+  async function clearAudit() {
+    try {
+      await clearMcpAudit(selectedId)
+      setAuditEntries([])
+      messageApi.success(t("审计记录已清空"))
+    } catch (error) { messageApi.error(String(error)) }
+  }
+
+  const connected = status.connected
+  const statusLabel = !selected?.enabled ? t("已停用") : connected ? t("已连接") : t("未连接")
 
   return <section className={`page mcp-page${section === 'skillhub' ? ' mcp-page--market' : ''}`}>
     {contextHolder}
     <header className="mcp-page__header">
       <div><span className="eyebrow">MODEL CONTEXT PROTOCOL</span><Typography.Title level={1}>{t("MCP 工作台")}</Typography.Title><Typography.Text type="secondary">{t("连接外部工具与数据源，每次工具调用都需要你的明确授权。")}</Typography.Text></div>
-      {section === 'servers' && <Button type="primary" icon={<Plus size={16}/>} onClick={() => setAdding(true)}>{t("添加 Server")}</Button>}
+      {section === 'servers' && <Button type="primary" icon={<Plus size={16}/>} onClick={openAdd}>{t("添加 Server")}</Button>}
     </header>
 
     <nav className="mcp-section-nav" aria-label={t("MCP 工作台功能")}>
@@ -125,26 +293,52 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
         <div className="mcp-section-title"><span><Server size={17}/>Servers</span><button type="button" aria-label={t("刷新 Server")} onClick={()=>void reload()}><RefreshCw size={15}/></button></div>
         {servers.length === 0
           ? <div className="mcp-empty"><Boxes size={30}/><b>{t("还没有 MCP Server")}</b><span>{t("添加本地 stdio 或远程 HTTP 服务。")}</span></div>
-          : servers.map(server => <button key={server.id} type="button" className={`mcp-server${selectedId === server.id ? ' is-selected' : ''}`} onClick={() => setSelectedId(server.id)}>
-              <span className="mcp-server__icon"><PlugZap size={18}/></span>
-              <span className="mcp-server__copy"><b>{server.name}</b><small>{server.transport === 'stdio' ? [server.command, ...server.args].filter(Boolean).join(' ') : server.url}</small></span>
-              <Tag color={server.enabled ? 'green' : 'default'}>{server.enabled ?t("启用"):t("停用")}</Tag><ChevronRight size={15}/>
-            </button>)}
+          : servers.map(server => <div key={server.id} className="mcp-server-row">
+              <button type="button" className={`mcp-server${selectedId === server.id ? ' is-selected' : ''}`} onClick={() => selectServer(server.id)}>
+                <span className="mcp-server__icon"><PlugZap size={18}/></span>
+                <span className="mcp-server__copy"><b>{server.name}</b><small>{server.transport === 'stdio' ? [server.command, ...server.args].filter(Boolean).join(' ') : server.url}</small></span>
+                <span className={`mcp-status${statuses[server.id]?.connected ? ' is-online' : ''}`} title={statuses[server.id]?.connected ? t("已连接") : t("未连接")}/>
+                <Tag color={server.enabled ? 'green' : 'default'}>{server.enabled ?t("启用"):t("停用")}</Tag><ChevronRight size={15}/>
+              </button>
+            </div>)}
       </aside>
 
       <main className="mcp-console">
         {!selected ? <div className="mcp-console__empty"><PlugZap size={42}/><h2>{t("选择一个 MCP Server")}</h2><p>{t("连接后可以浏览它提供的工具和资源。")}</p></div>:<>
-          <div className="mcp-console__head"><div><h2>{selected.name}</h2><span>{selected.transport.toUpperCase()} · {selected.enabled ?t("可连接"):t("已停用")}</span></div><Button type="primary" loading={busy} disabled={!selected.enabled} icon={<PlugZap size={16}/>} onClick={()=>void connect(selected)}>{t("连接并发现")}</Button></div>
+          <div className="mcp-console__head">
+            <div>
+              <h2>{selected.name}</h2>
+              <span>{selected.transport.toUpperCase()} · {statusLabel}{status.protocolVersion ? ` · MCP ${status.protocolVersion}` : ''}</span>
+            </div>
+            <div className="mcp-console__actions">
+              <Switch checked={selected.enabled} onChange={value => void toggleServer(selected, value)}/>
+              <Button size="small" icon={<Pencil size={14}/>} onClick={()=>openEdit(selected)}>{t("编辑")}</Button>
+              <Popconfirm title={t("删除这个 MCP Server？")} onConfirm={()=>void removeServer(selected)}><Button size="small" danger icon={<Trash2 size={14}/>}>{t("删除")}</Button></Popconfirm>
+              <Button size="small" icon={<History size={14}/>} onClick={()=>void openAudit()}>{t("审计")}</Button>
+              {connected
+                ? <Button size="small" onClick={()=>void disconnect(selected)}>{t("断开连接")}</Button>
+                : <Button type="primary" loading={busy} disabled={!selected.enabled} icon={<PlugZap size={16}/>} onClick={()=>void connect(selected)}>{t("连接并发现")}</Button>}
+            </div>
+          </div>
           <Alert type="info" showIcon message={t("安全调用")} description={t("工具名称、参数会在执行前展示。只有确认后，Arcadia 才会发送本次调用。")}/>
-          {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("正在发现服务能力\u2026")}</span></div>:<div className="mcp-capabilities">
+          {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("正在发现服务能力…")}</span></div>:<div className="mcp-capabilities">
             <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("工具")}</span><Tag>{tools.length}</Tag></div>
-              {tools.length === 0 ? <div className="mcp-placeholder">{t("连接 Server 后显示工具")}</div>:tools.map(tool=><Card key={tool.name} className="mcp-tool-card">
+              {tools.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回工具") : t("连接 Server 后显示工具")}</div>:tools.map(tool=><Card key={tool.name} className="mcp-tool-card">
                 <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("无描述")}</p></div><Button icon={<Play size={14}/>} disabled={busy} onClick={()=>void invoke(tool)}>{t("审核并调用")}</Button></div>
-                <Input.TextArea value={toolArgs[tool.name] ?? '{}'} onChange={event => setToolArgs(           (current                                        )=>({...current,[tool.name]:event.target.value}))} autoSize={{minRows:2,maxRows:8}}/>
+                <Input.TextArea value={toolArgs[tool.name] ?? '{}'} onChange={event => setToolArgs(current => ({...current,[tool.name]:event.target.value}))} autoSize={{minRows:2,maxRows:8}}/>
               </Card>)}
             </section>
-            <section><div className="mcp-section-title"><span><Database size={17}/>{t("资源")}</span><Tag>{resources.length}</Tag></div>
-              {resources.length === 0 ? <div className="mcp-placeholder">{t("服务未返回资源")}</div>:resources.map((resource,index)=><div className="mcp-resource" key={resource.uri??index}><Database size={16}/><span><b>{resource.name??resource.uri}</b><small>{resource.description??resource.uri}</small></span></div>)}
+            <section>
+              <div className="mcp-section-title"><span><Database size={17}/>{t("资源")}</span><Tag>{resources.length}</Tag></div>
+              {resources.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回资源") : t("连接 Server 后显示资源")}</div>:resources.map((resource,index)=><div className="mcp-resource" key={resource.uri??index}>
+                <Database size={16}/><span><b>{resource.name??resource.uri}</b><small>{resource.description??resource.uri}</small></span>
+                {resource.uri && <button type="button" className="mcp-resource__open" onClick={()=>void showResource(resource)}>{t("读取")}</button>}
+              </div>)}
+              <div className="mcp-section-title mcp-section-title--spaced"><span><MessageSquare size={17}/>{t("提示词")}</span><Tag>{prompts.length}</Tag></div>
+              {prompts.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回提示词") : t("连接 Server 后显示提示词")}</div>:prompts.map(prompt=><div className="mcp-resource mcp-prompt" key={prompt.name}>
+                <MessageSquare size={16}/><span><b>{prompt.name}</b><small>{prompt.description ?? t("无描述")}</small></span>
+                <button type="button" className="mcp-resource__open" onClick={()=>void showPrompt(prompt)}>{t("查看")}</button>
+              </div>)}
             </section>
           </div>}
           {result !== undefined && <section className="mcp-result"><div className="mcp-section-title"><span>{t("调用结果")}</span></div><pre>{JSON.stringify(result,null,2)}</pre></section>}
@@ -152,7 +346,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
       </main>
     </div>}
 
-    <Modal open={adding} title={t("添加 MCP Server")} width={640} okText={t("添加")} okButtonProps={{loading:busy}} onOk={()=>void addServer()} onCancel={()=>setAdding(false)}>
+    <Modal open={modalOpen} title={editingId ? t("编辑 MCP Server") : t("添加 MCP Server")} width={640} okText={editingId ? t("保存修改") : t("添加")} okButtonProps={{loading:busy}} onOk={()=>void saveServer()} onCancel={()=>{setModalOpen(false);resetForm()}}>
       <div className="mcp-add-form">
         <label><span>{t("Server 名称")}</span><Input value={name} onChange={event=>setName(event.target.value)} placeholder={t("例如 filesystem")}/></label>
         <label><span>{t("传输方式")}</span><Segmented value={transport} onChange={value=>setTransport(value as McpTransport)} options={[{label:'stdio',value:'stdio'},{label:'HTTP',value:'http'},{label:'SSE',value:'sse'}]}/></label>
@@ -161,5 +355,31 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
         <label className="mcp-add-form__toggle"><Switch checked={enabled} onChange={setEnabled}/><span>{t("添加后启用")}</span></label>
       </div>
     </Modal>
+
+    <Drawer title={viewer?.kind === 'prompt' ? t("提示词内容") : t("资源内容")} open={Boolean(viewer)} onClose={()=>setViewer(undefined)} width={680}>
+      <Typography.Title level={5}>{viewer?.title}</Typography.Title>
+      <pre className="mcp-json">{viewer?.body}</pre>
+    </Drawer>
+
+    <Drawer
+      title={t("审计日志")}
+      open={auditOpen}
+      onClose={()=>setAuditOpen(false)}
+      width={720}
+      extra={<Popconfirm title={t("确定清空审计记录？")} onConfirm={()=>void clearAudit()}><Button size="small" danger disabled={auditEntries.length === 0}>{t("清空审计")}</Button></Popconfirm>}
+    >
+      {auditBusy ? <div className="mcp-loading"><Spin/></div> : auditEntries.length === 0
+        ? <div className="mcp-placeholder">{t("暂无 MCP 调用记录")}</div>
+        : <div className="mcp-audit">{auditEntries.map(entry => <div className="mcp-audit__entry" key={entry.id}>
+            <div className="mcp-audit__head">
+              <Tag color={entry.success ? 'green' : 'red'}>{entry.success ? t("成功") : t("失败")}</Tag>
+              <b>{entry.method}</b>
+              {entry.targetName && <code>{entry.targetName}</code>}
+              <span className="mcp-audit__time">{new Date(entry.createdAt).toLocaleString()}</span>
+            </div>
+            {entry.error && <p>{entry.error}</p>}
+          </div>)}
+        </div>}
+    </Drawer>
   </section>
 }
