@@ -3864,6 +3864,47 @@ body[data-theme='dark'] .browser-private-bar,
 body[data-theme='dark'] .browser-private-mark { border-color: #59426f; background: #2a2033; color: #c9a9e7; }
 body[data-theme='dark'] .browser-private-bar span { color: #ae97c3; }
 
+body.little-arc-window {
+  min-width: 0;
+  background: #f7f8f5;
+}
+
+body.little-arc-window #root { width: 100vw; height: 100vh; }
+
+.little-arc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+}
+
+.little-arc__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.little-arc__hint { font-size: 11px; }
+
+.site-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+
+  section { display: flex; flex-direction: column; gap: 8px; }
+  h4 { margin: 0; font-size: 13px; font-weight: 650; }
+  &__url { overflow-wrap: anywhere; font-size: 12px; }
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+  }
+}
+
 .bookmark-import-preview {
   display: flex;
   flex-direction: column;

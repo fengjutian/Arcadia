@@ -25,9 +25,10 @@ import { archivedTabFromBrowserTab } from '../../features/archive/archive'
 import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
-import { normalizeSleepHost, readSleepExceptions, toggleSleepException, writeSleepExceptions } from '../../features/browser/sleepSettings'
+import { normalizeSleepHost, readSleepExceptions, toggleSleepException, writeSleepExceptions, isSleepExcluded } from '../../features/browser/sleepSettings'
 import { isAutoReaderSite, normalizeReaderHost, readReaderSites, toggleReaderSite, writeReaderSites, READER_FONT_SIZES, READER_WIDTHS, READER_THEMES, clampReaderFontSize, clampReaderWidth, readerStyleFor, writeReaderSiteStyle } from '../../features/browser/siteReaderPrefs'
 import { matchSiteRoute, readSiteRoutes, upsertSiteRoute, writeSiteRoutes, type SiteRoute } from '../../features/browser/siteRoutes'
+import { emitLittleArcResult, listenLittleArcCapture, listenLittleArcOpenMain, openLittleArc } from '../../features/littlearc/littleArc'
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
 import { scheduleExtrasSync } from '../../features/search/extrasSync'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
@@ -65,7 +66,9 @@ import { NotesPanel } from '../../features/notes/NotesPanel'
 import type { NoteEntry } from '../../features/notes/notes'
 import { loadPageNotes, persistPageNote, removePageNote } from '../../features/notes/noteStore'
 import { isPrivateTab, makePrivateTab, stripPrivateTabs } from '../../features/browser/privateTabs'
-import { readSitePermissions, writeSitePermissions } from '../../features/browser/sitePermissions'
+import { readSitePermissions, writeSitePermissions, normalizeOrigin, setKind, type SitePermissionKind, type SitePermissionValue } from '../../features/browser/sitePermissions'
+import { SitePanel } from '../../features/browser/SitePanel'
+import { SPLIT_MIN_WIDTH, splitBounds } from '../../features/browser/splitView'
 import { shouldRecordHistory } from '../../features/history/historyRecording'
 import { LockOutlined } from '../../components/ui/icons'
 import { readRecoverySnapshot, restoreFromSnapshot, stripTransientTabStates, writeSnapshot, type SessionSnapshot } from '../../features/browser/sessionStore'
@@ -225,6 +228,16 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const active = tabs.find(tab => tab.id === activeTabId) ?? tabs[0]
   const [readerStyleVersion, setReaderStyleVersion] = useState(0)
   const readerSiteStyle = useMemo(() => readerStyleFor(active.url), [active.url, readerArticle, readerStyleVersion])
+  const [permissionVersion, setPermissionVersion] = useState(0)
+  const [sitePanelOpen, setSitePanelOpen] = useState(false)
+  const [splitTabId, setSplitTabId] = useState<string | null>(null)
+  const siteOrigin = useMemo(() => normalizeOrigin(active.url || ''), [active.url])
+  const siteRule = useMemo(
+    () => (siteOrigin ? readSitePermissions().find(rule => rule.origin === siteOrigin) ?? null : null),
+    // `permissionVersion` re-reads storage after an inline permission change.
+    [siteOrigin, permissionVersion],
+  )
+  const activeSiteRoute = useMemo(() => matchSiteRoute(siteRoutes, active.url), [siteRoutes, active.url])
   const nativeMode = hasNativeTab(active.id)
 
   useEffect(() => {
@@ -797,6 +810,17 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   useEffect(() => { visibleRef.current = visible }, [visible])
 
   useEffect(() => {
+    let disposed = false
+    let unlistenCapture: (() => void) | undefined
+    let unlistenOpenMain: (() => void) | undefined
+    void listenLittleArcCapture(request => { if (!disposed) void captureUrlInLittleArc(request) }).then(stop => { if (disposed) stop(); else unlistenCapture = stop })
+    void listenLittleArcOpenMain(url => { if (!disposed && url) openNewTab(url) }).then(stop => { if (disposed) stop(); else unlistenOpenMain = stop })
+    return () => { disposed = true; unlistenCapture?.(); unlistenOpenMain?.() }
+    // Capture helpers read tabs/routes through refs, so one subscription is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     const open = (event: Event) => {
       const url = (event as CustomEvent<{ url?: string }>).detail?.url
       if (url && /^https?:\/\//.test(url)) openNewTab(url)
@@ -845,6 +869,54 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     const rect = surfaceRef.current?.getBoundingClientRect()
     return rect ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height } : undefined
   }
+
+  function openSplit(id: string) {
+    const rect = bounds()
+    if (rect && rect.width < SPLIT_MIN_WIDTH) {
+      messageApi.warning(translate("窗口太窄，无法并排显示"))
+      return
+    }
+    setSplitTabId(id)
+  }
+
+  function closeSplit() {
+    const id = splitTabId
+    setSplitTabId(null)
+    if (id) void hideNativeTab(id).catch(() => undefined)
+    const rect = bounds()
+    if (rect) void resizeNativeTab(active.id, rect).catch(() => undefined)
+  }
+
+  useEffect(() => {
+    if (!nativeMode || !splitTabId) return
+    if (!tabsRef.current.some(tab => tab.id === splitTabId)) {
+      setSplitTabId(null)
+      return
+    }
+    if (active.id === splitTabId) {
+      setSplitTabId(null)
+      return
+    }
+    const apply = () => {
+      const rect = bounds()
+      if (!rect) return
+      const panes = splitBounds(rect)
+      if (!panes) return
+      void resizeNativeTab(active.id, panes.left).catch(() => undefined)
+      void resizeNativeTab(splitTabId, panes.right).catch(() => undefined)
+      void showNativeTab(active.id).catch(() => undefined)
+      void showNativeTab(splitTabId).catch(() => undefined)
+    }
+    apply()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply)
+    if (observer && surfaceRef.current) observer.observe(surfaceRef.current)
+    window.addEventListener('resize', apply)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', apply)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nativeMode, splitTabId, active.id, tabs.length])
 
   function closeComparison() {
     const current = comparisonRef.current
@@ -1431,6 +1503,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     writeSiteRoutes(next)
   }
 
+  function changeSitePermission(kind: SitePermissionKind, value: SitePermissionValue) {
+    if (!siteOrigin) return
+    writeSitePermissions(setKind(siteOrigin, kind, value))
+    setPermissionVersion(version => version + 1)
+  }
+
   /** Explicit "sleep this tab now": keep the record, release the WebView. */
   async function suspendTabNow(tab: BrowserTab) {
     if (!hasNativeTab(tab.id) || isNativeTabSuspended(tab.id)) return
@@ -1594,6 +1672,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       ...routeCollections.map(collection => ({ key: `site-route:${collection.id}`, label: `${collection.name}${activeRoute?.collectionId === collection.id ? ' ✓' : ''}`, onClick: () => updateSiteRoutes(upsertSiteRoute(siteRoutes, active.url, { collectionId: collection.id })) })),
     ] },
     { key: 'tab-search', label:translate("命令栏"),extra:'Ctrl+K',onClick:()=>runBrowserMenuAction('tab-search')},
+    { key: 'little-arc', label: translate("随手收（小窗）"), onClick: () => { void openLittleArc(/^https?:/i.test(active.url) ? active.url : '') } },
     { key: 'history-search', label:translate("查找历史与收藏"),onClick:()=>runBrowserMenuAction('history-search')},
     { key: 'bookmark-add', label:translate("收藏当前页"),extra:'Ctrl+D',onClick:()=>runBrowserMenuAction('bookmark-add')},
     { key: 'bookmarks', label:translate("在知识库中管理收藏"),onClick:()=>runBrowserMenuAction('bookmarks')},
@@ -1605,6 +1684,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     { key: 'devtools', label:translate("开发者工具"),extra:'F12',disabled:!nativeMode||!advancedSettings.developerToolsEnabled,onClick:()=>runBrowserMenuAction('devtools')},
     { key: 'screenshot-visible', label:translate("截取可视区域"),disabled:!nativeMode,onClick:()=>runBrowserMenuAction('screenshot-visible')},
     { key: 'screenshot-full', label:translate("截取整个网页"),disabled:!nativeMode,onClick:()=>runBrowserMenuAction('screenshot-full')},
+    { key: 'site-panel', label: translate("站点面板"), disabled: !active.url, onClick: () => setSitePanelOpen(true) },
     { key: 'clear-site-data', label:translate("清除共享浏览数据"),disabled:!active.url||!nativeMode,onClick:()=>runBrowserMenuAction('clear-site-data')},
     currentBlock
       ? { key: 'site-unblock', label:translate("解除封杀此网站"),icon:<StopOutlined/>,onClick:()=>runBrowserMenuAction('site-unblock')}
@@ -2044,26 +2124,29 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     }
   }
 
-  function openNewTab(url?: string, options: { private?: boolean } = {}) {
+  function openNewTab(url?: string, options: { private?: boolean; background?: boolean } = {}): string | undefined {
     if (url && !isNativeBrowserAvailable()) {
       window.open(url, '_blank', 'noopener,noreferrer')
       messageApi.info(translate("网页预览模式下已使用系统浏览器打开"))
-      return
+      return undefined
     }
+    const background = options.background === true
     const tab = options.private ? makePrivateTab() : newTab()
     tab.lastActiveAt = Date.now()
     const currentId = activeTabIdRef.current
-    if (currentId) void hideNativeTab(currentId)
+    if (!background && currentId) void hideNativeTab(currentId)
     if (url) { tab.url = url; tab.title =translate("正在加载\u2026");tab.loading=true}
     setTabs(current => {
       const next = current.map(        (item                      )=>({...item,active:false}))
       return [...next, tab]
     })
-    activeTabIdRef.current = tab.id
-    lastActiveAtRef.current.set(tab.id, Date.now())
-    setActiveTabId(tab.id)
-    setAddress(url ?? '')
-    setReaderArticle(null)
+    if (!background) {
+      activeTabIdRef.current = tab.id
+      lastActiveAtRef.current.set(tab.id, Date.now())
+      setActiveTabId(tab.id)
+      setAddress(url ?? '')
+      setReaderArticle(null)
+    }
     if (url) {
       void new Promise(resolve => requestAnimationFrame(resolve)).then(async () => {
         const nextBounds = bounds()
@@ -2075,11 +2158,58 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             return
           }
           setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: undefined } : item))
+          // A background capture tab must never cover the page the user is on.
+          if (background) {
+            await hideNativeTab(tab.id)
+            return
+          }
           await enforceLiveTabLimit(tab.id)
         } catch (error) {
           setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: classifyNavigationError(error) } : item))
         }
       })
+    }
+    return tab.id
+  }
+
+  /** Capture a URL for the Little Arc window without touching the active tab. */
+  async function captureUrlInLittleArc(request: { url: string; requestId: string; collectionId?: string | null }) {
+    let tabId: string | undefined
+    try {
+      if (!isNativeBrowserAvailable()) throw new Error(translate("网页浏览仅在 Tauri 桌面应用中可用。"))
+      tabId = openNewTab(request.url, { background: true })
+      if (!tabId) throw new Error(translate("无法打开该网址"))
+      const deadline = Date.now() + 25_000
+      let tab = tabsRef.current.find(item => item.id === tabId)
+      while (Date.now() < deadline) {
+        await new Promise(resolve => window.setTimeout(resolve, 300))
+        tab = tabsRef.current.find(item => item.id === tabId)
+        if (!tab) throw new Error(translate("标签页已关闭"))
+        if (tab.error) throw new Error(tab.error.message)
+        if (!tab.loading) break
+      }
+      if (!tab) throw new Error(translate("标签页已关闭"))
+      if (tab.loading) throw new Error(translate("页面加载超时"))
+      const snapshot = await captureNativePage(tabId)
+      const article = extractArticle(snapshot)
+      if (!article.markdown.trim()) throw new Error(translate("无法识别该页面正文"))
+      const created = await saveDocument({
+        title: article.title || tab.title || request.url,
+        url: request.url,
+        markdown: article.markdown,
+        tags: ['Inbox'],
+      })
+      const route = matchSiteRoute(siteRoutesRef.current, request.url)
+      const collectionId = request.collectionId ?? route?.collectionId ?? null
+      if (collectionId) await addToCollection(collectionId, created.id).catch(() => undefined)
+      await emitLittleArcResult({ requestId: request.requestId, ok: true, title: created.title })
+    } catch (error) {
+      await emitLittleArcResult({ requestId: request.requestId, ok: false, error: error instanceof Error ? error.message : String(error) })
+    } finally {
+      if (tabId) {
+        if (hasNativeTab(tabId)) await closeNativeTab(tabId).catch(() => undefined)
+        setTabs(current => current.filter(item => item.id !== tabId))
+      }
     }
   }
 
@@ -2160,6 +2290,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       { key: 'sleep', label: tab.suspended ? translate("唤醒标签页") : translate("立即休眠"), disabled: tab.pinned || tab.id === activeTabId, onClick: () => { if (tab.suspended) void resumeTab(tab); else void suspendTabNow(tab) } },
       { key: 'sleep-site', label: sleepHost && sleepExceptions.includes(sleepHost) ? translate("恢复此站点自动休眠") : translate("此站点不再自动休眠"), disabled: !sleepHost, onClick: () => updateSleepExceptions(toggleSleepException(sleepExceptions, tab.url ?? '')) },
       { key: 'archive', label:translate("归档标签页"),disabled:!tab.url||tab.private,onClick:()=>{void archiveTabToStore(tab)}},
+      tab.id !== active.id
+        ? { key: 'split-with-active', label: translate("与当前标签并排"), disabled: !nativeMode || tab.private || !tab.url, onClick: () => openSplit(tab.id) }
+        : splitTabId
+          ? { key: 'split-close', label: translate("取消分屏"), onClick: closeSplit }
+          : { key: 'split-next', label: translate("与下一个标签并排"), disabled: !nativeMode || !tabs.some(item => item.id !== tab.id && !item.private && Boolean(item.url)), onClick: () => { const next = tabs.find(item => item.id !== tab.id && !item.private && Boolean(item.url)); if (next) openSplit(next.id) } },
       { key: 'queue', label:translate("稍后读"),disabled:!tab.url||tab.private,onClick:()=>{void queueTabForLater(tab)}},
       { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
       { type: 'divider' },
@@ -2515,6 +2650,26 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     {active.private&&<div className="browser-private-bar"><LockOutlined/><strong>{translate("私密浏览")}</strong><span>{translate("不会保存历史记录、关闭记录与站点权限")}</span></div>}
     {findOpen&&<div className="browser-find"><Input autoFocus allowClear prefix={<SearchOutlined/>} value={findQuery} status={findStatus==='missing'?'error':undefined} placeholder={translate("在页面中查找")} onChange={event=>{setFindQuery(event.target.value);setFindStatus('idle')}} onPressEnter={event=>void runFind(event.shiftKey)}/><Typography.Text type={findStatus==='missing'?'danger':'secondary'}>{findStatus==='missing'?translate("未找到"):findStatus==='found'?translate("已定位"):''}</Typography.Text><Button type="text" aria-label={translate("上一个匹配项")} icon={<ArrowUpOutlined/>} onClick={()=>void runFind(true)}/><Button type="text" aria-label={translate("下一个匹配项")} icon={<ArrowDownOutlined/>} onClick={()=>void runFind(false)}/><Button type="text" aria-label={translate("关闭查找")} icon={<CloseOutlined/>} onClick={closeFind}/></div>}
     <PermissionPromptBar prompt={permissionPrompt} />
+    <SitePanel
+      open={sitePanelOpen}
+      onClose={() => setSitePanelOpen(false)}
+      url={active.url}
+      adBlockEnabled={adBlockerEnabled}
+      blockedAds={blockedAdsByTab[active.id] ?? 0}
+      blockedBy={currentBlock?.host ?? null}
+      permissionRule={siteRule}
+      onChangePermission={changeSitePermission}
+      sleepExcluded={isSleepExcluded(active.url, sleepExceptions)}
+      onToggleSleep={() => updateSleepExceptions(toggleSleepException(sleepExceptions, active.url))}
+      autoReader={isAutoReaderSite(active.url, readerSites) || Boolean(activeSiteRoute?.autoReader)}
+      onToggleReader={() => updateReaderSites(toggleReaderSite(readerSites, active.url))}
+      readerStyle={readerSiteStyle}
+      onResetReaderStyle={() => { writeReaderSiteStyle(active.url, null); setReaderStyleVersion(version => version + 1) }}
+      routeCollectionName={activeSiteRoute?.collectionId ? routeCollections.find(collection => collection.id === activeSiteRoute.collectionId)?.name ?? null : null}
+      onClearRoute={() => updateSiteRoutes(upsertSiteRoute(siteRoutes, active.url, { collectionId: null }))}
+      onClearSiteData={() => runBrowserMenuAction('clear-site-data')}
+      onUnblock={() => runBrowserMenuAction('site-unblock')}
+    />
     <CommandPalette
       open={commandOpen}
       onClose={() => setCommandOpen(false)}
