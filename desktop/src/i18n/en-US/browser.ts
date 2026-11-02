@@ -48,6 +48,7 @@ export const browser: Messages = {
   '本地检索失败：': 'Local search failed: ',
   '本地索引': 'Local index',
   '本地知识库': 'Local knowledge base',
+  '笔记保存失败：{value0}': 'Failed to save note: {value0}',
   '编辑标题': 'Edit title',
   '编辑操作失败：{value0}': 'Edit failed: {value0}',
   '标签页崩溃': 'Tab crashed',

@@ -106,21 +106,31 @@ function readExisting(name) {
     process.exitCode = 1
     return values
   }
-  traverse(ast, {
-    ObjectProperty(nodePath) {
-      const key = nodePath.node.key
-      const value = nodePath.node.value
-      const name = key.type === 'StringLiteral' ? key.value : key.type === 'Identifier' ? key.name : null
-      if (name == null) return
-      if (value.type === 'StringLiteral') values.set(name, value.value)
-      else if (value.type === 'TemplateLiteral' && value.expressions.length === 0) values.set(name, value.quasis[0].value.cooked ?? '')
-      else if (value.type === 'ObjectExpression') {
-        const one = value.properties.find(p => p.type === 'ObjectProperty' && p.key.type === 'Identifier' && p.key.name === 'one')
-        const other = value.properties.find(p => p.type === 'ObjectProperty' && p.key.type === 'Identifier' && p.key.name === 'other')
-        if (one?.value.type === 'StringLiteral' && other?.value.type === 'StringLiteral') values.set(name, { one: one.value.value, other: other.value.value })
-      }
-    },
-  })
+  const declaration = ast.program.body[0]
+  const object = declaration.type === 'VariableDeclaration'
+    ? declaration.declarations[0]?.init
+    : null
+  if (!object || object.type !== 'ObjectExpression') {
+    console.error(`catalog shape is not an object literal: ${file}`)
+    process.exitCode = 1
+    return values
+  }
+  // Only top-level properties are message entries; iterate directly so the
+  // `one` / `other` keys inside a plural value are not mistaken for ids.
+  for (const property of object.properties) {
+    if (property.type !== 'ObjectProperty') continue
+    const key = property.key
+    const value = property.value
+    const name = key.type === 'StringLiteral' ? key.value : key.type === 'Identifier' ? key.name : null
+    if (name == null) continue
+    if (value.type === 'StringLiteral') values.set(name, value.value)
+    else if (value.type === 'TemplateLiteral' && value.expressions.length === 0) values.set(name, value.quasis[0].value.cooked ?? '')
+    else if (value.type === 'ObjectExpression') {
+      const one = value.properties.find(p => p.type === 'ObjectProperty' && p.key.type === 'Identifier' && p.key.name === 'one')
+      const other = value.properties.find(p => p.type === 'ObjectProperty' && p.key.type === 'Identifier' && p.key.name === 'other')
+      if (one?.value.type === 'StringLiteral' && other?.value.type === 'StringLiteral') values.set(name, { one: one.value.value, other: other.value.value })
+    }
+  }
   return values
 }
 
@@ -149,7 +159,12 @@ for (const fragment of FRAGMENTS) {
       else lines.push(`  ${escapeKey(key)}: ${escapeKey(value)},`)
     }
   }
-  for (const key of existing.keys()) if (!keys.includes(key)) stale += 1
+  for (const key of existing.keys()) {
+    if (!keys.includes(key)) {
+      stale += 1
+      console.log(`  stale in ${fragment}: ${key}`)
+    }
+  }
 
   if (init) {
     const content = `import type { Messages } from '../types'\n\nexport const ${fragment}: Messages = {\n${lines.join('\n')}${lines.length ? '\n' : ''}}\n`

@@ -1752,7 +1752,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       color: 'yellow',
     }
     setNotes(current => [entry, ...current])
-    void persistPageNote(entry).catch(error => messageApi.error(`笔记保存失败：${String(error)}`))
+    void persistPageNote(entry).catch(error => messageApi.error(translate("笔记保存失败：{value0}",{value0:String(error)})))
     setNotesOpen(true)
     messageApi.success(translate("已加入笔记"),2)
     return
@@ -2321,7 +2321,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         if (!target) return
         const next = { ...target, ...patch }
         setNotes(current => current.map(note => note.id === id ? next : note))
-        void persistPageNote(next).catch(error => messageApi.error(`笔记保存失败：${String(error)}`))
+        void persistPageNote(next).catch(error => messageApi.error(translate("笔记保存失败：{value0}",{value0:String(error)})))
       }}
     />
     <Modal

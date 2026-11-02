@@ -781,20 +781,23 @@ export interface Backup {
   exportedAt: string
   documents: BackupDocument[]
   session: BackupSessionEntry[]
+  /** Present from migration #32 onwards; older backups omit it. */
+  notes?: PageNote[]
 }
 export interface ImportSummary {
   documentsInserted: number
   documentsSkipped: number
   sessionInserted: number
+  notesInserted?: number
 }
 
 export async function exportBackup(): Promise<Backup> {
-  if (!isTauri()) return { version: 1, exportedAt: '', documents: [], session: [] }
+  if (!isTauri()) return { version: 1, exportedAt: '', documents: [], session: [], notes: [] }
   return invoke<Backup>('local_export_backup')
 }
 
 export async function importBackup(backup: Backup): Promise<ImportSummary> {
-  if (!isTauri()) return { documentsInserted: 0, documentsSkipped: 0, sessionInserted: 0 }
+  if (!isTauri()) return { documentsInserted: 0, documentsSkipped: 0, sessionInserted: 0, notesInserted: 0 }
   return invoke<ImportSummary>('local_import_backup', { backup })
 }
 

@@ -4114,6 +4114,9 @@ pub struct LocalBackup {
     exported_at: String,
     documents: Vec<LocalDocument>,
     session: Vec<LocalSessionEntry>,
+    /// Optional so backups written before page notes shipped still import.
+    #[serde(default)]
+    notes: Vec<LocalPageNote>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4129,6 +4132,7 @@ pub struct LocalImportSummary {
     documents_inserted: i64,
     documents_skipped: i64,
     session_inserted: i64,
+    notes_inserted: i64,
 }
 
 #[tauri::command]
@@ -4155,11 +4159,13 @@ pub fn local_export_backup(app: tauri::AppHandle) -> Result<LocalBackup, String>
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
+    let notes = query_page_notes(&database, 5000)?;
     Ok(LocalBackup {
         version: 1,
         exported_at: unix_seconds().to_string(),
         documents,
         session,
+        notes,
     })
 }
 
@@ -4198,10 +4204,19 @@ pub fn local_import_backup(
             .map_err(|error| error.to_string())?;
         session_inserted += 1;
     }
+    let mut notes_inserted = 0;
+    for note in backup.notes {
+        if validate_page_note(&note).is_err() {
+            continue;
+        }
+        insert_page_note(&database, &note)?;
+        notes_inserted += 1;
+    }
     Ok(LocalImportSummary {
         documents_inserted,
         documents_skipped,
         session_inserted,
+        notes_inserted,
     })
 }
 
