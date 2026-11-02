@@ -1,6 +1,6 @@
 import { t } from '../../i18n'
 import { Button, Input, message, Modal, Popconfirm, Segmented, Select, Skeleton, Switch, Tabs, Tag, Typography, Upload } from '../../components/ui'
-import { BookOutlined, ClockCircleOutlined, DeleteOutlined, EditOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
+import { BookOutlined, ClockCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DocumentCard } from '../../features/documents/DocumentCard'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
@@ -18,6 +18,7 @@ import {
   listCollections,
   listReadingQueue,
   removeFromReadingQueue,
+  saveClip,
   saveDocument,
   toggleStarred,
   type ArchivedTab,
@@ -36,7 +37,7 @@ import {
   type AutoArchiveSettings,
 } from '../../features/archive/archiveSettings'
 import { formatQueuedAt, queueHost } from '../../features/reading-queue/readingQueue'
-import { CLIP_KIND_LABEL, clipPreview, clipSourceHost } from '../../features/clips/clips'
+import { CLIP_KIND_LABEL, clipPreview, clipSourceHost, clipToMarkdown, clipsToMarkdown } from '../../features/clips/clips'
 import { trackDownload, type DownloadEntry } from '../../features/downloads/trackDownload'
 import { useDownloadCenter } from '../../features/downloads/useDownloadCenter'
 import { DownloadCenter } from '../../features/downloads/DownloadCenter'
@@ -327,6 +328,36 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     }
   }
 
+  async function assignClipCollection(clip: Clip, collectionId: string) {
+    const next: Clip = { ...clip, collectionId: collectionId || null, updatedAt: Date.now() }
+    try {
+      await saveClip(next)
+      setClips(items => items.map(item => item.id === clip.id ? next : item))
+      messageApi.success(t("已归入集合"))
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : t("归入集合失败"))
+    }
+  }
+
+  function downloadMarkdown(fileName: string, markdown: string) {
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportClip(clip: Clip) {
+    const name = (clip.title || clipPreview(clip, 40)).replace(/[\\/:*?"<>|]/g, '_')
+    downloadMarkdown(`${name}.md`, clipToMarkdown(clip))
+  }
+
+  function exportAllClips() {
+    downloadMarkdown('clips.md', clipsToMarkdown(clips))
+  }
+
   async function saveBookmarkEdit() {    if (!editingBookmark) return
     const title = bookmarkDraft.title.trim()
     if (!title) {
@@ -603,7 +634,10 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         <h2>{t("剪藏")}</h2>
         <p>{t("从网页里截下来的文字、链接和图片，保留来源，可直接跳回原文。")}</p>
       </div>
-      <span className="library-result-count">{clips.length} {t("条")}</span>
+      <div className="library-section-head__tools">
+        <span className="library-result-count">{clips.length} {t("条")}</span>
+        {clips.length > 0 && <Button size="small" icon={<DownloadOutlined/>} onClick={exportAllClips}>{t("导出全部")}</Button>}
+      </div>
     </div>
     {clips.length === 0
       ? <div className="library-empty-state library-empty-state--compact">
@@ -621,6 +655,15 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
               </span>
               <RightOutlined className="library-activity__arrow"/>
             </button>
+            <Select<string>
+              size="small"
+              className="library-clip-collection"
+              ariaLabel={t("归入集合")}
+              value={clip.collectionId ?? ''}
+              options={[{ label: t("未分类"), value: '' }, ...collections.map(collection => ({ label: collection.name, value: collection.id }))]}
+              onChange={value => void assignClipCollection(clip, String(value))}
+            />
+            <Button type="text" size="small" icon={<DownloadOutlined/>} aria-label={t("导出为 Markdown")} onClick={() => exportClip(clip)}/>
             <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("删除剪藏")} onClick={() => void removeClip(clip)}/>
           </div>)}
         </div>}

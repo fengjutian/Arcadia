@@ -192,8 +192,8 @@
 ### 6.15 剪藏片段
 
 - [~] 借鉴：Edge Collections——把选区、图片、链接连同备注收进集合，而不是只能整篇保存。
-- 已落地（2026-11-02）：迁移 #34 `clips` + `clips_fts`；命令 `local_list/search/save/delete/clear_clips`；右键菜单新增「剪藏选中文字 / 剪藏此链接 / 剪藏此图片」，自动带上来源 URL 与标题；知识库新增「剪藏」页签（按类型、来源、时间展示，可跳回原文、删除）。Rust 测试 `clips_roundtrip_through_fts`，前端 `features/clips/` 5 例。
-- 待补：整页剪藏、归入集合（`collectionId` 目前恒为 null）、导出 Markdown、搜索页/命令栏接入。
+- 已落地（2026-11-02）：迁移 #34 `clips` + `clips_fts`；命令 `local_list/search/save/delete/clear_clips`；右键菜单新增「剪藏选中文字 / 剪藏此链接 / 剪藏此图片」，自动带上来源 URL 与标题；知识库新增「剪藏」页签（按类型、来源、时间展示，可跳回原文、删除，按行归入集合，单条或全部导出 Markdown 并保留出处）。Rust 测试 `clips_roundtrip_through_fts`，前端 `features/clips/` 8 例。
+- 待补：整页剪藏（`kind='page'` 已预留）、搜索页/命令栏接入剪藏结果、按集合浏览剪藏。
 - 做法：统一「剪藏」对象（`kind / content / sourceUrl / note / collectionId`），落 SQLite、进 FTS5、可导出；选区来源复用右键菜单「加入笔记」。
 - 验收：四类剪藏均可创建；来源可回溯；导出 Markdown 保留出处；与整篇保存共用一套检索与引用。
 

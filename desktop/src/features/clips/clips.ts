@@ -59,3 +59,39 @@ export function clipSourceHost(clip: Clip): string {
     return clip.sourceUrl
   }
 }
+
+function formatClipDate(timestamp: number): string {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+/**
+ * Markdown export keeps the provenance: a quote without its source is useless
+ * a month later. Images/links are emitted as links, text as a blockquote.
+ */
+export function clipToMarkdown(clip: Clip): string {
+  const title = clip.title?.trim() || clip.sourceTitle?.trim() || clipSourceHost(clip)
+  const lines: string[] = [`## ${title}`, '']
+  const meta: string[] = [`来源：${clip.sourceUrl}`]
+  if (clip.kind !== 'page') meta.push(`类型：${CLIP_KIND_LABEL[clip.kind]}`)
+  meta.push(`剪藏于：${formatClipDate(clip.createdAt)}`)
+  lines.push(...meta.map(line => `> ${line}`), '')
+
+  if (clip.kind === 'selection' || clip.kind === 'page') {
+    lines.push(...clip.content.split('\n').map(line => `> ${line}`), '')
+  } else {
+    lines.push(`[${clip.kind === 'image' ? '图片' : '链接'}](${clip.content})`, '')
+  }
+
+  if (clip.note.trim()) {
+    lines.push(`**备注**：${clip.note.trim()}`, '')
+  }
+  return lines.join('\n').trimEnd() + '\n'
+}
+
+/** Concatenate clips into one export document. */
+export function clipsToMarkdown(clips: readonly Clip[]): string {
+  return clips.map(clipToMarkdown).join('\n---\n\n')
+}
+
