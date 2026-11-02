@@ -1,3 +1,4 @@
+import { translate } from '../../i18n'
 /**
  * Pure model for the unified command bar.
  *
@@ -125,12 +126,12 @@ export interface CommandSection {
 }
 
 export const COMMAND_KIND_LABEL: Record<CommandKind, string> = {
-  tab: '标签页',
-  action: '动作',
-  bookmark: '收藏',
-  history: '历史',
-  archive: '归档',
-  document: '知识库',
+  tab:translate("\u6807\u7B7E\u9875"),
+  action:translate("\u52A8\u4F5C"),
+  bookmark:translate("\u6536\u85CF"),
+  history:translate("\u5386\u53F2"),
+  archive:translate("\u5F52\u6863"),
+  document:translate("\u77E5\u8BC6\u5E93"),
 }
 
 const EVERY_KIND: readonly CommandKind[] = ['tab', 'action', 'bookmark', 'history', 'archive', 'document']
@@ -166,7 +167,7 @@ export function groupCommandItems(
   if (mode === 'ask') return []
   const kinds = mode === 'all' ? EVERY_KIND : MODE_KINDS[mode]
   const order = query.trim().length === 0
-    ? (['action', 'tab', 'bookmark', 'history', 'archive', 'document'] as const)
+    ?( ['action', 'tab', 'bookmark', 'history', 'archive', 'document'] as const)
     : EVERY_KIND
   const sections: CommandSection[] = []
   for (const kind of order) {

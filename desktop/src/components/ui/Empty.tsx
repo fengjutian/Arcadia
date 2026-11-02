@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { Inbox } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 
@@ -11,7 +12,7 @@ export interface EmptyProps {
 
 const simpleImage = <Inbox size={32}/>
 
-function EmptyView({ image = simpleImage, description = '暂无数据', children, className = '', style }: EmptyProps) {
+function EmptyView({ image = simpleImage, description =t("\u6682\u65E0\u6570\u636E"),children,className='',style}:EmptyProps){
   return <div className={`ui-empty ${className}`.trim()} style={style}>
     {image !== null && <div className="ui-empty__image">{image}</div>}
     {description !== null && <div className="ui-empty__description">{description}</div>}

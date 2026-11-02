@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { Children, cloneElement, createContext, isValidElement, useContext, useEffect, useMemo, useSyncExternalStore, type FormEvent, type ReactElement, type ReactNode } from 'react'
 
 export interface FormRule {
@@ -29,13 +30,13 @@ function createForm<Values extends Record<string, any>>(): FormInstance<Values> 
   const rules = new Map<string, FormRule[]>()
   const notify = () => { version += 1; listeners.forEach(listener => listener()) }
   const validate = (names?: Array<keyof Values | string>) => {
-    for (const name of (names?.map(String) ?? [...rules.keys()])) {
+    for (const name of( names?.map(String) ?? [...rules.keys()])) {
       const value = values[name]
       for (const rule of rules.get(name) ?? []) {
         const empty = value == null || String(value).trim() === ''
-        if (rule.required && empty) throw new Error(rule.message ?? `请填写${name}`)
-        if (!empty && rule.type === 'url' && !/^https?:\/\/[^\s]+$/i.test(String(value))) throw new Error(rule.message ?? '请输入有效 URL')
-        if (!empty && rule.type === 'number' && (Number.isNaN(Number(value)) || (rule.min != null && Number(value) < rule.min) || (rule.max != null && Number(value) > rule.max))) throw new Error(rule.message ?? '数值超出范围')
+        if (rule.required && empty) throw new Error(rule.message ??t("\u8BF7\u586B\u5199{value0}",{value0:name}))
+        if (!empty && rule.type === 'url' && !/^https?:\/\/[^\s]+$/i.test(String(value))) throw new Error(rule.message ??t("\u8BF7\u8F93\u5165\u6709\u6548 URL"))
+        if (!empty && rule.type === 'number' &&                                                                                   (Number.isNaN(Number(value))||(rule.min!=null&&Number(value)<rule.min)||(rule.max!=null&&Number(value)>rule.max)))throw new Error(rule.message??t("\u6570\u503C\u8D85\u51FA\u8303\u56F4"))
       }
     }
     return { ...values } as Values
@@ -84,7 +85,7 @@ export interface FormItemProps {
 
 function FormItem({ name, label, tooltip, rules = [], children, className = '' }: FormItemProps) {
   const form = useContext(FormContext)
-  useSyncExternalStore(form?._subscribe ?? (() => () => undefined), form?._snapshot ?? (() => 0))
+  useSyncExternalStore(form?._subscribe ??  (()=> () => undefined), form?._snapshot ??  (()=> 0))
   useEffect(() => name && form ? form._register(name, rules) : undefined, [form, name, rules])
   const child = children ? Children.only(children) : null
   const childProps = (isValidElement(child) ? child.props : {}) as { onChange?: (...args: any[]) => void }

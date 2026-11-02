@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { Select as BaseSelect } from '@base-ui/react/select'
 import { Check, ChevronDown } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
@@ -28,7 +29,7 @@ export interface SelectProps<Value = string, Option extends SelectOption<Value> 
   ariaLabel?: string
 }
 
-export function Select<Value = string, Option extends SelectOption<Value> = SelectOption<Value>>({ value, defaultValue, options = [], onChange, mode, placeholder = '请选择', disabled, size = 'middle', className = '', style, name, id, ariaLabel }: SelectProps<Value, Option>) {
+export function Select<Value = string, Option extends SelectOption<Value> = SelectOption<Value>>({ value, defaultValue, options = [], onChange, mode, placeholder =t("\u8BF7\u9009\u62E9"),disabled,size='middle',className='',style,name,id,ariaLabel}:SelectProps<Value,Option>){
   const [open, setOpen] = useState(false)
   const multiple = mode === 'multiple'
   useModalOverlayLifecycle(open)
@@ -60,7 +61,7 @@ export function Select<Value = string, Option extends SelectOption<Value> = Sele
             if (!values.length) return placeholder
             return <span className="ui-select__tags">{values.map(item => <span className="ui-select__tag" key={String(item)}>{options.find(option => Object.is(option.value, item))?.label ?? String(item)}</span>)}</span>
           }
-          return options.find(option => Object.is(option.value, selected))?.label ?? (selected == null ? placeholder : String(selected))
+          return options.find(option => Object.is(option.value, selected))?.label ??( selected == null ? placeholder : String(selected))
         }}
       </BaseSelect.Value>
       <BaseSelect.Icon className="ui-select__icon"><ChevronDown size={15}/></BaseSelect.Icon>

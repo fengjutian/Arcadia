@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { Dialog } from '@base-ui/react/dialog'
 import type { ReactNode } from 'react'
 import { useModalOverlayLifecycle } from './overlayLifecycle'
@@ -22,7 +23,7 @@ export function Drawer({ open = false, title, extra, children, width = 420, plac
       <Dialog.Backdrop className="ui-dialog__backdrop"/>
       <Dialog.Viewport className={`ui-drawer__viewport ui-drawer__viewport--${placement}`}>
         <Dialog.Popup className={`ui-drawer ui-drawer--${placement} ${className}`.trim()} style={{ width }}>
-          <header className="ui-drawer__header"><Dialog.Title className="ui-drawer__title">{title}</Dialog.Title><span className="ui-drawer__spacer"/>{extra}{closable && <Dialog.Close className="ui-dialog__close" aria-label="关闭">×</Dialog.Close>}</header>
+          <header className="ui-drawer__header"><Dialog.Title className="ui-drawer__title">{title}</Dialog.Title><span className="ui-drawer__spacer"/>{extra}{closable && <Dialog.Close className="ui-dialog__close" aria-label={t("\u5173\u95ED")}>×</Dialog.Close>}</header>
           <div className="ui-drawer__body">{children}</div>
         </Dialog.Popup>
       </Dialog.Viewport>

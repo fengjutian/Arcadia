@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -65,7 +66,7 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
         setProviders(items)
         setProviderId(previous => previous || items[0]?.id || '')
       })
-      .catch(caught => { if (current) setError(errorText(caught, '读取 AI Provider 失败')) })
+      .catch(caught => { if (current) setError(errorText(caught,t("\u8BFB\u53D6 AI Provider \u5931\u8D25")))})
       .finally(() => { if (current) setLoadingProviders(false) })
     return () => { current = false }
   }, [])
@@ -107,7 +108,7 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
     const receive = (event: MessageEvent<unknown>) => {
       if (event.source !== previewFrameRef.current?.contentWindow || !isPreviewFollowUp(event.data)) return
       const { question: askQuestion, option, comment } = event.data
-      const followUp = `关于“${askQuestion}”，我的选择是“${option}”${comment ? `，补充说明：${comment}` : ''}。请据此继续回答。`
+      const followUp =t("\u5173\u4E8E\u201C{value0}\u201D\uFF0C\u6211\u7684\u9009\u62E9\u662F\u201C{value1}\u201D{value2}\u3002\u8BF7\u636E\u6B64\u7EE7\u7EED\u56DE\u7B54\u3002",{value0:askQuestion,value1:option,value2:comment?t("\uFF0C\u8865\u5145\u8BF4\u660E\uFF1A{value0}",{value0:comment}):''})
       setPreview(null)
       setQuestion(followUp)
       void submit(followUp)
@@ -167,7 +168,7 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
         const webResults = await webSearch(prompt, 6)
         sources = prepareAiSearchSources([
           ...sources.map(({ id: _id, ...source }) => source),
-          ...webResults.map((result, index) => ({
+          ...webResults.map((result, index) =>( {
             documentId:`web-${index}-${result.url}`,
             title:result.title,
             url:result.url,
@@ -176,17 +177,17 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
           })),
         ], 10)
       } catch (caught) {
-        webWarning = errorText(caught, '联网搜索失败，已仅使用本地知识库')
+        webWarning = errorText(caught,t("\u8054\u7F51\u641C\u7D22\u5931\u8D25\uFF0C\u5DF2\u4EC5\u4F7F\u7528\u672C\u5730\u77E5\u8BC6\u5E93"))
       }
     }
-    if (sources.length === 0) throw new Error('没有找到足够证据。请先保存相关网页、开启联网补充，或换一种问法。')
+    if (sources.length === 0) throw new Error(t("\u6CA1\u6709\u627E\u5230\u8DB3\u591F\u8BC1\u636E\u3002\u8BF7\u5148\u4FDD\u5B58\u76F8\u5173\u7F51\u9875\u3001\u5F00\u542F\u8054\u7F51\u8865\u5145\uFF0C\u6216\u6362\u4E00\u79CD\u95EE\u6CD5\u3002"))
     const cacheKey = aiSearchCacheKey({ providerId, question:prompt, history:conversationHistory, sources })
     const cachedEntries = readAiSearchCache(await getSession(AI_SEARCH_CACHE_KEY).catch(() => null))
     const cached = options?.forceRefresh ? undefined : cachedEntries.find(entry => entry.key === cacheKey)
     if (cached) return { answer:cached.answer, sources:cached.sources, citedIds:cached.citedIds, fromCache:true, webSourceCount:cached.sources.filter(source => source.kind === 'web').length, webWarning }
     const response = await aiChat(providerId, buildAiSearchRequest(prompt, sources, conversationHistory))
     const answer = response.content.trim()
-    if (!answer) throw new Error('模型返回了空答案')
+    if (!answer) throw new Error(t("\u6A21\u578B\u8FD4\u56DE\u4E86\u7A7A\u7B54\u6848"))
     const citedIds = citedSourceIds(answer, sources)
     const nextCache = upsertAiSearchCache(cachedEntries, { key:cacheKey, answer, sources, citedIds, createdAt:Date.now() })
     void setSession(AI_SEARCH_CACHE_KEY, JSON.stringify(nextCache)).catch(() => undefined)
@@ -208,7 +209,7 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
       }])
       setQuestion('')
     } catch (caught) {
-      setError(errorText(caught, 'AI 搜索失败，请稍后重试'))
+      setError(errorText(caught,t("AI \u641C\u7D22\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5")))
     } finally {
       setBusy(false)
     }
@@ -233,8 +234,8 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
         versionCreatedAt:new Date().toISOString(),
         previousVersions:[...(item.previousVersions ?? []), previous].slice(-5),
       } : item))
-      message.success('已生成新版本，旧版本已保留')
-    } catch (caught) { setError(errorText(caught, '重新生成失败，请稍后重试')) }
+      message.success(t("\u5DF2\u751F\u6210\u65B0\u7248\u672C\uFF0C\u65E7\u7248\u672C\u5DF2\u4FDD\u7559"))
+    } catch (caught) { setError(errorText(caught,t("\u91CD\u65B0\u751F\u6210\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5")))}
     finally { setBusy(false) }
   }
 
@@ -258,48 +259,48 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
       }
     }))
     setVersionTurnId(null)
-    message.success('已恢复所选版本')
+    message.success(t("\u5DF2\u6062\u590D\u6240\u9009\u7248\u672C"))
   }
 
   async function copyTurn(turn: AiSearchTurn) {
     try {
       await navigator.clipboard.writeText(answerAsMarkdown(turn.question, turn.answer, turn.sources))
-      message.success('答案 Markdown 已复制')
-    } catch { message.error('复制失败，请检查剪贴板权限') }
+      message.success(t("\u7B54\u6848 Markdown \u5DF2\u590D\u5236"))
+    } catch { message.error(t("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u526A\u8D34\u677F\u6743\u9650"))}
   }
 
   async function saveTurn(turn: AiSearchTurn) {
     if (turn.savedDocumentId) return
     try {
       const saved = await saveDocument({
-        title: `AI 搜索：${turn.question}`.slice(0, 160),
+        title: t("AI \u641C\u7D22\uFF1A{value0}",{value0:turn.question}).slice(0,160),
         url: `arcadia://ai-search/${encodeURIComponent(turn.id)}`,
         markdown: answerAsMarkdown(turn.question, turn.answer, turn.sources),
-        tags: ['AI 搜索'],
+        tags: [t("AI \u641C\u7D22")],
       })
       setTurns(current => current.map(item => item.id === turn.id ? { ...item, savedDocumentId:saved.id } : item))
-      message.success('已保存到本地知识库')
-    } catch (caught) { message.error(errorText(caught, '保存失败，请稍后重试')) }
+      message.success(t("\u5DF2\u4FDD\u5B58\u5230\u672C\u5730\u77E5\u8BC6\u5E93"))
+    } catch (caught) { message.error(errorText(caught,t("\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5")))}
   }
 
   async function shareTurn(turn: AiSearchTurn) {
     const text = answerAsMarkdown(turn.question, turn.answer, turn.sources)
     try {
       if (typeof navigator.share === 'function') {
-        await navigator.share({ title:`AI 搜索：${turn.question}`, text })
+        await navigator.share({ title:t("AI \u641C\u7D22\uFF1A{value0}",{value0:turn.question}),text})
         return
       }
       await navigator.clipboard.writeText(text)
-      message.success('当前平台不支持系统分享，已复制 Markdown')
+      message.success(t("\u5F53\u524D\u5E73\u53F0\u4E0D\u652F\u6301\u7CFB\u7EDF\u5206\u4EAB\uFF0C\u5DF2\u590D\u5236 Markdown"))
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === 'AbortError') return
-      message.error('分享失败，请稍后重试')
+      message.error(t("\u5206\u4EAB\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5"))
     }
   }
 
   function exportTurn(turn: AiSearchTurn) {
     const answerHtml = document.getElementById(`ai-search-answer-${turn.id}`)?.innerHTML
-    if (!answerHtml) { message.error('答案尚未渲染完成'); return }
+    if (!answerHtml) { message.error(t("\u7B54\u6848\u5C1A\u672A\u6E32\u67D3\u5B8C\u6210"));return}
     const html = standaloneAnswerHtml({ question: turn.question, answerHtml, sources: turn.sources })
     const url = URL.createObjectURL(new Blob([html], { type:'text/html;charset=utf-8' }))
     const anchor = document.createElement('a')
@@ -307,31 +308,31 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
     anchor.download = `${safeFilename(turn.question)}.html`
     anchor.click()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-    message.success('已导出单文件 HTML')
+    message.success(t("\u5DF2\u5BFC\u51FA\u5355\u6587\u4EF6 HTML"))
   }
 
   function previewTurn(turn: AiSearchTurn) {
     const answerHtml = document.getElementById(`ai-search-answer-${turn.id}`)?.innerHTML
-    if (!answerHtml) { message.error('答案尚未渲染完成'); return }
+    if (!answerHtml) { message.error(t("\u7B54\u6848\u5C1A\u672A\u6E32\u67D3\u5B8C\u6210"));return}
     setPreview({ turnId:turn.id, title:turn.question, html:standaloneAnswerHtml({ question:turn.question, answerHtml, sources:turn.sources }) })
   }
 
-  if (loadingProviders) return <div className="ai-search-loading"><Spin/><span>正在读取模型配置…</span></div>
+  if (loadingProviders) return <div className="ai-search-loading"><Spin/><span>{t("\u6B63\u5728\u8BFB\u53D6\u6A21\u578B\u914D\u7F6E\u2026")}</span></div>
 
   return <div className="ai-search">
     <div className="ai-search__composer">
       <div className="ai-search__composer-head">
-        <span><RobotOutlined/> 基于本地知识库生成带引用的结构化答案</span>
+        <span><RobotOutlined/> {t("\u57FA\u4E8E\u672C\u5730\u77E5\u8BC6\u5E93\u751F\u6210\u5E26\u5F15\u7528\u7684\u7ED3\u6784\u5316\u7B54\u6848")}</span>
         <div className="ai-search__composer-actions">
-        <label className="ai-search-web-toggle" title="启用后会把问题发送到 Bing RSS 搜索，并将结果摘要加入证据包">
-          <Switch checked={webEnabled} onChange={setWebEnabled}/><span>联网补充</span>
+        <label className="ai-search-web-toggle" title={t("\u542F\u7528\u540E\u4F1A\u628A\u95EE\u9898\u53D1\u9001\u5230 Bing RSS \u641C\u7D22\uFF0C\u5E76\u5C06\u7ED3\u679C\u6458\u8981\u52A0\u5165\u8BC1\u636E\u5305")}>
+          <Switch checked={webEnabled} onChange={setWebEnabled}/><span>{t("\u8054\u7F51\u8865\u5145")}</span>
         </label>
-        {turns.length > 0 && <Button size="small" icon={<PlusOutlined/>} disabled={busy} onClick={() => { setTurns([]); setQuestion(''); setError('') }}>新搜索</Button>}
+        {turns.length > 0 && <Button size="small" icon={<PlusOutlined/>} disabled={busy} onClick={() => { setTurns([]); setQuestion(''); setError('') }}>{t("\u65B0\u641C\u7D22")}</Button>}
         {providers.length > 0 && <Select
           className="ai-search__provider"
           ariaLabel="AI Provider"
           value={providerId}
-          options={providers.map(provider => ({ label: provider.model, value: provider.id }))}
+          options={providers.map(            (provider                                     )=>({label:provider.model,value:provider.id}))}
           onChange={setProviderId}
         />}
         </div>
@@ -340,8 +341,8 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
         <Input.TextArea
           value={question}
           onChange={event => setQuestion(event.target.value)}
-          placeholder="例如：比较我保存过的 SQLite FTS 与向量检索方案"
-          aria-label="AI 搜索问题"
+          placeholder={t("\u4F8B\u5982\uFF1A\u6BD4\u8F83\u6211\u4FDD\u5B58\u8FC7\u7684 SQLite FTS \u4E0E\u5411\u91CF\u68C0\u7D22\u65B9\u6848")}
+          aria-label={t("AI \u641C\u7D22\u95EE\u9898")}
           autoSize={{ minRows: 2, maxRows: 5 }}
           onKeyDown={event => {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -351,49 +352,49 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
           }}
         />
         <Button type="primary" icon={busy ? <Spin size="small"/> : <ArrowUpOutlined/>} disabled={!question.trim() || !providerId || busy} onClick={() => void submit()}>
-          {busy ? '生成中' : '搜索'}
+          {busy ?t("\u751F\u6210\u4E2D"):t("\u641C\u7D22")}
         </Button>
       </div>
-      <div className="ai-search__hint">Enter 发送 · Shift + Enter 换行 · 只使用本地知识库证据</div>
+      <div className="ai-search__hint">{t("Enter \u53D1\u9001 \xB7 Shift + Enter \u6362\u884C \xB7 \u53EA\u4F7F\u7528\u672C\u5730\u77E5\u8BC6\u5E93\u8BC1\u636E")}</div>
     </div>
 
     {providers.length === 0 && <Empty
       image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description="尚未配置 AI Provider。请先在设置中添加兼容模型。"
+      description={t("\u5C1A\u672A\u914D\u7F6E AI Provider\u3002\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u6DFB\u52A0\u517C\u5BB9\u6A21\u578B\u3002")}
     />}
     {error && <Alert type="warning" showIcon message={error}/>} 
 
     {turns.length === 0 && providers.length > 0 && !error && <div className="ai-search__empty">
       <SearchOutlined/>
-      <h2>把搜索结果整理成答案</h2>
-      <p>AI 会先检索本地知识库，再生成带来源的结论、步骤或对比表。</p>
+      <h2>{t("\u628A\u641C\u7D22\u7ED3\u679C\u6574\u7406\u6210\u7B54\u6848")}</h2>
+      <p>{t("AI \u4F1A\u5148\u68C0\u7D22\u672C\u5730\u77E5\u8BC6\u5E93\uFF0C\u518D\u751F\u6210\u5E26\u6765\u6E90\u7684\u7ED3\u8BBA\u3001\u6B65\u9AA4\u6216\u5BF9\u6BD4\u8868\u3002")}</p>
     </div>}
 
     <div className="ai-search__turns">
       {turns.map((turn, index) => {
         const generatedFollowUps = extractFollowUpQuestions(turn.answer)
-        const followUps = generatedFollowUps.length > 0 ? generatedFollowUps : ['给我一个具体实施步骤', '有哪些风险或反例？', '用表格比较关键选项']
+        const followUps = generatedFollowUps.length > 0 ? generatedFollowUps : [t("\u7ED9\u6211\u4E00\u4E2A\u5177\u4F53\u5B9E\u65BD\u6B65\u9AA4"),t("\u6709\u54EA\u4E9B\u98CE\u9669\u6216\u53CD\u4F8B\uFF1F"),t("\u7528\u8868\u683C\u6BD4\u8F83\u5173\u952E\u9009\u9879")]
         const quality = evaluateAiSearchAnswer(turn.answer, turn.sources)
         return <article className="ai-search-answer" key={turn.id}>
         <header>
           <span className="ai-search-answer__index">{index + 1}</span>
-          <div><small>问题 {turn.fromCache && <Tag color="green">缓存命中</Tag>}{Boolean(turn.webSourceCount) && <Tag color="blue">联网 {turn.webSourceCount}</Tag>}{turn.webWarning && <Tag color="orange">联网降级</Tag>}</small><h2>{turn.question}</h2></div>
+          <div><small>{t("\u95EE\u9898")} {turn.fromCache&&<Tag color="green">{t("\u7F13\u5B58\u547D\u4E2D")}</Tag>}{Boolean(turn.webSourceCount)&&<Tag color="blue">{t("\u8054\u7F51")} {turn.webSourceCount}</Tag>}{turn.webWarning&&<Tag color="orange">{t("\u8054\u7F51\u964D\u7EA7")}</Tag>}</small><h2>{turn.question}</h2></div>
           <div className="ai-search-answer__actions">
-            <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>复制</Button>
-            <Button size="small" type="text" icon={<ReloadOutlined/>} disabled={busy} onClick={() => void regenerateTurn(turn)}>重生成</Button>
-            {(turn.previousVersions?.length ?? 0) > 0 && <Button size="small" type="text" icon={<ClockCircleOutlined/>} onClick={() => setVersionTurnId(turn.id)}>版本 {turn.previousVersions?.length}</Button>}
-            <button type="button" className={`ai-search-quality-badge is-${quality.level}`} onClick={() => setQualityTurnId(turn.id)} title="查看本地答案质量检查">质量 {quality.score}</button>
-            <Button size="small" type="text" icon={turn.savedDocumentId ? <CheckCircleOutlined/> : <SaveOutlined/>} disabled={Boolean(turn.savedDocumentId)} onClick={() => void saveTurn(turn)}>{turn.savedDocumentId ? '已保存' : '保存'}</Button>
-            <Button size="small" type="text" icon={<ExportOutlined/>} onClick={() => void shareTurn(turn)}>分享</Button>
-            <Button size="small" type="text" icon={<FullscreenOutlined/>} onClick={() => previewTurn(turn)}>页面</Button>
+            <Button size="small" type="text" icon={<CopyOutlined/>} onClick={() => void copyTurn(turn)}>{t("\u590D\u5236")}</Button>
+            <Button size="small" type="text" icon={<ReloadOutlined/>} disabled={busy} onClick={() => void regenerateTurn(turn)}>{t("\u91CD\u751F\u6210")}</Button>
+            {(turn.previousVersions?.length ?? 0) > 0 && <Button size="small" type="text" icon={<ClockCircleOutlined/>} onClick={() => setVersionTurnId(turn.id)}>{t("\u7248\u672C")} {turn.previousVersions?.length}</Button>}
+            <button type="button" className={`ai-search-quality-badge is-${quality.level}`} onClick={() => setQualityTurnId(turn.id)} title={t("\u67E5\u770B\u672C\u5730\u7B54\u6848\u8D28\u91CF\u68C0\u67E5")}>{t("\u8D28\u91CF")} {quality.score}</button>
+            <Button size="small" type="text" icon={turn.savedDocumentId ? <CheckCircleOutlined/> : <SaveOutlined/>} disabled={Boolean(turn.savedDocumentId)} onClick={() => void saveTurn(turn)}>{turn.savedDocumentId ?t("\u5DF2\u4FDD\u5B58"):t("\u4FDD\u5B58")}</Button>
+            <Button size="small" type="text" icon={<ExportOutlined/>} onClick={() => void shareTurn(turn)}>{t("\u5206\u4EAB")}</Button>
+            <Button size="small" type="text" icon={<FullscreenOutlined/>} onClick={() => previewTurn(turn)}>{t("\u9875\u9762")}</Button>
             <Button size="small" type="text" icon={<DownloadOutlined/>} onClick={() => exportTurn(turn)}>HTML</Button>
           </div>
         </header>
         <div id={`ai-search-answer-${turn.id}`} className="ai-search-answer__markdown markdown-body">
           <AiSearchAnswerContent answer={turn.answer} busy={busy} onAnswer={value => void submit(value)}/>
         </div>
-        <section className="ai-search-sources" aria-label="答案来源">
-          <h3><FileTextOutlined/> 来源</h3>
+        <section className="ai-search-sources" aria-label={t("\u7B54\u6848\u6765\u6E90")}>
+          <h3><FileTextOutlined/> {t("\u6765\u6E90")}</h3>
           <div className="ai-search-sources__list">
             {turn.sources.map(source => <button key={source.id} type="button" onClick={() => onOpenUrl?.(source.url)}>
               <Tag color={turn.citedIds.includes(source.id) ? 'green' : undefined}>{source.id}</Tag>
@@ -402,25 +403,25 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
           </div>
         </section>
         {index === turns.length - 1 && <div className="ai-search-followups">
-          <span>继续追问</span>
+          <span>{t("\u7EE7\u7EED\u8FFD\u95EE")}</span>
           {followUps.map(item => <button key={item} type="button" disabled={busy} onClick={() => { setQuestion(item); void submit(item) }}>{item}</button>)}
         </div>}
       </article>})}
     </div>
-    {turns.length > 0 && <div className="ai-search__footer-note">当前模型：{activeProvider?.model ?? '—'} · 新追问会重新检索本地证据</div>}
+    {turns.length > 0 && <div className="ai-search__footer-note">{t("\u5F53\u524D\u6A21\u578B\uFF1A")}{activeProvider?.model??'—'} {t("\xB7 \u65B0\u8FFD\u95EE\u4F1A\u91CD\u65B0\u68C0\u7D22\u672C\u5730\u8BC1\u636E")}</div>}
     <Modal
       open={preview !== null}
-      title={preview?.title || 'AI 搜索答案'}
+      title={preview?.title ||t("AI \u641C\u7D22\u7B54\u6848")}
       width="min(1100px, 96vw)"
       className="ai-search-preview-modal"
       styles={{ body:{ padding:0 } }}
-      footer={<Button onClick={() => setPreview(null)}>关闭</Button>}
+      footer={<Button onClick={() => setPreview(null)}>{t("\u5173\u95ED")}</Button>}
       onCancel={() => setPreview(null)}
       destroyOnHidden
     >
       {preview && <iframe
         ref={previewFrameRef}
-        title={`AI 搜索答案：${preview.title}`}
+        title={t("AI \u641C\u7D22\u7B54\u6848\uFF1A{value0}",{value0:preview.title})}
         className="ai-search-preview-frame"
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
@@ -429,69 +430,69 @@ export function AiSearchPanel({ initialQuery = '', initialWebEnabled = false, au
     </Modal>
     <Modal
       open={versionTurnId !== null}
-      title="回答历史版本"
+      title={t("\u56DE\u7B54\u5386\u53F2\u7248\u672C")}
       width={720}
-      footer={<Button onClick={() => setVersionTurnId(null)}>关闭</Button>}
+      footer={<Button onClick={() => setVersionTurnId(null)}>{t("\u5173\u95ED")}</Button>}
       onCancel={() => setVersionTurnId(null)}
       destroyOnHidden
     >
       <div className="ai-search-versions">
         {(turns.find(turn => turn.id === versionTurnId)?.previousVersions ?? []).map((version, index) => <article key={version.id}>
-          <div><b>版本 {index + 1}</b><time>{formatVersionTime(version.createdAt)}</time></div>
+          <div><b>{t("\u7248\u672C")} {index+1}</b><time>{formatVersionTime(version.createdAt)}</time></div>
           <p>{version.answer.replace(/[#*_`>\[\]]/g, '').slice(0, 240)}{version.answer.length > 240 ? '…' : ''}</p>
-          <span>{version.sources.length} 个来源</span>
+          <span>{version.sources.length} {t("\u4E2A\u6765\u6E90")}</span>
           <div className="ai-search-versions__actions">
-            <Button size="small" onClick={() => versionTurnId && setComparisonTarget({ turnId:versionTurnId, versionId:version.id })}>与当前比较</Button>
-            <Button size="small" onClick={() => versionTurnId && restoreVersion(versionTurnId, version.id)}>恢复此版本</Button>
+            <Button size="small" onClick={() => versionTurnId && setComparisonTarget({ turnId:versionTurnId, versionId:version.id })}>{t("\u4E0E\u5F53\u524D\u6BD4\u8F83")}</Button>
+            <Button size="small" onClick={() => versionTurnId && restoreVersion(versionTurnId, version.id)}>{t("\u6062\u590D\u6B64\u7248\u672C")}</Button>
           </div>
         </article>)}
       </div>
     </Modal>
     <Modal
       open={versionComparison !== null}
-      title="版本差异"
+      title={t("\u7248\u672C\u5DEE\u5F02")}
       width="min(1120px, 96vw)"
       className="ai-search-diff-modal"
-      footer={<Button onClick={() => setComparisonTarget(null)}>关闭</Button>}
+      footer={<Button onClick={() => setComparisonTarget(null)}>{t("\u5173\u95ED")}</Button>}
       onCancel={() => setComparisonTarget(null)}
       destroyOnHidden
     >
       {versionComparison && <>
         <div className="ai-search-diff__summary">
-          <Tag color="green">新增 {versionComparison.diff.addedLines} 行</Tag>
-          <Tag color="red">删除 {versionComparison.diff.removedLines} 行</Tag>
-          <span>来源 +{versionComparison.diff.addedSources.length} / -{versionComparison.diff.removedSources.length}</span>
+          <Tag color="green">{t("\u65B0\u589E")} {versionComparison.diff.addedLines} {t("\u884C")}</Tag>
+          <Tag color="red">{t("\u5220\u9664")} {versionComparison.diff.removedLines} {t("\u884C")}</Tag>
+          <span>{t("\u6765\u6E90 +")}{versionComparison.diff.addedSources.length} / -{versionComparison.diff.removedSources.length}</span>
         </div>
         <div className="ai-search-diff">
-          <VersionDiffColumn title={`历史版 · ${formatVersionTime(versionComparison.version.createdAt)}`} lines={versionComparison.diff.previous}/>
-          <VersionDiffColumn title="当前版" lines={versionComparison.diff.current}/>
+          <VersionDiffColumn title={t("\u5386\u53F2\u7248 \xB7 {value0}",{value0:formatVersionTime(versionComparison.version.createdAt)})}lines={versionComparison.diff.previous}/>
+          <VersionDiffColumn title={t("\u5F53\u524D\u7248")}lines={versionComparison.diff.current}/>
         </div>
       </>}
     </Modal>
     <Modal
       open={qualityTurnId !== null}
-      title="答案质量检查"
+      title={t("\u7B54\u6848\u8D28\u91CF\u68C0\u67E5")}
       width={640}
-      footer={<Button onClick={() => setQualityTurnId(null)}>关闭</Button>}
+      footer={<Button onClick={() => setQualityTurnId(null)}>{t("\u5173\u95ED")}</Button>}
       onCancel={() => setQualityTurnId(null)}
       destroyOnHidden
     >
-      {(() => {
+      { (()=> {
         const turn = turns.find(item => item.id === qualityTurnId)
         if (!turn) return null
         const report = evaluateAiSearchAnswer(turn.answer, turn.sources)
         return <div className="ai-search-quality">
-          <div className={`ai-search-quality__score is-${report.level}`}><strong>{report.score}</strong><span>本地规则评分</span></div>
+          <div className={`ai-search-quality__score is-${report.level}`}><strong>{report.score}</strong><span>{t("\u672C\u5730\u89C4\u5219\u8BC4\u5206")}</span></div>
           <dl>
-            <div><dt>引用覆盖</dt><dd>{Math.round(report.citationCoverage * 100)}%（{report.citedParagraphs}/{report.factualParagraphs} 段）</dd></div>
-            <div><dt>有效引用</dt><dd>{report.citedSourceIds.length} 个</dd></div>
-            <div><dt>来源域名</dt><dd>{report.sourceDomains} 个</dd></div>
-            <div><dt>可视化组件</dt><dd>{report.validVisuals} 个有效 / {report.invalidDslBlocks} 个无效</dd></div>
+            <div><dt>{t("\u5F15\u7528\u8986\u76D6")}</dt><dd>{Math.round(report.citationCoverage*100)}%（{report.citedParagraphs}/{report.factualParagraphs} {t("\u6BB5\uFF09")}</dd></div>
+            <div><dt>{t("\u6709\u6548\u5F15\u7528")}</dt><dd>{report.citedSourceIds.length} {t("\u4E2A")}</dd></div>
+            <div><dt>{t("\u6765\u6E90\u57DF\u540D")}</dt><dd>{report.sourceDomains} {t("\u4E2A")}</dd></div>
+            <div><dt>{t("\u53EF\u89C6\u5316\u7EC4\u4EF6")}</dt><dd>{report.validVisuals} {t("\u4E2A\u6709\u6548 /")} {report.invalidDslBlocks} {t("\u4E2A\u65E0\u6548")}</dd></div>
           </dl>
-          {report.warnings.length > 0 ? <ul>{report.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul> : <p className="ai-search-quality__ok"><CheckCircleOutlined/> 未发现明显的结构或引用问题</p>}
-          <small>评分只检查可验证的格式、引用和来源多样性，不代表事实一定正确。</small>
+          {report.warnings.length > 0 ? <ul>{report.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul> : <p className="ai-search-quality__ok"><CheckCircleOutlined/> {t("\u672A\u53D1\u73B0\u660E\u663E\u7684\u7ED3\u6784\u6216\u5F15\u7528\u95EE\u9898")}</p>}
+          <small>{t("\u8BC4\u5206\u53EA\u68C0\u67E5\u53EF\u9A8C\u8BC1\u7684\u683C\u5F0F\u3001\u5F15\u7528\u548C\u6765\u6E90\u591A\u6837\u6027\uFF0C\u4E0D\u4EE3\u8868\u4E8B\u5B9E\u4E00\u5B9A\u6B63\u786E\u3002")}</small>
         </div>
-      })()}
+      }  )()}
     </Modal>
   </div>
 }
@@ -517,10 +518,10 @@ function AiSearchAsk({ block, busy, onAnswer }: { block: AiSearchAskBlock; busy:
   const [selected, setSelected] = useState('')
   const [comment, setComment] = useState('')
   const followUp = selected
-    ? `关于“${block.question}”，我的选择是“${selected}”${comment.trim() ? `，补充说明：${comment.trim()}` : ''}。请据此继续回答。`
-    : ''
+    ?t("\u5173\u4E8E\u201C{value0}\u201D\uFF0C\u6211\u7684\u9009\u62E9\u662F\u201C{value1}\u201D{value2}\u3002\u8BF7\u636E\u6B64\u7EE7\u7EED\u56DE\u7B54\u3002",{value0:block.question,value1:selected,value2:comment.trim()?t("\uFF0C\u8865\u5145\u8BF4\u660E\uFF1A{value0}",{value0:comment.trim()}):''}):
+      ''
   return <section className="ai-search-ask" aria-label={block.question} data-ai-ask-question={block.question}>
-    <div className="ai-search-ask__eyebrow"><RobotOutlined/> 需要你的选择</div>
+    <div className="ai-search-ask__eyebrow"><RobotOutlined/> {t("\u9700\u8981\u4F60\u7684\u9009\u62E9")}</div>
     <h3>{block.question}</h3>
     <div className="ai-search-ask__options" role="radiogroup" aria-label={block.question}>
       {block.options.map(option => <button
@@ -532,23 +533,23 @@ function AiSearchAsk({ block, busy, onAnswer }: { block: AiSearchAskBlock; busy:
         className={selected === option ? 'is-selected' : ''}
         onClick={() => setSelected(option)}
       >
-        <span aria-hidden="true"/>{option}{block.suggested === option && <Tag color="green">建议</Tag>}
+        <span aria-hidden="true"/>{option}{block.suggested === option && <Tag color="green">{t("\u5EFA\u8BAE")}</Tag>}
       </button>)}
     </div>
     <Input
       value={comment}
       onChange={event => setComment(event.target.value)}
-      placeholder="补充说明（可选）"
-      aria-label="补充说明"
+      placeholder={t("\u8865\u5145\u8BF4\u660E\uFF08\u53EF\u9009\uFF09")}
+      aria-label={t("\u8865\u5145\u8BF4\u660E")}
       data-ai-ask-comment
     />
-    <Button type="primary" data-ai-ask-submit disabled={!selected || busy} onClick={() => onAnswer(followUp)}>按此选择继续</Button>
+    <Button type="primary" data-ai-ask-submit disabled={!selected || busy} onClick={() => onAnswer(followUp)}>{t("\u6309\u6B64\u9009\u62E9\u7EE7\u7EED")}</Button>
   </section>
 }
 
 function AiSearchFlow({ block }: { block: AiSearchFlowBlock }) {
-  return <figure className="ai-search-visual ai-search-flow" aria-label="流程图">
-    <figcaption>流程</figcaption>
+  return <figure className="ai-search-visual ai-search-flow" aria-label={t("\u6D41\u7A0B\u56FE")}>
+    <figcaption>{t("\u6D41\u7A0B")}</figcaption>
     <div className="ai-search-flow__edges">
       {block.edges.map((edge, index) => <div className="ai-search-flow__edge" key={`${edge.from}-${edge.to}-${index}`}>
         <span className="ai-search-flow__node">{edge.from}</span>
@@ -560,8 +561,8 @@ function AiSearchFlow({ block }: { block: AiSearchFlowBlock }) {
 }
 
 function AiSearchTimeline({ block }: { block: AiSearchTimelineBlock }) {
-  return <figure className="ai-search-visual ai-search-timeline" aria-label="时间线">
-    <figcaption>时间线</figcaption>
+  return <figure className="ai-search-visual ai-search-timeline" aria-label={t("\u65F6\u95F4\u7EBF")}>
+    <figcaption>{t("\u65F6\u95F4\u7EBF")}</figcaption>
     <ol>{block.items.map((item, index) => <li key={`${item.date}-${item.title}-${index}`}>
       <time>{item.date}</time><span aria-hidden="true"/><div><b>{item.title}</b>{item.description && <p>{item.description}</p>}</div>
     </li>)}</ol>
@@ -570,8 +571,8 @@ function AiSearchTimeline({ block }: { block: AiSearchTimelineBlock }) {
 
 function AiSearchChart({ block }: { block: AiSearchChartBlock }) {
   const maximum = Math.max(...block.items.map(item => Math.abs(item.value)), 1)
-  return <figure className="ai-search-visual ai-search-chart" aria-label={block.title || '数据图表'}>
-    <figcaption>{block.title || '数据对比'}</figcaption>
+  return <figure className="ai-search-visual ai-search-chart" aria-label={block.title ||t("\u6570\u636E\u56FE\u8868")}>
+    <figcaption>{block.title ||t("\u6570\u636E\u5BF9\u6BD4")}</figcaption>
     <div className="ai-search-chart__rows">{block.items.map((item, index) => <div className="ai-search-chart__row" key={`${item.label}-${index}`}>
       <span title={item.label}>{item.label}</span>
       <i><b className={item.value < 0 ? 'is-negative' : ''} style={{ width:`${Math.max(2, Math.abs(item.value) / maximum * 100)}%` }}/></i>
@@ -603,12 +604,12 @@ function isStoredTurns(value: unknown): value is AiSearchTurn[] {
       && typeof item.answer === 'string'
       && Array.isArray(item.sources)
       && Array.isArray(item.citedIds)
-      && (item.savedDocumentId === undefined || typeof item.savedDocumentId === 'string')
-      && (item.versionCreatedAt === undefined || typeof item.versionCreatedAt === 'string')
-      && (item.previousVersions === undefined || isStoredVersions(item.previousVersions))
-      && (item.fromCache === undefined || typeof item.fromCache === 'boolean')
-      && (item.webSourceCount === undefined || typeof item.webSourceCount === 'number')
-      && (item.webWarning === undefined || typeof item.webWarning === 'string')
+      &&( item.savedDocumentId === undefined || typeof item.savedDocumentId === 'string')
+      &&( item.versionCreatedAt === undefined || typeof item.versionCreatedAt === 'string')
+      &&( item.previousVersions === undefined || isStoredVersions(item.previousVersions))
+      &&( item.fromCache === undefined || typeof item.fromCache === 'boolean')
+      &&( item.webSourceCount === undefined || typeof item.webSourceCount === 'number')
+      &&( item.webWarning === undefined || typeof item.webWarning === 'string')
   })
 }
 

@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { parseAnswerSegments } from './aiSearchAnswer'
 import type { AiSearchSource } from './aiSearchPrompt'
 
@@ -29,19 +30,19 @@ export function evaluateAiSearchAnswer(answer: string, sources: readonly AiSearc
   const invalidDslBlocks = Math.max(0, declaredDslBlocks - validVisuals)
   const sourceDomains = new Set(sources.map(source => domainOf(source.url)).filter(Boolean)).size
   const warnings: string[] = []
-  if (citationCoverage < 0.7) warnings.push('部分事实段落缺少来源引用')
-  if (invalidCitationIds.length > 0) warnings.push(`包含不存在的引用：${invalidCitationIds.join('、')}`)
-  if (sources.length > 2 && sourceDomains < 2) warnings.push('证据集中在单一网站，建议增加来源多样性')
-  if (invalidDslBlocks > 0) warnings.push('存在格式无效的交互或可视化组件')
-  if (citedSourceIds.length === 0 && factual.length > 0) warnings.push('回答没有引用任何检索来源')
+  if (citationCoverage < 0.7) warnings.push(t("\u90E8\u5206\u4E8B\u5B9E\u6BB5\u843D\u7F3A\u5C11\u6765\u6E90\u5F15\u7528"))
+  if (invalidCitationIds.length > 0) warnings.push(t("\u5305\u542B\u4E0D\u5B58\u5728\u7684\u5F15\u7528\uFF1A{value0}",{value0:invalidCitationIds.join('、')}))
+  if (sources.length > 2 && sourceDomains < 2) warnings.push(t("\u8BC1\u636E\u96C6\u4E2D\u5728\u5355\u4E00\u7F51\u7AD9\uFF0C\u5EFA\u8BAE\u589E\u52A0\u6765\u6E90\u591A\u6837\u6027"))
+  if (invalidDslBlocks > 0) warnings.push(t("\u5B58\u5728\u683C\u5F0F\u65E0\u6548\u7684\u4EA4\u4E92\u6216\u53EF\u89C6\u5316\u7EC4\u4EF6"))
+  if (citedSourceIds.length === 0 && factual.length > 0) warnings.push(t("\u56DE\u7B54\u6CA1\u6709\u5F15\u7528\u4EFB\u4F55\u68C0\u7D22\u6765\u6E90"))
 
   const score = clamp(Math.round(
     100
     - (1 - citationCoverage) * 45
     - invalidCitationIds.length * 18
     - invalidDslBlocks * 10
-    - (sources.length > 2 && sourceDomains < 2 ? 8 : 0)
-    - (factual.length > 0 && citedSourceIds.length === 0 ? 22 : 0),
+    -( sources.length > 2 && sourceDomains < 2 ? 8 : 0)
+    -( factual.length > 0 && citedSourceIds.length === 0 ? 22 : 0),
   ), 0, 100)
   return {
     score,

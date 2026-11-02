@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { Dialog } from '@base-ui/react/dialog'
 import type { CSSProperties, ReactNode } from 'react'
 import { Button, type ButtonProps } from './Button'
@@ -22,7 +23,7 @@ export interface ModalProps {
   styles?: { body?: CSSProperties }
 }
 
-export function Modal({ open = false, title, children, footer, width = 520, closable = true, mask, onCancel, onOk, okText = '确定', cancelText = '取消', okButtonProps, cancelButtonProps, destroyOnHidden = true, className = '', styles }: ModalProps) {
+export function Modal({ open = false, title, children, footer, width = 520, closable = true, mask, onCancel, onOk, okText =t("\u786E\u5B9A"),cancelText=t("\u53D6\u6D88"),okButtonProps,cancelButtonProps,destroyOnHidden=true,className='',styles}:ModalProps){
   useModalOverlayLifecycle(open)
   return <Dialog.Root open={open} onOpenChange={(next, details) => {
     if (!next && mask?.closable === false && String(details.reason).includes('outside')) return
@@ -34,7 +35,7 @@ export function Modal({ open = false, title, children, footer, width = 520, clos
         <Dialog.Popup className={`ui-dialog ${className}`.trim()} style={{ width }}>
           {(title != null || closable) && <header className="ui-dialog__header">
             {title != null ? <Dialog.Title className="ui-dialog__title">{title}</Dialog.Title> : <span/>}
-            {closable && <Dialog.Close className="ui-dialog__close" aria-label="关闭">×</Dialog.Close>}
+            {closable && <Dialog.Close className="ui-dialog__close" aria-label={t("\u5173\u95ED")}>×</Dialog.Close>}
           </header>}
           <div className="ui-dialog__body" style={styles?.body}>{children}</div>
           {footer !== null && <footer className="ui-dialog__footer">{footer ?? <><Button {...cancelButtonProps} onClick={onCancel}>{cancelText}</Button><Button type="primary" {...okButtonProps} onClick={() => void onOk?.()}>{okText}</Button></>}</footer>}

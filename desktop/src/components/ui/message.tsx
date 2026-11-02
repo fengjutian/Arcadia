@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { CheckCircle2, CircleAlert, Info, LoaderCircle, TriangleAlert, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -74,7 +75,7 @@ function useToastStore(): [MessageApi, ReactNode] {
     }
     push(config, id, type)
   }, [push, trackInjected])
-  const api = useMemo<MessageApi>(() => ({
+  const api = useMemo<MessageApi>(() =>( {
     open,
     success: (content, duration) => open({ content, duration, type: 'success' }),
     error: (content, duration) => open({ content, duration, type: 'error' }),
@@ -89,7 +90,7 @@ function useToastStore(): [MessageApi, ReactNode] {
       setToasts([])
     },
   }), [open, remove])
-  const layer = <div className="ui-message-layer" aria-live="polite">{toasts.map(toast => <div className={`ui-message ui-message--${toast.type}`} key={toast.id}><span>{icons[toast.type]}</span><div>{toast.content}</div><button type="button" aria-label="关闭" onClick={() => remove(toast.id)}><X size={14}/></button></div>)}</div>
+  const layer = <div className="ui-message-layer" aria-live="polite">{toasts.map(toast => <div className={`ui-message ui-message--${toast.type}`} key={toast.id}><span>{icons[toast.type]}</span><div>{toast.content}</div><button type="button" aria-label={t("\u5173\u95ED")}onClick={()=>remove(toast.id)}><X size={14}/></button></div>)}</div>
   return [api, createPortal(layer, document.body)]
 }
 

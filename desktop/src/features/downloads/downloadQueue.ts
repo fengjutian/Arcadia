@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 /**
  * Pure FIFO queue of pending downloads that should only start once a running
  * slot frees up. The queue lives in localStorage so a refresh or a crash
@@ -102,11 +103,11 @@ export function queuedAgeMs(entry: QueuedDownload, now = Date.now()): number {
 /** Human-friendly wait time, e.g. "3 秒" / "2 分" / "1 小时". */
 export function formatQueuedAge(entry: QueuedDownload, now: number = Date.now()): string {
   const ms = queuedAgeMs(entry, now)
-  if (ms < 1000) return '刚刚'
+  if (ms < 1000) return t("\u521A\u521A")
   const sec = Math.floor(ms / 1000)
-  if (sec < 60) return `${sec} 秒`
+  if (sec < 60) return t("{value0} \u79D2",{value0:sec})
   const min = Math.floor(sec / 60)
-  if (min < 60) return `${min} 分`
+  if (min < 60) return t("{value0} \u5206",{value0:min})
   const hr = Math.floor(min / 60)
-  return `${hr} 小时`
+  return t("{value0} \u5C0F\u65F6",{value0:hr})
 }

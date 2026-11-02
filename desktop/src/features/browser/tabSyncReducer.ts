@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import type { BrowserTab } from '../../types'
 import type { NativeBrowserState } from '../../services/nativeBrowser'
 
@@ -31,9 +32,9 @@ export function fallbackTabTitle(url: string): string {
       const fileName = parsed.pathname.split('/').filter(Boolean).at(-1)
       if (fileName) return decodeURIComponent(fileName)
     }
-    return parsed.hostname || '新标签页'
+    return parsed.hostname ||t("\u65B0\u6807\u7B7E\u9875")
   } catch {
-    return '新标签页'
+    return t("\u65B0\u6807\u7B7E\u9875")
   }
 }
 

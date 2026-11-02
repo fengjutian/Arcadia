@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 /**
  * Recognising "the native WebView behind this tab is gone".
  *
@@ -18,5 +19,4 @@ export function isMissingWebviewError(error: unknown): boolean {
   return MISSING_WEBVIEW.test(message) || /browser tab webview not found/i.test(message)
 }
 
-export const MISSING_WEBVIEW_MESSAGE =
-  '该标签页的原生视图已失效（底层 WebView 不存在），已尝试自动重建。如果仍看到此页面，请点击「重试」。'
+export const MISSING_WEBVIEW_MESSAGE =t("\u8BE5\u6807\u7B7E\u9875\u7684\u539F\u751F\u89C6\u56FE\u5DF2\u5931\u6548\uFF08\u5E95\u5C42 WebView \u4E0D\u5B58\u5728\uFF09\uFF0C\u5DF2\u5C1D\u8BD5\u81EA\u52A8\u91CD\u5EFA\u3002\u5982\u679C\u4ECD\u770B\u5230\u6B64\u9875\u9762\uFF0C\u8BF7\u70B9\u51FB\u300C\u91CD\u8BD5\u300D\u3002")

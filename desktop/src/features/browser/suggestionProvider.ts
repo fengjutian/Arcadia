@@ -1,3 +1,4 @@
+import { translate } from '../../i18n'
 /**
  * Address-bar suggestion provider. Merges four sources — open tabs, history,
  * bookmarks, and the implicit "search" fallback — and ranks them by a small
@@ -108,7 +109,7 @@ export function buildSuggestions(input: SuggestionInputs): SuggestionItem[] {
   if (q) {
     items.set(`__search__:${q}`, {
       url: asText(searchTemplate).replace('{query}', encodeURIComponent(q)),
-      title: `搜索 "${q}"`,
+      title:translate("\u641C\u7D22 \"{value0}\"",{value0:q}),
       source: 'search',
       score: 10,
       searchTemplate: searchTemplate,

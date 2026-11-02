@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { useEffect, useState } from 'react'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { AssistantPanel } from './AssistantPanel'
@@ -17,7 +18,7 @@ export function FloatingAssistantWindow() {
     return () => unlisten?.()
   }, [])
 
-  if (!payload) return <div className="floating-assistant-error">无法读取 AI 助手上下文，请关闭后重试。</div>
+  if (!payload) return <div className="floating-assistant-error">{t("\u65E0\u6CD5\u8BFB\u53D6 AI \u52A9\u624B\u4E0A\u4E0B\u6587\uFF0C\u8BF7\u5173\u95ED\u540E\u91CD\u8BD5\u3002")}</div>
   return <div className="floating-assistant-shell">
     <AssistantPanel
       {...payload}

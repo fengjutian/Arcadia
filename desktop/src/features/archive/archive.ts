@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import type { ArchivedTab } from '../../api'
 import type { BrowserTab } from '../../types'
 
@@ -34,10 +35,10 @@ export interface ArchiveSection {
 }
 
 const BUCKET_LABEL: Record<ArchiveBucket, string> = {
-  today: '今天',
-  yesterday: '昨天',
-  week: '最近七天',
-  older: '更早',
+  today:t("\u4ECA\u5929"),
+  yesterday:t("\u6628\u5929"),
+  week:t("\u6700\u8FD1\u4E03\u5929"),
+  older:t("\u66F4\u65E9"),
 }
 
 const BUCKET_ORDER: readonly ArchiveBucket[] = ['today', 'yesterday', 'week', 'older']
@@ -67,11 +68,11 @@ export function groupArchivedTabs(items: readonly ArchivedTab[], now = Date.now(
   }
   return BUCKET_ORDER
     .filter(bucket => buckets.has(bucket))
-    .map(bucket => ({
-      bucket,
-      label: BUCKET_LABEL[bucket],
-      items: (buckets.get(bucket) ?? []).slice().sort((left, right) => right.archivedAt - left.archivedAt),
-    }))
+    .map(          (bucket
+
+
+
+     )          =>( {bucket,label:BUCKET_LABEL[bucket],items:(buckets.get(bucket)??[]).slice().sort((left,right)=>right.archivedAt-left.archivedAt),}))
 }
 
 /** Compact timestamp for archive rows ("11-02 09:41"). */

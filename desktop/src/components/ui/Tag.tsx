@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import type { HTMLAttributes, ReactNode } from 'react'
 
 export interface TagProps extends HTMLAttributes<HTMLSpanElement> {
@@ -13,6 +14,6 @@ export function Tag({ color = 'default', icon, closable, onClose, className = ''
   return <span className={`ui-tag ant-tag ui-tag--${preset} ${className}`.trim()} {...props} style={style}>
     {icon && <span className="ui-tag__icon">{icon}</span>}
     <span>{children}</span>
-    {closable && <button type="button" className="ui-tag__close" aria-label="移除" onClick={event => { event.stopPropagation(); onClose?.() }}>×</button>}
+    {closable && <button type="button" className="ui-tag__close" aria-label={t("\u79FB\u9664")}onClick={event=>{event.stopPropagation();onClose?.()}}>×</button>}
   </span>
 }

@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Input, Modal, Tag, Typography, type InputRef } from '../../components/ui'
 import {
@@ -25,14 +26,14 @@ import {
 } from './commandModel'
 
 const MODE_LABEL: Record<CommandMode, string> = {
-  all: '全部',
-  ask: '问 AI',
-  tabs: '标签页',
-  bookmarks: '收藏',
-  history: '历史',
-  archive: '归档',
-  knowledge: '知识库',
-  actions: '动作',
+  all:t("\u5168\u90E8"),
+  ask:t("\u95EE AI"),
+  tabs:t("\u6807\u7B7E\u9875"),
+  bookmarks:t("\u6536\u85CF"),
+  history:t("\u5386\u53F2"),
+  archive:t("\u5F52\u6863"),
+  knowledge:t("\u77E5\u8BC6\u5E93"),
+  actions:t("\u52A8\u4F5C"),
 }
 
 const KIND_ICON: Record<CommandKind, ReactNode> = {
@@ -112,50 +113,50 @@ export function CommandPalette({
     return () => cancelAnimationFrame(frame)
   }, [open])
 
-  const tabItems = useMemo<CommandItem[]>(() => tabs.map(tab => ({
-    id: `tab:${tab.id}`,
-    kind: 'tab',
-    title: tab.title || tab.url || '新标签页',
-    subtitle: tab.url,
-    meta: tab.id === activeId ? '当前' : tab.pinned ? '固定' : undefined,
-    keywords: tab.private ? '私密' : undefined,
-    run: () => onActivateTab(tab.id),
-  })), [tabs, activeId, onActivateTab])
+  const tabItems = useMemo<CommandItem[]>(() => tabs.map(       (tab
 
-  const historyItems = useMemo<CommandItem[]>(() => history.map(entry => ({
-    id: `history:${entry.url}`,
-    kind: 'history',
-    title: entry.title || entry.url,
-    subtitle: entry.url,
-    run: () => onNavigate(entry.url),
-  })), [history, onNavigate])
 
-  const bookmarkItems = useMemo<CommandItem[]>(() => bookmarks.map(bookmark => ({
-    id: `bookmark:${bookmark.id}`,
-    kind: 'bookmark',
-    title: bookmark.title || bookmark.url,
-    subtitle: bookmark.url,
-    meta: bookmark.folder || undefined,
-    keywords: bookmark.note || undefined,
-    run: () => onNavigate(bookmark.url),
-  })), [bookmarks, onNavigate])
+
+
+
+
+
+   )                                                         =>( {id:`tab:${tab.id}`,kind:'tab',title:tab.title||tab.url||t("\u65B0\u6807\u7B7E\u9875"),subtitle:tab.url,meta:tab.id===activeId?t("\u5F53\u524D"):tab.pinned?t("\u56FA\u5B9A"):undefined,keywords:tab.private?t("\u79C1\u5BC6"):undefined,run:()=>onActivateTab(tab.id),})),[tabs,activeId,onActivateTab])
+
+  const historyItems = useMemo<CommandItem[]>(() => history.map(         (entry
+
+
+
+
+
+   )                                                                  =>( {id:`history:${entry.url}`,kind:'history',title:entry.title||entry.url,subtitle:entry.url,run:()=>onNavigate(entry.url),})),[history,onNavigate])
+
+  const bookmarkItems = useMemo<CommandItem[]>(() => bookmarks.map(            (bookmark
+
+
+
+
+
+
+
+   )                                                                        =>( {id:`bookmark:${bookmark.id}`,kind:'bookmark',title:bookmark.title||bookmark.url,subtitle:bookmark.url,meta:bookmark.folder||undefined,keywords:bookmark.note||undefined,run:()=>onNavigate(bookmark.url),})),[bookmarks,onNavigate])
 
   const actionItems = useMemo<CommandItem[]>(() => [
-    { id: 'action:new-tab', kind: 'action', title: '新建标签页', shortcut: 'Ctrl + T', keywords: 'new tab', run: onNewTab },
-    { id: 'action:close-tab', kind: 'action', title: '关闭当前标签页', shortcut: 'Ctrl + W', keywords: 'close tab', run: () => onCloseTab(activeId) },
-    { id: 'action:save-page', kind: 'action', title: '保存当前页到知识库', keywords: 'save markdown', run: onSavePage },
-    { id: 'action:bookmark', kind: 'action', title: '收藏当前页', shortcut: 'Ctrl + D', keywords: 'bookmark', run: onBookmarkPage },
-    { id: 'action:archive-tab', kind: 'action', title: '归档当前标签页', keywords: 'archive close', run: onArchiveTab },
-    { id: 'action:ai', kind: 'action', title: '打开 AI 助手', keywords: 'assistant', run: onToggleAi },
-    { id: 'action:notes', kind: 'action', title: '网页笔记面板', shortcut: 'Ctrl + Shift + N', keywords: 'notes', run: onToggleNotes },
-    { id: 'action:bulk-summary', kind: 'action', title: '多链接 AI 摘要', shortcut: 'Ctrl + Shift + S', keywords: 'bulk summary', run: onBulkSummary },
-    { id: 'action:workspace', kind: 'action', title: '保存当前标签为工作区', shortcut: 'Ctrl + Shift + W', keywords: 'workspace', run: onSaveWorkspace },
+    { id: 'action:new-tab', kind: 'action', title:t("\u65B0\u5EFA\u6807\u7B7E\u9875"),shortcut:'Ctrl + T',keywords:'new tab',run:onNewTab},
+    { id: 'action:close-tab', kind: 'action', title:t("\u5173\u95ED\u5F53\u524D\u6807\u7B7E\u9875"),shortcut:'Ctrl + W',keywords:'close tab',run:()=>onCloseTab(activeId)},
+    { id: 'action:save-page', kind: 'action', title:t("\u4FDD\u5B58\u5F53\u524D\u9875\u5230\u77E5\u8BC6\u5E93"),keywords:'save markdown',run:onSavePage},
+    { id: 'action:bookmark', kind: 'action', title:t("\u6536\u85CF\u5F53\u524D\u9875"),shortcut:'Ctrl + D',keywords:'bookmark',run:onBookmarkPage},
+    { id: 'action:archive-tab', kind: 'action', title:t("\u5F52\u6863\u5F53\u524D\u6807\u7B7E\u9875"),keywords:'archive close',run:onArchiveTab},
+    { id: 'action:ai', kind: 'action', title:t("\u6253\u5F00 AI \u52A9\u624B"),keywords:'assistant',run:onToggleAi},
+    { id: 'action:notes', kind: 'action', title:t("\u7F51\u9875\u7B14\u8BB0\u9762\u677F"),shortcut:'Ctrl + Shift + N',keywords:'notes',run:onToggleNotes},
+    { id: 'action:bulk-summary', kind: 'action', title:t("\u591A\u94FE\u63A5 AI \u6458\u8981"),shortcut:'Ctrl + Shift + S',keywords:'bulk summary',run:onBulkSummary},
+    { id: 'action:workspace', kind: 'action', title:t("\u4FDD\u5B58\u5F53\u524D\u6807\u7B7E\u4E3A\u5DE5\u4F5C\u533A"),shortcut:'Ctrl + Shift + W',keywords:'workspace',run:onSaveWorkspace},
   ], [activeId, onNewTab, onCloseTab, onSavePage, onBookmarkPage, onArchiveTab, onToggleAi, onToggleNotes, onBulkSummary, onSaveWorkspace])
 
   useEffect(() => {
     if (!open) return
     const q = effectiveQuery.trim()
-    const wantsDocuments = effectiveMode === 'knowledge' || (effectiveMode === 'all' && q.length >= 2)
+    const wantsDocuments = effectiveMode === 'knowledge' ||( effectiveMode === 'all' && q.length >= 2)
     if (!wantsDocuments || q.length === 0) {
       setDocuments([])
       return
@@ -165,14 +166,14 @@ export function CommandPalette({
       void searchDocuments(q)
         .then(hits => {
           if (cancelled) return
-          setDocuments(hits.slice(0, 6).map(hit => ({
-            id: `document:${hit.id}`,
-            kind: 'document' as const,
-            title: hit.title || hit.url,
-            subtitle: hit.url,
-            meta: hit.wordCount > 0 ? `${hit.wordCount} 字` : undefined,
-            run: () => onNavigate(hit.url),
-          })))
+          setDocuments(hits.slice(0, 6).map(       (hit
+
+
+
+
+
+
+           )                                    =>( {id:`document:${hit.id}`,kind:'document'as const,title:hit.title||hit.url,subtitle:hit.url,meta:hit.wordCount>0?t("{value0} \u5B57",{value0:hit.wordCount}):undefined,run:()=>onNavigate(hit.url),})))
         })
         .catch(() => { if (!cancelled) setDocuments([]) })
     }, 160)
@@ -188,14 +189,14 @@ export function CommandPalette({
       void listArchivedTabs(archiveLookup, 50)
         .then(rows => {
           if (cancelled) return
-          setArchived(rows.map(row => ({
-            id: `archive:${row.id}`,
-            kind: 'archive' as const,
-            title: row.title || row.url,
-            subtitle: row.url,
-            meta: formatArchivedAt(row.archivedAt),
-            run: () => onNavigate(row.url),
-          })))
+          setArchived(rows.map(       (row
+
+
+
+
+
+
+           )                       =>( {id:`archive:${row.id}`,kind:'archive'as const,title:row.title||row.url,subtitle:row.url,meta:formatArchivedAt(row.archivedAt),run:()=>onNavigate(row.url),})))
         })
         .catch(() => { if (!cancelled) setArchived([]) })
     }, archiveLookup ? 160 : 0)
@@ -206,8 +207,8 @@ export function CommandPalette({
     ? {
         id: 'ask',
         kind: 'action',
-        title: `问 AI：${effectiveQuery}`,
-        subtitle: '在 AI 助手中继续追问',
+        title:t("\u95EE AI\uFF1A{value0}",{value0:effectiveQuery}),
+        subtitle:t("\u5728 AI \u52A9\u624B\u4E2D\u7EE7\u7EED\u8FFD\u95EE"),
         run: () => onAskAi(effectiveQuery),
       }
     : null
@@ -263,14 +264,14 @@ export function CommandPalette({
         ref={inputRef}
         value={query}
         onChange={event => { setQuery(event.target.value); setHighlight(0) }}
-        placeholder="搜索标签、历史、收藏、归档、知识库，或输入 @ ~ / ? > 切换范围"
+        placeholder={t("\u641C\u7D22\u6807\u7B7E\u3001\u5386\u53F2\u3001\u6536\u85CF\u3001\u5F52\u6863\u3001\u77E5\u8BC6\u5E93\uFF0C\u6216\u8F93\u5165 @ ~ / ? > \u5207\u6362\u8303\u56F4")}
         size="large"
         prefix={<SearchOutlined />}
-        suffix={<span className="command-palette__mode">{MODE_LABEL[effectiveMode]} · Tab 切换</span>}
+        suffix={<span className="command-palette__mode">{MODE_LABEL[effectiveMode]} {t("\xB7 Tab \u5207\u6362")}</span>}
       />
       <div className="tab-search-palette__list">
         {rows.length === 0
-          ? <div className="tab-search-palette__empty">没有匹配项</div>
+          ? <div className="tab-search-palette__empty">{t("\u6CA1\u6709\u5339\u914D\u9879")}</div>
           : sections.map(section => <section key={section.kind} className="command-palette__section">
               <header>{section.label}</header>
               {section.items.map(item => {
@@ -293,8 +294,8 @@ export function CommandPalette({
               })}
             </section>)}
       </div>
-      <Typography.Text type="secondary" className="tab-search-palette__hint">
-        ↑↓ 选择 · Enter 执行 · Tab 切换范围 · Esc 关闭
+      <Typography.Text type="secondary" className="tab-search-palette__hint">{t("\u2191\u2193 \u9009\u62E9 \xB7 Enter \u6267\u884C \xB7 Tab \u5207\u6362\u8303\u56F4 \xB7 Esc \u5173\u95ED")} 
+
       </Typography.Text>
     </div>
   </Modal>

@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { forwardRef, useImperativeHandle, useRef, useState, type InputHTMLAttributes, type KeyboardEvent, type ReactNode, type TextareaHTMLAttributes } from 'react'
 
 export interface InputRef {
@@ -21,7 +22,7 @@ const BaseInput = forwardRef<InputRef, InputProps>(function Input({
   onPressEnter, onKeyDown, value, defaultValue, type = 'text', style, ...props
 }, forwardedRef) {
   const inputRef = useRef<HTMLInputElement>(null)
-  useImperativeHandle(forwardedRef, () => ({
+  useImperativeHandle(forwardedRef, () =>( {
     input: inputRef.current,
     focus(options) {
       inputRef.current?.focus()
@@ -46,7 +47,7 @@ const BaseInput = forwardRef<InputRef, InputProps>(function Input({
   return <span className={`ui-input ant-input-affix-wrapper ui-input--${size} ${status ? `is-${status}` : ''} ${props.disabled ? 'is-disabled' : ''} ${className}`.trim()} style={style}>
     {prefix && <span className="ui-input__prefix ant-input-prefix">{prefix}</span>}
     <input ref={inputRef} className="ui-input__control ant-input" type={type} value={value} defaultValue={defaultValue} onKeyDown={event => { if (event.key === 'Enter') onPressEnter?.(event); onKeyDown?.(event) }} {...props}/>
-    {allowClear && hasValue && <button type="button" className="ui-input__clear" aria-label="清空" onClick={clear}>×</button>}
+    {allowClear && hasValue && <button type="button" className="ui-input__clear" aria-label={t("\u6E05\u7A7A")}onClick={clear}>×</button>}
     {suffix && <span className="ui-input__suffix ant-input-suffix">{suffix}</span>}
   </span>
 })
@@ -54,7 +55,7 @@ const BaseInput = forwardRef<InputRef, InputProps>(function Input({
 function Password(props: InputProps & { visibilityToggle?: boolean }) {
   const [visible, setVisible] = useState(false)
   const { visibilityToggle = true, suffix, ...rest } = props
-  return <BaseInput {...rest} type={visible ? 'text' : 'password'} suffix={<>{suffix}{visibilityToggle && <button type="button" className="ui-input__password-toggle" aria-label={visible ? '隐藏密码' : '显示密码'} onClick={() => setVisible(value => !value)}>{visible ? '隐藏' : '显示'}</button>}</>}/>
+  return <BaseInput {...rest} type={visible ? 'text' : 'password'} suffix={<>{suffix}{visibilityToggle && <button type="button" className="ui-input__password-toggle" aria-label={visible ?t("\u9690\u85CF\u5BC6\u7801"):t("\u663E\u793A\u5BC6\u7801")}onClick={()=>setVisible(value=>!value)}>{visible?t("\u9690\u85CF"):t("\u663E\u793A")}</button>}</>}/>
 }
 
 export interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {

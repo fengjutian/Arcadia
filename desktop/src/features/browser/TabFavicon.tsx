@@ -1,9 +1,10 @@
+import { t } from '../../i18n'
 import { useState } from 'react'
 import { GlobalOutlined } from '../../components/ui/icons'
 
 function faviconCandidates(favicon: string | undefined, pageUrl: string): string[] {
   const candidates: string[] = []
-  if (favicon && (/^https:\/\//i.test(favicon) || /^data:image\//i.test(favicon))) candidates.push(favicon)
+  if (favicon &&( /^https:\/\//i.test(favicon) || /^data:image\//i.test(favicon))) candidates.push(favicon)
   try {
     const page = new URL(pageUrl)
     if (page.protocol === 'https:') candidates.push(`${page.origin}/favicon.ico`)
@@ -14,6 +15,6 @@ function faviconCandidates(favicon: string | undefined, pageUrl: string): string
 export function TabFavicon({ favicon, pageUrl }: { favicon?: string; pageUrl: string }) {
   const candidates = faviconCandidates(favicon, pageUrl)
   const [index, setIndex] = useState(0)
-  if (!candidates[index]) return <GlobalOutlined aria-label="默认网站图标"/>
+  if (!candidates[index]) return <GlobalOutlined aria-label={t("\u9ED8\u8BA4\u7F51\u7AD9\u56FE\u6807")}/>
   return <img src={candidates[index]} alt="" referrerPolicy="no-referrer" onError={() => setIndex(current => current + 1)}/>
 }

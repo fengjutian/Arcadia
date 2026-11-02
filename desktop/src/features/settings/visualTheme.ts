@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import alpineSunrise from '../../assets/themes/alpine-sunrise.webp'
 import auroraFlow from '../../assets/themes/aurora-flow.webp'
 import mistyLake from '../../assets/themes/misty-lake.webp'
@@ -14,9 +15,9 @@ const THEME_KIND_KEY = 'arcadia-theme-kind'
 const IMAGE_THEME_KEY = 'arcadia-image-theme'
 
 export const IMAGE_THEMES: Array<{ id: ImageThemeId; label: string; description: string; url: string }> = [
-  { id: 'alpine', label: '雪山晨光', description: '明亮温暖的高山日出', url: alpineSunrise },
-  { id: 'aurora', label: '极光流影', description: '深邃梦幻的蓝紫流光', url: auroraFlow },
-  { id: 'forest', label: '雾林湖泊', description: '安静自然的森林晨雾', url: mistyLake },
+  { id: 'alpine', label:t("\u96EA\u5C71\u6668\u5149"),description:t("\u660E\u4EAE\u6E29\u6696\u7684\u9AD8\u5C71\u65E5\u51FA"),url:alpineSunrise},
+  { id: 'aurora', label:t("\u6781\u5149\u6D41\u5F71"),description:t("\u6DF1\u9083\u68A6\u5E7B\u7684\u84DD\u7D2B\u6D41\u5149"),url:auroraFlow},
+  { id: 'forest', label:t("\u96FE\u6797\u6E56\u6CCA"),description:t("\u5B89\u9759\u81EA\u7136\u7684\u68EE\u6797\u6668\u96FE"),url:mistyLake},
 ]
 
 export function readAppearancePreference(): AppearancePreference {

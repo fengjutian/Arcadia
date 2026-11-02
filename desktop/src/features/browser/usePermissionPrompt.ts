@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { onPermissionRequest, type PermissionRequest } from '../../services/nativeBrowser'
 import { respondPermissionRequest } from '../../services/permissions'
@@ -122,12 +123,12 @@ export function describePrompt(request: PermissionRequest): { origin: string; ki
 }
 
 const PERMISSION_LABELS: Record<PermissionRequest['kind'], string> = {
-  camera: '摄像头',
-  microphone: '麦克风',
-  location: '定位',
-  notifications: '通知',
-  clipboard: '剪贴板读取',
-  media: '摄像头 + 麦克风',
+  camera:t("\u6444\u50CF\u5934"),
+  microphone:t("\u9EA6\u514B\u98CE"),
+  location:t("\u5B9A\u4F4D"),
+  notifications:t("\u901A\u77E5"),
+  clipboard:t("\u526A\u8D34\u677F\u8BFB\u53D6"),
+  media:t("\u6444\u50CF\u5934 + \u9EA6\u514B\u98CE"),
 }
 
 function originDisplay(origin: string): string {

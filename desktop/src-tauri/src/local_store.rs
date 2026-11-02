@@ -3623,13 +3623,7 @@ fn archived_tab_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalArchi
 const ARCHIVED_TAB_COLUMNS: &str =
     "id,url,title,favicon,archived_at,visited_at,source,workspace_id";
 
-#[tauri::command]
-pub fn local_archive_tab(
-    app: tauri::AppHandle,
-    tab: LocalArchivedTab,
-) -> Result<LocalArchivedTab, String> {
-    validate_archived_tab(&tab)?;
-    let database = connection(&app)?;
+fn insert_archived_tab(database: &Connection, tab: &LocalArchivedTab) -> Result<(), String> {
     // Upsert rather than INSERT OR REPLACE: REPLACE skips DELETE triggers, which
     // would desynchronise the external-content FTS table.
     database
@@ -3663,19 +3657,16 @@ pub fn local_archive_tab(
             [],
         )
         .map_err(|error| error.to_string())?;
-    Ok(tab)
+    Ok(())
 }
 
-#[tauri::command]
-pub fn local_list_archived_tabs(
-    app: tauri::AppHandle,
-    query: Option<String>,
-    limit: Option<u32>,
+fn query_archived_tabs(
+    database: &Connection,
+    query: &str,
+    limit: i64,
 ) -> Result<Vec<LocalArchivedTab>, String> {
-    let database = connection(&app)?;
-    let limit = i64::from(limit.unwrap_or(200).clamp(1, 1000));
-    let needle = query.unwrap_or_default();
-    let needle = needle.trim();
+    let limit = limit.clamp(1, 1000);
+    let needle = query.trim();
     if needle.is_empty() {
         let mut statement = database
             .prepare(&format!(
@@ -3694,18 +3685,18 @@ pub fn local_list_archived_tabs(
     if fts_query.is_empty() {
         return Ok(Vec::new());
     }
+    let columns = ARCHIVED_TAB_COLUMNS
+        .split(',')
+        .map(|column| format!("a.{}", column.trim()))
+        .collect::<Vec<_>>()
+        .join(",");
     let mut statement = database
         .prepare(&format!(
-            "SELECT {} FROM tab_archive_fts f
+            "SELECT {columns} FROM tab_archive_fts f
              JOIN tab_archive a ON a.rowid = f.rowid
              WHERE tab_archive_fts MATCH ?1
              ORDER BY bm25(tab_archive_fts)
-             LIMIT ?2",
-            ARCHIVED_TAB_COLUMNS
-                .split(',')
-                .map(|column| format!("a.{}", column.trim()))
-                .collect::<Vec<_>>()
-                .join(",")
+             LIMIT ?2"
         ))
         .map_err(|error| error.to_string())?;
     let rows = statement
@@ -3713,6 +3704,26 @@ pub fn local_list_archived_tabs(
         .map_err(|error| error.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_archive_tab(
+    app: tauri::AppHandle,
+    tab: LocalArchivedTab,
+) -> Result<LocalArchivedTab, String> {
+    validate_archived_tab(&tab)?;
+    insert_archived_tab(&connection(&app)?, &tab)?;
+    Ok(tab)
+}
+
+#[tauri::command]
+pub fn local_list_archived_tabs(
+    app: tauri::AppHandle,
+    query: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<LocalArchivedTab>, String> {
+    let limit = i64::from(limit.unwrap_or(200));
+    query_archived_tabs(&connection(&app)?, &query.unwrap_or_default(), limit)
 }
 
 #[tauri::command]
@@ -5575,5 +5586,40 @@ mod tests {
                 .unwrap();
             assert_eq!(count, 1, "query {query} should match the Chinese title");
         }
+    }
+
+    #[test]
+    fn archive_roundtrips_through_fts() {
+        let mut database = fresh();
+        run_migrations(&mut database).unwrap();
+        let tab = LocalArchivedTab {
+            id: "archive-1".into(),
+            url: "https://example.com/rust-ownership".into(),
+            title: "Rust ownership explained".into(),
+            favicon: None,
+            archived_at: 1_700_000_000_000,
+            visited_at: Some(1_699_999_000_000),
+            source: "manual".into(),
+            workspace_id: None,
+        };
+        insert_archived_tab(&database, &tab).unwrap();
+
+        let hits = query_archived_tabs(&database, "ownership", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, "archive-1");
+
+        // An update must rewrite the FTS row, not duplicate it.
+        let mut renamed = tab.clone();
+        renamed.title = "Rust borrowing explained".into();
+        insert_archived_tab(&database, &renamed).unwrap();
+        assert!(query_archived_tabs(&database, "ownership", 10).unwrap().is_empty());
+        assert_eq!(query_archived_tabs(&database, "borrowing", 10).unwrap().len(), 1);
+
+        // A delete must remove the FTS row as well.
+        database
+            .execute("DELETE FROM tab_archive WHERE id = ?1", params!["archive-1"])
+            .unwrap();
+        assert!(query_archived_tabs(&database, "borrowing", 10).unwrap().is_empty());
+        assert!(query_archived_tabs(&database, "", 10).unwrap().is_empty());
     }
 }

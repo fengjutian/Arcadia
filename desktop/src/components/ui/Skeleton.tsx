@@ -1,1 +1,2 @@
-export function Skeleton({ active, rows = 4, className = '' }: { active?: boolean; rows?: number; className?: string }) { return <div className={`ui-skeleton${active ? ' is-active' : ''} ${className}`.trim()} aria-label="加载中">{Array.from({ length: rows }, (_, index) => <span key={index} style={{ width: `${100 - index * 9}%` }}/>)}</div> }
+import { t } from '../../i18n'
+export function Skeleton({ active, rows = 4, className = '' }: { active?: boolean; rows?: number; className?: string }) { return <div className={`ui-skeleton${active ? ' is-active' : ''} ${className}`.trim()} aria-label={t("\u52A0\u8F7D\u4E2D")}>{Array.from({length:rows},(_,index)=><span key={index}style={{width:`${100-index*9}%`}}/>)}</div>}

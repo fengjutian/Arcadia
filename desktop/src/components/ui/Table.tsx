@@ -1,3 +1,4 @@
+import { t } from '../../i18n'
 import { useEffect, useMemo, useState, type CSSProperties, type Key, type ReactNode } from 'react'
 import { Empty } from './Empty'
 import { Spin } from './Spin'
@@ -53,6 +54,6 @@ export function Table<RecordType>({ columns = [], dataSource = [], rowKey, rowCl
       {loading && <div className="ui-table__loading"><Spin/></div>}
       {!loading && dataSource.length === 0 && <Empty/>}
     </div>
-    {pagination !== false && pages > 1 && <div className="ui-table__pagination"><button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>上一页</button><span>{page} / {pages}</span><button type="button" disabled={page >= pages} onClick={() => setPage(value => value + 1)}>下一页</button></div>}
+    {pagination !== false && pages > 1 && <div className="ui-table__pagination"><button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>{t("\u4E0A\u4E00\u9875")}</button><span>{page} / {pages}</span><button type="button"disabled={page>=pages}onClick={()=>setPage(value=>value+1)}>{t("\u4E0B\u4E00\u9875")}</button></div>}
   </div>
 }
