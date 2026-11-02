@@ -180,7 +180,10 @@ pub fn toggle_fullscreen(app: AppHandle) -> Result<bool, String> {
 /// `tauri-plugin-dialog` is wired in, and fall back to manual entry
 /// otherwise.
 #[tauri::command]
-pub async fn pick_files(app: AppHandle, options: FilePickOptions) -> Result<FilePickResult, String> {
+pub async fn pick_files(
+    app: AppHandle,
+    options: FilePickOptions,
+) -> Result<FilePickResult, String> {
     use tauri_plugin_dialog::DialogExt;
     let multiple = options.multiple.unwrap_or(false);
     let directory = options.directory.unwrap_or(false);

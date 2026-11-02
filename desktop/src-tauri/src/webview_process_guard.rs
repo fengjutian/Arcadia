@@ -47,7 +47,9 @@ mod windows_guard {
         let event_app = app.clone();
         let event_label = label.to_string();
         let _ = crate::engine::with_platform_webview(app, label, move |platform| {
-            let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else { return };
+            let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else {
+                return;
+            };
             let handler = ProcessFailedEventHandler::create(Box::new(move |_sender, args| {
                 let Some(args) = args else { return Ok(()) };
                 let mut raw_kind = COREWEBVIEW2_PROCESS_FAILED_KIND(0);
@@ -77,4 +79,3 @@ pub fn attach_process_guard<R: Runtime>(app: &AppHandle<R>, label: &str) {
     #[cfg(not(target_os = "windows"))]
     let _ = (app, label);
 }
-

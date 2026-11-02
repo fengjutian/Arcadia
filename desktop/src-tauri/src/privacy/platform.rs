@@ -375,7 +375,11 @@ mod win {
             ));
             let token_registered = if let Ok(core2) = core.cast::<ICoreWebView2_2>() {
                 let mut token = 0;
-                unsafe { core2.add_WebResourceRequested(&handler, &mut token).map(|()| token) }
+                unsafe {
+                    core2
+                        .add_WebResourceRequested(&handler, &mut token)
+                        .map(|()| token)
+                }
             } else {
                 Err(windows::core::Error::from_win32())
             };

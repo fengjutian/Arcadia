@@ -1,6 +1,6 @@
 import { t } from '../../i18n'
 import { Button, Input, message, Modal, Popconfirm, Segmented, Select, Skeleton, Switch, Tabs, Tag, Typography, Upload } from '../../components/ui'
-import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
+import { BookOutlined, ClockCircleOutlined, DeleteOutlined, EditOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DocumentCard } from '../../features/documents/DocumentCard'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
@@ -111,6 +111,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         listBrowserHistory().then(setHistory),
         listArchivedTabs().then(setArchived),
         listReadingQueue().then(setQueue),
+        listBookmarks().then(setBookmarks),
         downloadCenter.refresh(),
       ])
       messageApi.success(t("知识库已刷新"))
@@ -126,6 +127,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     void listBrowserHistory().then(setHistory)
     void listArchivedTabs().then(setArchived)
     void listReadingQueue().then(setQueue)
+    void listBookmarks().then(setBookmarks)
     void refreshCollections()
   }, [])
 
@@ -281,6 +283,47 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   function updateAutoArchive(next: AutoArchiveSettings) {
     setAutoArchive(next)
     writeAutoArchiveSettings(next)
+  }
+
+  function openBookmark(bookmark: BookmarkRecord) {
+    window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url: bookmark.url } }))
+    onOpenBrowser?.()
+  }
+
+  function beginBookmarkEdit(bookmark: BookmarkRecord) {
+    setEditingBookmark(bookmark)
+    setBookmarkDraft({ title: bookmark.title, folder: bookmark.folder, note: bookmark.note })
+  }
+
+  async function removeBookmarkEntry(bookmark: BookmarkRecord) {
+    try {
+      await removeBookmark(bookmark.id)
+      setBookmarks(items => items.filter(item => item.id !== bookmark.id))
+      messageApi.success(t("已删除收藏"))
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : t("删除收藏失败"))
+    }
+  }
+
+  async function saveBookmarkEdit() {
+    if (!editingBookmark) return
+    const title = bookmarkDraft.title.trim()
+    if (!title) {
+      messageApi.error(t("收藏标题不能为空"))
+      return
+    }
+    try {
+      const updated = await updateBookmark(editingBookmark.id, {
+        title,
+        folder: bookmarkDraft.folder.trim(),
+        note: bookmarkDraft.note,
+      })
+      setBookmarks(items => items.map(item => item.id === updated.id ? updated : item))
+      setEditingBookmark(null)
+      messageApi.success(t("收藏已更新"))
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : t("更新收藏失败"))
+    }
   }
 
   const visibleDocuments = useMemo(() => {
@@ -503,6 +546,36 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         </div>}
   </div>
 
+  const bookmarkContent = <div className="library-module">
+    <div className="library-section-head">
+      <div>
+        <h2>{t("收藏")}</h2>
+        <p>{t("浏览器收藏的页面。可在这里打开、改名或删除。")}</p>
+      </div>
+      <span className="library-result-count">{bookmarks.length} {t("条")}</span>
+    </div>
+    {bookmarks.length === 0
+      ? <div className="library-empty-state library-empty-state--compact">
+          <span className="library-empty-state__icon"><StarOutlined/></span>
+          <h3>{t("还没有收藏")}</h3>
+          <p>{t("在浏览器里按 Ctrl+D 收藏当前页，之后会出现在这里。")}</p>
+        </div>
+      : <div className="library-activity-list">
+          {bookmarks.map(item => <div className="library-archive-row" key={item.id}>
+            <button type="button" className="library-activity" onClick={() => openBookmark(item)}>
+              <span className="library-activity__icon"><StarOutlined/></span>
+              <span className="library-activity__body">
+                <strong title={item.title || item.url}>{item.title || item.url}</strong>
+                <small><span>{queueHost(item.url)}</span><span>{item.folder || t("未分类")}</span></small>
+              </span>
+              <RightOutlined className="library-activity__arrow"/>
+            </button>
+            <Button type="text" size="small" icon={<EditOutlined/>} aria-label={t("编辑收藏")} onClick={() => beginBookmarkEdit(item)}/>
+            <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("删除收藏")} onClick={() => void removeBookmarkEntry(item)}/>
+          </div>)}
+        </div>}
+  </div>
+
   const downloadContent = <div className="library-module">
     <div className="library-section-head">
       <div>
@@ -575,6 +648,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
             { key: 'history', label: <TabLabel label={t("近期浏览")} count={recentHistory.length}/>,children:historyContent},
             { key: 'archive', label: <TabLabel label={t("归档")} count={archived.length}/>,children:archiveContent},
             { key: 'queue', label: <TabLabel label={t("待读")} count={queue.length}/>, children: queueContent },
+            { key: 'bookmarks', label: <TabLabel label={t("收藏")} count={bookmarks.length}/>, children: bookmarkContent },
             { key: 'downloads', label: <TabLabel label={t("下载记录")} count={downloadCenter.records.length}/>,children:downloadContent},
           ]}
         />
@@ -604,6 +678,20 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
 
     <Modal title={t("新建集合")} open={creating} onCancel={()=>{setCreating(false);setNewName('')}} onOk={()=>void createNewCollection()} okText={t("创建")} cancelText={t("取消")}>
       <Input autoFocus placeholder={t("集合名称")} value={newName} onChange={event=>setNewName(event.target.value)} onPressEnter={()=>void createNewCollection()}/>
+    </Modal>
+    <Modal
+      title={t("编辑收藏")}
+      open={Boolean(editingBookmark)}
+      onCancel={() => setEditingBookmark(null)}
+      onOk={() => void saveBookmarkEdit()}
+      okText={t("保存")}
+      cancelText={t("取消")}
+    >
+      <div className="library-bookmark-form">
+        <Input placeholder={t("标题")} value={bookmarkDraft.title} onChange={event => setBookmarkDraft({ ...bookmarkDraft, title: event.target.value })}/>
+        <Input placeholder={t("文件夹（可选）")} value={bookmarkDraft.folder} onChange={event => setBookmarkDraft({ ...bookmarkDraft, folder: event.target.value })}/>
+        <Input.TextArea placeholder={t("备注（可选）")} value={bookmarkDraft.note} autoSize={{ minRows: 2, maxRows: 4 }} onChange={event => setBookmarkDraft({ ...bookmarkDraft, note: event.target.value })}/>
+      </div>
     </Modal>
     <DocumentDetailDrawer document={selected} onClose={() => setSelected(null)} onDeleted={id => setDocuments(items => items.filter(item => item.id !== id))} onExported={onExported} onUpdated={handleDocumentUpdated}/>
   </section>

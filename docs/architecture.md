@@ -6,7 +6,8 @@
 React UI（Browser / Library / Search / Assistant / Settings）
   │ 179 个 typed Tauri commands
 Tauri + Rust
-  ├── browser/        WebView 生命周期、导航校验、快照
+  ├── engine/         PageEngine trait + WryPageEngine（唯一持有 tauri::Webview 的层）
+  ├── browser/        导航校验、URL 规范化、页面脚本文本
   ├── local_store.rs  SQLite + 26 个顺序迁移 + FTS5 + 备份恢复
   ├── rag/            chunker / indexer / lexical / vector / fusion / reranker / citation / evaluator
   ├── providers/      openai / ollama / embedding

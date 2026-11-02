@@ -124,7 +124,13 @@ pub trait PageObserver: Send + Sync {
     /// The page asked for a new window (`target=_blank`, `window.open`).
     fn new_window(&self, opener_label: &str, url: &str, private: bool);
     /// Returns `true` to let the download proceed, `false` to veto it.
-    fn download_requested(&self, label: &str, url: &str, destination: &str, file_name: &str) -> bool;
+    fn download_requested(
+        &self,
+        label: &str,
+        url: &str,
+        destination: &str,
+        file_name: &str,
+    ) -> bool;
     /// A download reached a terminal state.
     fn download_finished(&self, label: &str, url: &str, path: Option<&str>, success: bool);
 }
@@ -272,7 +278,10 @@ mod tests {
 
     #[test]
     fn engine_errors_keep_frontend_visible_wording() {
-        assert_eq!(EngineError::NotFound.to_string(), "browser tab webview not found");
+        assert_eq!(
+            EngineError::NotFound.to_string(),
+            "browser tab webview not found"
+        );
         assert_eq!(EngineError::Timeout.to_string(), "page script timed out");
         assert_eq!(
             String::from(EngineError::msg("boom")),

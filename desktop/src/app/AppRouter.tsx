@@ -39,7 +39,7 @@ export function AppRouter() {
   }
   const secondaryViews: Exclude<View, 'browser'>[] = ['library', 'search', 'ai', 'mcp', 'settings']
   return <AppLayout view={view} onViewChange={changeView}><Suspense fallback={<div className="route-loading"><Spin size="large"/></div>}>
-    <div className={`route-view${view === 'browser' ? '' : ' is-hidden'}`} data-view="browser"><BrowserPage visible={view === 'browser'} onSearchKnowledge={query => { setKnowledgeQuery(query); changeView('search') }}/></div>
+    <div className={`route-view${view === 'browser' ? '' : ' is-hidden'}`} data-view="browser"><BrowserPage visible={view === 'browser'} onOpenLibrary={() => changeView('library')} onSearchKnowledge={query => { setKnowledgeQuery(query); changeView('search') }}/></div>
     {secondaryViews.map(pageView => mountedViews.has(pageView) && (
       <div key={pageView} className={`route-view${view === pageView ? '' : ' is-hidden'}`} data-view={pageView}>{pages[pageView]}</div>
     ))}

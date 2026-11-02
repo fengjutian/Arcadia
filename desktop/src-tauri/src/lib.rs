@@ -1,7 +1,7 @@
 pub mod agent;
 pub mod assistant_tasks;
-pub mod bookmarks;
 pub mod bing;
+pub mod bookmarks;
 pub mod browser;
 pub mod capabilities;
 pub mod certificate_guard;
@@ -10,7 +10,6 @@ pub mod engine;
 pub mod event_bus;
 pub mod local_store;
 pub mod mcp;
-pub mod skillhub;
 pub mod permission_guard;
 pub mod plugins;
 pub mod privacy;
@@ -19,10 +18,11 @@ pub mod providers;
 pub mod rag;
 pub mod session_lock;
 pub mod site_blacklist;
+pub mod skillhub;
+pub mod web_search;
 pub mod webview_compat;
 pub mod webview_process_guard;
 pub mod webview_suspend;
-pub mod web_search;
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -833,7 +833,11 @@ async fn browser_set_muted(
 }
 
 #[tauri::command]
-fn browser_set_bounds(app: tauri::AppHandle, label: String, bounds: PageBounds) -> Result<(), String> {
+fn browser_set_bounds(
+    app: tauri::AppHandle,
+    label: String,
+    bounds: PageBounds,
+) -> Result<(), String> {
     validate_browser_label(&label)?;
     engine::page_engine(&app).set_bounds(&label, bounds)?;
     Ok(())
@@ -1303,7 +1307,11 @@ async fn browser_page_toast(
 
 /// Removes one in-page notification; a no-op after a navigation.
 #[tauri::command]
-fn browser_page_toast_close(app: tauri::AppHandle, label: String, id: String) -> Result<(), String> {
+fn browser_page_toast_close(
+    app: tauri::AppHandle,
+    label: String,
+    id: String,
+) -> Result<(), String> {
     validate_browser_label(&label)?;
     engine::page_engine(&app).eval(&label, &browser::page_toast_close_script(&id)?)?;
     Ok(())
@@ -2057,7 +2065,9 @@ pub fn run() {
             // Tauri 2 surfaces WindowEvent::CloseRequested for every window;
             // we treat any of them as a graceful exit and clear the lock.
             // SIGKILL / power loss will leave the lock row in place.
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+            if window.label() == "main"
+                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
+            {
                 if let Ok(database) = local_store::connection(window.app_handle()) {
                     let now = chrono::Utc::now().timestamp();
                     if let Err(error) = session_lock::clear_lock(&database, now) {
@@ -2264,6 +2274,11 @@ pub fn run() {
             local_store::local_add_reading_queue,
             local_store::local_remove_reading_queue,
             local_store::local_clear_reading_queue,
+            local_store::local_list_clips,
+            local_store::local_search_clips,
+            local_store::local_save_clip,
+            local_store::local_delete_clip,
+            local_store::local_clear_clips,
             local_store::local_list_site_permissions,
             local_store::local_replace_site_permissions,
             local_store::local_export_backup,
@@ -2332,10 +2347,12 @@ fn browser_emit_event(
         // Remote pages may only report interactions from the small native
         // bookmark/resource panels. Privileged browser-menu actions are owned
         // by the trusted main WebView and must never be page-forgeable.
-        if !trusted_menu && !matches!(
-            action.as_str(),
-            "__dismiss__" | "bookmark-open" | "resource-scan" | "resource-download"
-        ) {
+        if !trusted_menu
+            && !matches!(
+                action.as_str(),
+                "__dismiss__" | "bookmark-open" | "resource-scan" | "resource-download"
+            )
+        {
             return Err("toolbar action is not allowlisted".into());
         }
     }
@@ -2358,7 +2375,10 @@ async fn browser_permission_request(
         return Err("request_id, origin and kind are required".into());
     }
     validate_browser_label(webview.label())?;
-    if !matches!(kind.as_str(), "camera" | "microphone" | "location" | "notifications" | "clipboard" | "media") {
+    if !matches!(
+        kind.as_str(),
+        "camera" | "microphone" | "location" | "notifications" | "clipboard" | "media"
+    ) {
         return Err("unsupported permission kind".into());
     }
     let current_origin = engine::page_engine(&app)
@@ -2490,7 +2510,11 @@ async fn browser_close_tab(app: tauri::AppHandle, label: String) -> Result<(), S
     validate_browser_label(&label)?;
     let private_profile = privacy::platform::tab_origin(&label)
         .filter(|tab| tab.private)
-        .map(|_| std::env::temp_dir().join("arcadia-private-webviews").join(&label));
+        .map(|_| {
+            std::env::temp_dir()
+                .join("arcadia-private-webviews")
+                .join(&label)
+        });
     let engine = engine::page_engine(&app);
     let url = engine::eval_json::<String>(&*engine, &label, "location.href")
         .await

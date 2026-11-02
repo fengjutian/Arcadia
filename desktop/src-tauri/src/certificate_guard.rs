@@ -187,18 +187,20 @@ mod windows_guard {
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_secs(3));
                 if crate::engine::page_engine(&delayed_app).exists(&label) {
-                    let _ = crate::engine::with_platform_webview(&delayed_app, &label, |platform| {
-                        let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else {
-                            return;
-                        };
-                        let Ok(core14) = core.cast::<ICoreWebView2_14>() else {
-                            return;
-                        };
-                        let callback = ClearServerCertificateErrorActionsCompletedHandler::create(
-                            Box::new(|_| Ok(())),
-                        );
-                        let _ = unsafe { core14.ClearServerCertificateErrorActions(&callback) };
-                    });
+                    let _ =
+                        crate::engine::with_platform_webview(&delayed_app, &label, |platform| {
+                            let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else {
+                                return;
+                            };
+                            let Ok(core14) = core.cast::<ICoreWebView2_14>() else {
+                                return;
+                            };
+                            let callback =
+                                ClearServerCertificateErrorActionsCompletedHandler::create(
+                                    Box::new(|_| Ok(())),
+                                );
+                            let _ = unsafe { core14.ClearServerCertificateErrorActions(&callback) };
+                        });
                 }
             });
         }

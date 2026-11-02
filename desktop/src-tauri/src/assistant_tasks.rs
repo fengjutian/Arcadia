@@ -6,7 +6,10 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::{
     providers::ChatRequest,
-    rag::{citation::{CitationStatus, RagAnswer}, commands::RagAnswerRequest},
+    rag::{
+        citation::{CitationStatus, RagAnswer},
+        commands::RagAnswerRequest,
+    },
 };
 
 #[derive(Clone, Serialize)]
@@ -59,15 +62,22 @@ pub async fn assistant_task_start(
     let task_app = app.clone();
     tauri::async_runtime::spawn(async move {
         let outcome = match crate::rag::commands::rag_answer(task_app.clone(), request).await {
-            Ok(mut result) if matches!(result.citation_status, CitationStatus::NotRequired | CitationStatus::Invalid) => {
+            Ok(mut result)
+                if matches!(
+                    result.citation_status,
+                    CitationStatus::NotRequired | CitationStatus::Invalid
+                ) =>
+            {
                 match general_request {
-                    Some(request) => crate::ai_chat_impl(task_app.clone(), provider_id, request).await.map(|response| {
-                        // Mark this as a complete answer so the frontend does not start a
-                        // second, reload-sensitive request after the background task ends.
-                        result.answer = response.content;
-                        result.citation_status = CitationStatus::Valid;
-                        result
-                    }),
+                    Some(request) => crate::ai_chat_impl(task_app.clone(), provider_id, request)
+                        .await
+                        .map(|response| {
+                            // Mark this as a complete answer so the frontend does not start a
+                            // second, reload-sensitive request after the background task ends.
+                            result.answer = response.content;
+                            result.citation_status = CitationStatus::Valid;
+                            result
+                        }),
                     None => Ok(result),
                 }
             }
@@ -75,19 +85,36 @@ pub async fn assistant_task_start(
         };
         let (task, title, body) = match outcome {
             Ok(result) => (
-                AssistantTask { id: task_id.clone(), status: "completed", result: Some(result), error: None },
+                AssistantTask {
+                    id: task_id.clone(),
+                    status: "completed",
+                    result: Some(result),
+                    error: None,
+                },
                 "知识助手已完成",
                 "回答已生成，打开应用即可查看。",
             ),
             Err(error) => (
-                AssistantTask { id: task_id.clone(), status: "failed", result: None, error: Some(error.clone()) },
+                AssistantTask {
+                    id: task_id.clone(),
+                    status: "failed",
+                    result: None,
+                    error: Some(error.clone()),
+                },
                 "知识助手任务失败",
                 "生成回答时遇到问题，请打开应用重试。",
             ),
         };
-        task_app.state::<AssistantTaskRegistry>().insert(task.clone());
+        task_app
+            .state::<AssistantTaskRegistry>()
+            .insert(task.clone());
         let _ = task_app.emit("assistant://task-updated", &task);
-        let _ = task_app.notification().builder().title(title).body(body).show();
+        let _ = task_app
+            .notification()
+            .builder()
+            .title(title)
+            .body(body)
+            .show();
     });
 
     Ok(id)
@@ -98,5 +125,7 @@ pub fn assistant_task_get(
     registry: tauri::State<'_, AssistantTaskRegistry>,
     task_id: String,
 ) -> Result<AssistantTask, String> {
-    registry.get(&task_id).ok_or_else(|| "assistant task not found".into())
+    registry
+        .get(&task_id)
+        .ok_or_else(|| "assistant task not found".into())
 }

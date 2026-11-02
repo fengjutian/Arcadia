@@ -52,7 +52,6 @@ import { PermissionPromptBar } from '../../features/browser/PermissionPromptBar'
 import { CertificateErrorBar } from '../../features/browser/CertificateErrorBar'
 import { useCertificatePrompt } from '../../features/browser/useCertificatePrompt'
 import { CommandPalette } from '../../features/command/CommandPalette'
-import { BookmarkSearchPalette } from '../../features/bookmarks/BookmarkSearchPalette'
 import { useBookmarks } from '../../features/bookmarks/useBookmarks'
 import { BulkSummaryPalette } from '../../features/ai/BulkSummaryPalette'
 import type { BulkProgressEntry } from '../../features/ai/bulkSummary'
@@ -121,7 +120,7 @@ function getSessionLegacy(key: string): string | null {
   try { return localStorage.getItem(key) } catch { return null }
 }
 
-export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: boolean; onSearchKnowledge?: (query: string) => void }) {
+export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }: { visible?: boolean; onSearchKnowledge?: (query: string) => void; onOpenLibrary?: () => void }) {
   const [tabs, setTabs] = useState<BrowserTab[]>([newTab('new')])
   const [activeTabId, setActiveTabId] = useState('new')
   const [address, setAddress] = useState('')
@@ -132,7 +131,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [findOpen, setFindOpen] = useState(false)
   const [pendingShellOpen, setPendingShellOpen] = useState<string | null>(null)
   const [commandOpen, setCommandOpen] = useState(false)
-  const [bookmarkPaletteOpen, setBookmarkPaletteOpen] = useState(false)
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
   const [blockEvents, setBlockEvents] = useState<Awaited<ReturnType<typeof privacyListBlockEvents>>>([])
@@ -1063,9 +1061,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         case 'openCommandBar':
           setCommandOpen(true)
           return
-        case 'openBookmarks':
-          setBookmarkPaletteOpen(true)
-          return
         case 'addBookmark':
           void addCurrentAsBookmark()
           return
@@ -1358,7 +1353,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       case 'tab-search': setCommandOpen(true); break
       case 'history-search': setCommandOpen(true); break
       case 'bookmark-add': void addCurrentAsBookmark(); break
-      case 'bookmarks': setBookmarkPaletteOpen(true); break
+      case 'bookmarks': onOpenLibrary?.(); break
       case 'bulk-summary': setBulkSummaryOpen(true); break
       case 'toggle-notes': setNotesOpen(value => !value); break
       case 'save-workspace': void saveAsWorkspace(); break
@@ -1446,10 +1441,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   const browserMenu: MenuProps['items'] = ([
     { key: 'find', label:translate("在页面中查找"),extra:'Ctrl+F',onClick:()=>runBrowserMenuAction('find')},
-    { key: 'tab-search', label:translate("搜索标签页"),extra:'Ctrl+K',onClick:()=>runBrowserMenuAction('tab-search')},
-    { key: 'history-search', label:translate("浏览历史记录"),extra:'Ctrl+H',onClick:()=>runBrowserMenuAction('history-search')},
+    { key: 'tab-search', label:translate("命令栏"),extra:'Ctrl+K',onClick:()=>runBrowserMenuAction('tab-search')},
+    { key: 'history-search', label:translate("查找历史与收藏"),onClick:()=>runBrowserMenuAction('history-search')},
     { key: 'bookmark-add', label:translate("收藏当前页"),extra:'Ctrl+D',onClick:()=>runBrowserMenuAction('bookmark-add')},
-    { key: 'bookmarks', label:translate("打开收藏夹"),extra:'Ctrl+Shift+O',onClick:()=>runBrowserMenuAction('bookmarks')},
+    { key: 'bookmarks', label:translate("在知识库中管理收藏"),onClick:()=>runBrowserMenuAction('bookmarks')},
     { key: 'bulk-summary', label:translate("多链接 AI 摘要"),extra:'Ctrl+Shift+S',onClick:()=>runBrowserMenuAction('bulk-summary')},
     { key: 'toggle-notes', label:translate("网页笔记面板"),extra:'Ctrl+Shift+N',onClick:()=>runBrowserMenuAction('toggle-notes')},
     { key: 'save-workspace', label:translate("保存全部标签为工作区"),extra:'Ctrl+Shift+W',icon:<SaveOutlined/>,disabled:tabs.length===0,onClick:()=>runBrowserMenuAction('save-workspace')},
@@ -1488,7 +1483,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
                   <Typography.Text type="secondary" className="bookmark-bar-panel__url">{bookmark.url}</Typography.Text>
                 </button>
               </li>))}
-            {bookmarkActions.bookmarks.length > 8 && <li><button type="button" onClick={() => setBookmarkPaletteOpen(true)}>{translate("查看全部")} {bookmarkActions.bookmarks.length} {translate("条\u2026")}</button></li>}
+            {bookmarkActions.bookmarks.length > 8 && <li><button type="button" onClick={() => onOpenLibrary?.()}>{translate("查看全部")} {bookmarkActions.bookmarks.length} {translate("条\u2026")}</button></li>}
           </ul>}
     </div>);const downloadPanel=(<DownloadSummary feed={downloads.map((item             )=>({...item,targetPath:item.targetPath??item.path}))}
       inFlight={downloads.filter(item => item.status === 'downloading').length}
@@ -2328,14 +2323,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       onToggleNotes={() => setNotesOpen(value => !value)}
       onBulkSummary={() => setBulkSummaryOpen(true)}
       onSaveWorkspace={() => void saveAsWorkspace()}
-    />
-    <BookmarkSearchPalette
-      open={bookmarkPaletteOpen}
-      bookmarks={bookmarkActions.bookmarks}
-      onClose={() => setBookmarkPaletteOpen(false)}
-      onOpen={bookmark => void navigate(bookmark.url)}
-      onRemove={bookmark => void bookmarkActions.remove(bookmark.id)}
-      onUpdate={(bookmark, patch) => { void bookmarkActions.update(bookmark.id, patch) }}
     />
     <BulkSummaryPalette
       open={bulkSummaryOpen}

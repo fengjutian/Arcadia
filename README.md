@@ -104,6 +104,8 @@ Provider 与网络：`reqwest` + `rustls-tls`，流式响应。
 
 远程网页运行在独立子 WebView 中。网页内容不能直接调用应用的高权限命令；React UI 通过受控的 Tauri command 完成导航、页面快照和 SQLite 操作。
 
+页面承载层收敛在 `desktop/src-tauri/src/engine/`：命令层只按 tab label 调用 `PageEngine` trait，唯一持有 `tauri::Webview` 的是 `WryPageEngine`。这是日后接入自带 Chromium（CEF）的替换点，接入时业务代码不需要改动。
+
 ## 项目目录
 
 ```text
@@ -122,6 +124,7 @@ Provider 与网络：`reqwest` + `rustls-tls`，流式响应。
 │   │   └── types.ts                 # 前端共享类型
 │   └── src-tauri/
 │       ├── capabilities/            # 主窗口最小权限
+│       ├── src/engine/              # PageEngine trait + WryPageEngine（唯一下探 tauri::Webview）
 │       ├── src/browser/             # URL 规范化与导航校验
 │       ├── src/local_store.rs       # SQLite 迁移、FTS5、备份恢复
 │       ├── src/rag/                 # 分块、索引、召回、融合、引用
@@ -286,6 +289,7 @@ npm run test:rust     # 247 个用例，见下方说明
 
 - [产品需求](docs/PRD.md)
 - [系统架构](docs/architecture.md)
+- [页面承载层 PageEngine](docs/page-engine.md)
 - [开发路线图](docs/roadmap.md)
 - [开发技术文档](docs/development-guide.md)
 - [国际化方案](docs/internationalization.md)

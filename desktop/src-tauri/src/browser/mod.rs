@@ -49,10 +49,7 @@ pub fn page_toast_script(toast: &PageToast<'_>) -> Result<String, String> {
         "duration": toast.duration_ms,
         "theme": toast.theme,
     });
-    Ok(PAGE_TOAST_TEMPLATE.replace(
-        PAGE_TOAST_CONFIG_SLOT,
-        &config.to_string(),
-    ))
+    Ok(PAGE_TOAST_TEMPLATE.replace(PAGE_TOAST_CONFIG_SLOT, &config.to_string()))
 }
 
 /// Script that removes one toast by id; a no-op once the page has navigated.

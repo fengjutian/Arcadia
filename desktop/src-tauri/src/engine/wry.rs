@@ -90,8 +90,11 @@ impl PageEngine for WryPageEngine {
         // removed when the tab closes.
         let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(url));
         if private {
-            builder = builder
-                .data_directory(std::env::temp_dir().join("arcadia-private-webviews").join(&label));
+            builder = builder.data_directory(
+                std::env::temp_dir()
+                    .join("arcadia-private-webviews")
+                    .join(&label),
+            );
         }
         for script in &init_scripts {
             builder = builder.initialization_script(script.as_str());
@@ -130,7 +133,12 @@ impl PageEngine for WryPageEngine {
                         .and_then(|name| name.to_str())
                         .unwrap_or("download")
                         .to_string();
-                    download_observer.download_requested(&download_label, &url, &destination, &file_name)
+                    download_observer.download_requested(
+                        &download_label,
+                        &url,
+                        &destination,
+                        &file_name,
+                    )
                 }
                 DownloadEvent::Finished { url, path, success } => {
                     let url = url.to_string();
@@ -233,12 +241,8 @@ impl PageEngine for WryPageEngine {
 
     fn set_visible(&self, label: &str, visible: bool) -> Result<()> {
         let view = self.view(label)?;
-        if visible {
-            view.show()
-        } else {
-            view.hide()
-        }
-        .map_err(|error| EngineError::Message(error.to_string()))
+        if visible { view.show() } else { view.hide() }
+            .map_err(|error| EngineError::Message(error.to_string()))
     }
 
     fn focus(&self, label: &str) -> Result<()> {
@@ -360,10 +364,10 @@ async fn clear_webview_profile_data(view: &Webview) -> Result<()> {
             }
         }
     })?;
-    tokio::time::timeout(Duration::from_secs(30), receiver)
-        .await
-        .map_err(|_| EngineError::msg("清理 Cookie 与磁盘缓存超时"))?
-        .map_err(|_| EngineError::msg("清理 Cookie 与磁盘缓存回调已取消"))?;
+    let finished = tokio::time::timeout(Duration::from_secs(30), receiver).await;
+    if finished.is_err() {
+        return Err(EngineError::msg("清理 Cookie 与磁盘缓存超时"));
+    }
     Ok(())
 }
 

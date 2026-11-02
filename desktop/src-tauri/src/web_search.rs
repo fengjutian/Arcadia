@@ -12,7 +12,10 @@ pub struct WebSearchResult {
 }
 
 #[tauri::command]
-pub async fn web_search(query: String, limit: Option<usize>) -> Result<Vec<WebSearchResult>, String> {
+pub async fn web_search(
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<WebSearchResult>, String> {
     let query = query.trim();
     if query.is_empty() || query.chars().count() > 300 {
         return Err("search query must contain 1 to 300 characters".into());
@@ -43,9 +46,13 @@ fn parse_bing_rss(xml: &str, limit: usize) -> Vec<WebSearchResult> {
     let mut results = Vec::new();
     let mut rest = xml;
     while results.len() < limit {
-        let Some(start) = rest.find("<item>") else { break };
+        let Some(start) = rest.find("<item>") else {
+            break;
+        };
         rest = &rest[start + "<item>".len()..];
-        let Some(end) = rest.find("</item>") else { break };
+        let Some(end) = rest.find("</item>") else {
+            break;
+        };
         let item = &rest[..end];
         rest = &rest[end + "</item>".len()..];
         let title = tag_text(item, "title");
@@ -68,10 +75,20 @@ fn parse_bing_rss(xml: &str, limit: usize) -> Vec<WebSearchResult> {
 fn tag_text(input: &str, tag: &str) -> String {
     let open = format!("<{tag}>");
     let close = format!("</{tag}>");
-    let Some(start) = input.find(&open) else { return String::new() };
+    let Some(start) = input.find(&open) else {
+        return String::new();
+    };
     let value = &input[start + open.len()..];
-    let Some(end) = value.find(&close) else { return String::new() };
-    decode_entities(value[..end].trim().trim_start_matches("<![CDATA[").trim_end_matches("]]>").trim())
+    let Some(end) = value.find(&close) else {
+        return String::new();
+    };
+    decode_entities(
+        value[..end]
+            .trim()
+            .trim_start_matches("<![CDATA[")
+            .trim_end_matches("]]>")
+            .trim(),
+    )
 }
 
 fn strip_html(input: &str) -> String {
@@ -80,7 +97,10 @@ fn strip_html(input: &str) -> String {
     for character in input.chars() {
         match character {
             '<' => inside = true,
-            '>' => { inside = false; output.push(' '); }
+            '>' => {
+                inside = false;
+                output.push(' ');
+            }
             _ if !inside => output.push(character),
             _ => {}
         }
@@ -100,7 +120,9 @@ fn decode_entities(input: &str) -> String {
 
 fn truncate(input: &str, maximum: usize) -> String {
     let mut output: String = input.chars().take(maximum).collect();
-    if input.chars().count() > maximum { output.push('…'); }
+    if input.chars().count() > maximum {
+        output.push('…');
+    }
     output
 }
 
@@ -111,7 +133,14 @@ mod tests {
     #[test]
     fn parses_and_sanitizes_rss_results() {
         let xml = r#"<rss><channel><item><title>Alpha &amp; Beta</title><link>https://example.com/a</link><description><![CDATA[<b>Useful</b> summary]]></description></item><item><title>Bad</title><link>javascript:alert(1)</link><description>x</description></item></channel></rss>"#;
-        assert_eq!(parse_bing_rss(xml, 5), vec![WebSearchResult { title:"Alpha & Beta".into(), url:"https://example.com/a".into(), snippet:"Useful summary".into() }]);
+        assert_eq!(
+            parse_bing_rss(xml, 5),
+            vec![WebSearchResult {
+                title: "Alpha & Beta".into(),
+                url: "https://example.com/a".into(),
+                snippet: "Useful summary".into()
+            }]
+        );
     }
 
     #[test]

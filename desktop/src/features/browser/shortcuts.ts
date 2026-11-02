@@ -19,7 +19,6 @@ export type ShortcutAction =
   | 'stop'
   | 'find'
   | 'openCommandBar'
-  | 'openBookmarks'
   | 'addBookmark'
   | 'openBulkSummary'
   | 'toggleNotesPanel'
@@ -81,7 +80,6 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   { action: 'prevTab',           label:t("上一个标签"),hint:'Ctrl/⌘ + Shift + Tab',default:kbd('Tab',true,true)},
   { action: 'jumpToTab',         label:t("跳转到第 N 个标签"),hint:'Ctrl/⌘ + 1~9',default:kbd('1')},
   { action: 'openCommandBar',    label:t("打开命令栏"),hint:'Ctrl/⌘ + K',default:kbd('k')},
-  { action: 'openBookmarks',     label:t("打开收藏夹面板"),hint:'Ctrl/⌘ + Shift + O',default:kbd('o',true,true)},
   { action: 'addBookmark',       label:t("收藏当前页"),hint:'Ctrl/⌘ + D',default:kbd('d')},
   { action: 'openBulkSummary',   label:t("多链接 AI 摘要"),hint:'Ctrl/⌘ + Shift + S',default:kbd('s',true,true)},
   { action: 'toggleNotesPanel',  label:t("切换网页笔记面板"),hint:'Ctrl/⌘ + Shift + N',default:kbd('n',true,true)},

@@ -75,16 +75,16 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1`–`6.3`、`6.6`、`6.13`、`6.14` 已部分落地，其余未开始。按性价比排序：`6.1`–`6.3` 不依赖布局收口，可在当前工作流结束后立即启动；`6.4` 起依赖布局收口。
+> 状态以各条目勾选为准：`6.1` 已完成；`6.2`、`6.3`、`6.6`、`6.13`、`6.14` 部分落地，其余未开始。按性价比排序：`6.2`–`6.3` 不依赖布局收口；`6.4` 起依赖布局收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
 
-- [~] 借鉴：Arc 的 `⌘T` 命令栏把导航、切标签与动作执行合并在一个输入框，动作本身可被搜索（[Command Bar Actions](https://start.arc.net/command-bar-actions)）。
+- [x] 借鉴：Arc 的 `⌘T` 命令栏把导航、切标签与动作执行合并在一个输入框，动作本身可被搜索（[Command Bar Actions](https://start.arc.net/command-bar-actions)）。
 - 现状：`TabSearchPalette`、`BookmarkSearchPalette`、`HistorySearchPalette`、`BulkSummaryPalette` 是四个独立 Modal；地址栏只负责导航。
 - 已落地（2026-11-02）：`features/command/` 提供 `CommandPalette` 与 `commandModel`（前缀解析、评分、分组），`Ctrl/⌘ + K` 打开；覆盖标签页、历史、收藏、归档、知识库与 10 个浏览器动作；`Tab` 循环范围，`@` / `~` / `/` / `?` / `>` 前缀直选；`!gh` 一类站内搜索（8 个内置快捷词，结果在新标签打开）；自定义 `!` 词表通过「管理快捷搜索词」维护，存 `local_session` 并随备份导出；已知域名 + `Tab` 进入站内搜索模式（再按 `Tab` 或 `Esc` 退出）。测试 16 + 16 例。
-- 已落地（2026-11-02，旧入口下线）：删除 `TabSearchPalette` 与 `HistorySearchPalette` 及其快捷键（`Ctrl+Shift+A` / `Ctrl+H` 不再绑定）；历史删除/清空迁到知识库「近期浏览」，新增 `local_delete_history` 命令；浏览器菜单里的两个入口改为打开命令栏。
-- 待补：`BookmarkSearchPalette` 仍承担改名/删除收藏，需先把这些管理动作迁到知识库再下线；之后改标 `[x]`。
+- 已落地（2026-11-02，旧入口下线）：删除 `TabSearchPalette`、`HistorySearchPalette`、`BookmarkSearchPalette` 及其快捷键（`Ctrl+Shift+A` / `Ctrl+H` / `Ctrl+Shift+O` 不再绑定）；历史删除/清空与收藏改名/删除迁到知识库（新增「收藏」页签、编辑弹窗，历史行内删除），新增 `local_delete_history` 命令；浏览器菜单与工具栏「查看全部」改为打开命令栏或知识库。`BulkSummaryPalette` 保留——它是任务对话框，不是搜索入口。
+- 验收情况：四类结果同屏分组、键盘可达、动作有反馈、旧 palette 已移除；纯函数与交互测试见上。
 - 做法：新增单一命令栏，前缀分域：`@` 标签、`/` 知识库、`?` 问 AI、`>` 动作；复用 `tabSearchIndex`、`historySearchIndex`、`bookmarkSearchIndex`；动作表映射现有高频 Tauri command。
 - 增补（借 Chrome / Firefox）：`Tab` 就地切换搜索域；域名 + Tab 触发站内搜索，模板复用 `searchEngine.ts`；允许用户自定义 `!` 快捷词。
 - 验收：`Ctrl/Cmd + K` 打开；四类结果同屏分组且键盘可达；动作有成功/失败反馈；旧 palette 入口保留一个版本周期后移除；新增纯函数与交互测试。
@@ -226,7 +226,7 @@
   4. 内核能力缺口有书面清单：区分「产品必需」与「有了更好」。
 - 第二阶段做法：以 CEF（或等价的自托管 Chromium）作为 `PageEngine` 的第二个实现，与现有 wry 实现并存，用 feature flag 切换，两套都进 CI。
 - 启动条件（顺序不可颠倒）：
-  1. 先把 webview 承载层收口成内部 trait（`create / eval / navigate / set_bounds / capture / focus`），把散落在 `lib.rs` 的 `get_webview`（40 处）与 `.eval()`（15 处）全部收进去。这一步无论最终换不换内核都该做。
+  1. ~~先把 webview 承载层收口成内部 trait（`create / eval / navigate / set_bounds / capture / focus`），把散落在 `lib.rs` 的 `get_webview`（40 处）与 `.eval()`（15 处）全部收进去。这一步无论最终换不换内核都该做。~~ **已完成（2026-11-02）**：`desktop/src-tauri/src/engine/` 提供 `PageEngine` trait 与 `WryPageEngine` 实现；业务命令只按 tab label 调用，`get_webview` 仅存在于 `engine/wry.rs`（1 处解析 + 2 处存在性检查），平台模块统一走 `with_platform_webview` 逃生口。行为与错误文案保持不变。
   2. 补齐运行时版本探测（`webview_version` / `chromium_major`），作为两套实现的行为基线。已实现，见 `browser_capabilities`。
   3. 最后才引入 CEF，且只在新实现上做能力增强，不回改业务层。
 - 什么情况下换 CEF 才划算：需要 Chrome 扩展、需要完整 CDP、需要锁定内核版本、或需要三端同内核。若痛点只是权限事件 / 右键菜单 / 单标签内存，走 `webview2-com` COM 路径即可，不换内核。
@@ -256,7 +256,7 @@
 5. macOS / Linux 的隐私拦截与证书拦截等价实现（受平台接口限制，需先做可行性验证）。
 6. 继续 Iteration 6 收尾：`6.3` 把笔记接入搜索与 RAG；`6.1` 站内搜索模板、自定义 `!` 快捷词；`6.2` 自动归档与 SearchPage 浏览痕迹。
 7. 布局收口完成后进入 `6.4` Space 化与 `6.5` 站点路由；`6.6`–`6.12` 按用户反馈再排序。
-8. Iteration 7 的第 1 步：把 webview 承载层收口为 `PageEngine` trait，作为日后接入 Chromium 的前置条件；只做抽象，不改变现有行为，可在 `6.4` 之前并行。
+8. ~~Iteration 7 的第 1 步：把 webview 承载层收口为 `PageEngine` trait，作为日后接入 Chromium 的前置条件；只做抽象，不改变现有行为，可在 `6.4` 之前并行。~~ 已完成（2026-11-02）：见 `desktop/src-tauri/src/engine/`。下一步是先按 §进行中 收口布局，再决定是否进入 CEF 第二阶段——启动条件第 2 条（版本探测）已具备，第 3 条需要书面结论。
 
 ## 决策记录
 

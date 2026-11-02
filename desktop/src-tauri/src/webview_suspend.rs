@@ -32,7 +32,11 @@ async fn suspend_windows<R: Runtime>(app: &AppHandle<R>, label: &str) -> Result<
         };
         let callback_sender = setup_sender.clone();
         let handler = TrySuspendCompletedHandler::create(Box::new(move |_error, success| {
-            if let Some(sender) = callback_sender.lock().ok().and_then(|mut value| value.take()) {
+            if let Some(sender) = callback_sender
+                .lock()
+                .ok()
+                .and_then(|mut value| value.take())
+            {
                 let _ = sender.send(success);
             }
             Ok(())
@@ -93,4 +97,3 @@ pub fn browser_resume(app: tauri::AppHandle, label: String) -> Result<bool, Stri
         Ok(false)
     }
 }
-

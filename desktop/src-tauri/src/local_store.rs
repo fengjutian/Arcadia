@@ -773,6 +773,48 @@ const MIGRATIONS: &[(i64, &str)] = &[
         CREATE UNIQUE INDEX idx_reading_queue_url ON reading_queue(url);
         CREATE INDEX idx_reading_queue_added_at ON reading_queue(added_at DESC);",
     ),
+    (
+        34,
+        "CREATE TABLE clips (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL CHECK(kind IN ('selection','link','image','page')),
+            content TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            source_url TEXT NOT NULL,
+            source_title TEXT NOT NULL DEFAULT '',
+            note TEXT NOT NULL DEFAULT '',
+            collection_id TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_clips_created_at ON clips(created_at DESC);
+        CREATE INDEX idx_clips_source ON clips(source_url);
+        CREATE VIRTUAL TABLE clips_fts USING fts5(
+            content,
+            note,
+            title,
+            source_title,
+            content='clips',
+            content_rowid='rowid',
+            tokenize='unicode61'
+        );
+        INSERT INTO clips_fts(rowid, content, note, title, source_title)
+            SELECT rowid, content, note, title, source_title FROM clips;
+        CREATE TRIGGER clips_ai AFTER INSERT ON clips BEGIN
+            INSERT INTO clips_fts(rowid, content, note, title, source_title)
+                VALUES (new.rowid, new.content, new.note, new.title, new.source_title);
+        END;
+        CREATE TRIGGER clips_ad AFTER DELETE ON clips BEGIN
+            INSERT INTO clips_fts(clips_fts, rowid, content, note, title, source_title)
+                VALUES('delete', old.rowid, old.content, old.note, old.title, old.source_title);
+        END;
+        CREATE TRIGGER clips_au AFTER UPDATE ON clips BEGIN
+            INSERT INTO clips_fts(clips_fts, rowid, content, note, title, source_title)
+                VALUES('delete', old.rowid, old.content, old.note, old.title, old.source_title);
+            INSERT INTO clips_fts(rowid, content, note, title, source_title)
+                VALUES (new.rowid, new.content, new.note, new.title, new.source_title);
+        END;",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3232,7 +3274,12 @@ pub fn local_list_history_page(
     let items = rows
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
-    Ok(LocalHistoryPage { items, total, page, page_size })
+    Ok(LocalHistoryPage {
+        items,
+        total,
+        page,
+        page_size,
+    })
 }
 
 #[tauri::command]
@@ -3856,7 +3903,8 @@ fn validate_page_note(note: &LocalPageNote) -> Result<(), String> {
     Ok(())
 }
 
-const PAGE_NOTE_COLUMNS: &str = "id,url,title,quote,comment,color,prefix,suffix,document_id,created_at,updated_at";
+const PAGE_NOTE_COLUMNS: &str =
+    "id,url,title,quote,comment,color,prefix,suffix,document_id,created_at,updated_at";
 
 fn page_note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalPageNote> {
     Ok(LocalPageNote {
@@ -4073,7 +4121,9 @@ fn query_reading_queue(
 }
 
 #[tauri::command]
-pub fn local_list_reading_queue(app: tauri::AppHandle) -> Result<Vec<LocalReadingQueueEntry>, String> {
+pub fn local_list_reading_queue(
+    app: tauri::AppHandle,
+) -> Result<Vec<LocalReadingQueueEntry>, String> {
     query_reading_queue(&connection(&app)?, 500)
 }
 
@@ -4098,6 +4148,165 @@ pub fn local_remove_reading_queue(app: tauri::AppHandle, id: String) -> Result<(
 pub fn local_clear_reading_queue(app: tauri::AppHandle) -> Result<(), String> {
     connection(&app)?
         .execute("DELETE FROM reading_queue", [])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+/// A captured fragment: selected text, a link or an image, plus provenance.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalClip {
+    id: String,
+    kind: String,
+    content: String,
+    title: String,
+    source_url: String,
+    source_title: String,
+    note: String,
+    collection_id: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+fn validate_clip(clip: &LocalClip) -> Result<(), String> {
+    if clip.id.trim().is_empty() || clip.id.len() > 128 {
+        return Err("invalid clip id".into());
+    }
+    if !matches!(clip.kind.as_str(), "selection" | "link" | "image" | "page") {
+        return Err("clip kind must be selection, link, image or page".into());
+    }
+    if clip.content.trim().is_empty() || clip.content.len() > 100_000 {
+        return Err("clip content must be between 1 and 100000 bytes".into());
+    }
+    if clip.title.len() > 2048 || clip.source_title.len() > 2048 || clip.note.len() > 20_000 {
+        return Err("clip metadata is too long".into());
+    }
+    if clip.source_url.len() > 8192 {
+        return Err("clip source url is too long".into());
+    }
+    if clip.created_at <= 0 || clip.updated_at <= 0 {
+        return Err("invalid clip timestamps".into());
+    }
+    Ok(())
+}
+
+const CLIP_COLUMNS: &str = "id,kind,content,title,source_url,source_title,note,collection_id,created_at,updated_at";
+
+fn clip_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalClip> {
+    Ok(LocalClip {
+        id: row.get(0)?,
+        kind: row.get(1)?,
+        content: row.get(2)?,
+        title: row.get(3)?,
+        source_url: row.get(4)?,
+        source_title: row.get(5)?,
+        note: row.get(6)?,
+        collection_id: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+    })
+}
+
+fn insert_clip(database: &Connection, clip: &LocalClip) -> Result<(), String> {
+    // Delete + insert keeps the external-content FTS row in sync (same reason
+    // as page notes / archive).
+    let transaction = database
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute("DELETE FROM clips WHERE id=?1", params![clip.id])
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute(
+            "INSERT INTO clips(id,kind,content,title,source_url,source_title,note,collection_id,created_at,updated_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            params![
+                clip.id,
+                clip.kind,
+                clip.content,
+                clip.title,
+                clip.source_url,
+                clip.source_title,
+                clip.note,
+                clip.collection_id,
+                clip.created_at,
+                clip.updated_at
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn query_clips(database: &Connection, limit: i64) -> Result<Vec<LocalClip>, String> {
+    let mut statement = database
+        .prepare(&format!("SELECT {CLIP_COLUMNS} FROM clips ORDER BY created_at DESC LIMIT ?1"))
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![limit.clamp(1, 1000)], clip_from_row)
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+fn search_clips(database: &Connection, query: &str, limit: i64) -> Result<Vec<LocalClip>, String> {
+    let fts_query = build_fts5_query(query.trim());
+    if fts_query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let columns = CLIP_COLUMNS
+        .split(',')
+        .map(|column| format!("c.{}", column.trim()))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut statement = database
+        .prepare(&format!(
+            "SELECT {columns} FROM clips_fts f
+             JOIN clips c ON c.rowid = f.rowid
+             WHERE clips_fts MATCH ?1
+             ORDER BY bm25(clips_fts)
+             LIMIT ?2"
+        ))
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![fts_query, limit.clamp(1, 200)], clip_from_row)
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_list_clips(app: tauri::AppHandle) -> Result<Vec<LocalClip>, String> {
+    query_clips(&connection(&app)?, 500)
+}
+
+#[tauri::command]
+pub fn local_search_clips(
+    app: tauri::AppHandle,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<LocalClip>, String> {
+    search_clips(&connection(&app)?, &query, i64::from(limit.unwrap_or(50)))
+}
+
+#[tauri::command]
+pub fn local_save_clip(app: tauri::AppHandle, clip: LocalClip) -> Result<(), String> {
+    validate_clip(&clip)?;
+    insert_clip(&connection(&app)?, &clip)
+}
+
+#[tauri::command]
+pub fn local_delete_clip(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    connection(&app)?
+        .execute("DELETE FROM clips WHERE id=?", params![id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn local_clear_clips(app: tauri::AppHandle) -> Result<(), String> {
+    connection(&app)?
+        .execute("DELETE FROM clips", [])
         .map_err(|error| error.to_string())?;
     Ok(())
 }
@@ -4249,7 +4458,8 @@ pub(crate) fn password_for_origin_by_id(
         )
         .optional()
         .map_err(|error| error.to_string())?;
-    let username = username.ok_or_else(|| "credential does not belong to the current origin".to_string())?;
+    let username =
+        username.ok_or_else(|| "credential does not belong to the current origin".to_string())?;
     let password = keyring::Entry::new(KEYRING_SERVICE, &credential_key(id))
         .map_err(|error| error.to_string())?
         .get_password()
@@ -4694,7 +4904,11 @@ mod tests {
         assert_eq!(summary.notes_inserted, 1);
 
         let restored_note: String = target
-            .query_row("SELECT quote FROM page_notes WHERE id='note-1'", [], |row| row.get(0))
+            .query_row(
+                "SELECT quote FROM page_notes WHERE id='note-1'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
         assert_eq!(restored_note, "quoted");
 
@@ -6018,8 +6232,15 @@ mod tests {
         renamed.title = "Rust borrowing explained".into();
         renamed.url = "https://example.com/rust-borrowing".into();
         insert_archived_tab(&database, &renamed).unwrap();
-        assert!(query_archived_tabs(&database, "ownership", 10).unwrap().is_empty());
-        assert_eq!(query_archived_tabs(&database, "borrowing", 10).unwrap().len(), 1);
+        assert!(query_archived_tabs(&database, "ownership", 10)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            query_archived_tabs(&database, "borrowing", 10)
+                .unwrap()
+                .len(),
+            1
+        );
         let indexed: i64 = database
             .query_row(
                 "SELECT COUNT(*) FROM tab_archive_fts WHERE tab_archive_fts MATCH ?1",
@@ -6031,9 +6252,14 @@ mod tests {
 
         // A delete must remove the FTS row as well.
         database
-            .execute("DELETE FROM tab_archive WHERE id = ?1", params!["archive-1"])
+            .execute(
+                "DELETE FROM tab_archive WHERE id = ?1",
+                params!["archive-1"],
+            )
             .unwrap();
-        assert!(query_archived_tabs(&database, "borrowing", 10).unwrap().is_empty());
+        assert!(query_archived_tabs(&database, "borrowing", 10)
+            .unwrap()
+            .is_empty());
         assert!(query_archived_tabs(&database, "", 10).unwrap().is_empty());
     }
 
@@ -6069,15 +6295,24 @@ mod tests {
             .unwrap();
         assert_eq!(matched, 1, "quotes must be searchable");
         assert_eq!(search_page_notes(&database, "cosine", 10).unwrap().len(), 1);
-        assert_eq!(search_page_notes(&database, "核心", 10).unwrap().len(), 1, "comments must be searchable");
-        assert!(search_page_notes(&database, "unrelated-token", 10).unwrap().is_empty());
+        assert_eq!(
+            search_page_notes(&database, "核心", 10).unwrap().len(),
+            1,
+            "comments must be searchable"
+        );
+        assert!(search_page_notes(&database, "unrelated-token", 10)
+            .unwrap()
+            .is_empty());
 
         let mut edited = note.clone();
         edited.quote = "dot product".into();
         edited.comment = "换一个说法".into();
         edited.updated_at = 1_700_000_100_000;
         insert_page_note(&database, &edited).unwrap();
-        assert!(search_page_notes(&database, "核心", 10).unwrap().is_empty(), "edited notes must drop their old comment tokens");
+        assert!(
+            search_page_notes(&database, "核心", 10).unwrap().is_empty(),
+            "edited notes must drop their old comment tokens"
+        );
         let stale: i64 = database
             .query_row(
                 "SELECT COUNT(*) FROM page_notes_fts WHERE page_notes_fts MATCH ?1",
@@ -6086,19 +6321,55 @@ mod tests {
             )
             .unwrap();
         assert_eq!(stale, 0, "editing a note must retire the old FTS row");
-        assert_eq!(query_page_notes(&database, 10).unwrap().len(), 1, "editing must not duplicate");
+        assert_eq!(
+            query_page_notes(&database, 10).unwrap().len(),
+            1,
+            "editing must not duplicate"
+        );
 
         database
             .execute("DELETE FROM page_notes WHERE id=?1", params!["note-1"])
             .unwrap();
         let remaining: i64 = database
-            .query_row(
-                "SELECT COUNT(*) FROM page_notes_fts",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT COUNT(*) FROM page_notes_fts", [], |row| row.get(0))
             .unwrap();
         assert_eq!(remaining, 0, "deleting a note must clear its FTS row");
+    }
+
+    #[test]
+    fn clips_roundtrip_through_fts() {
+        let mut database = fresh();
+        run_migrations(&mut database).unwrap();
+        let clip = LocalClip {
+            id: "clip-1".into(),
+            kind: "selection".into(),
+            content: "cosine similarity".into(),
+            title: "Embedding guide".into(),
+            source_url: "https://example.com/guide".into(),
+            source_title: "Guide".into(),
+            note: "".into(),
+            collection_id: None,
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_000,
+        };
+        insert_clip(&database, &clip).unwrap();
+        assert_eq!(query_clips(&database, 10).unwrap().len(), 1);
+        assert_eq!(search_clips(&database, "cosine", 10).unwrap().len(), 1);
+        assert!(search_clips(&database, "unrelated-token", 10).unwrap().is_empty());
+
+        let mut edited = clip.clone();
+        edited.content = "dot product".into();
+        edited.updated_at = 1_700_000_100_000;
+        insert_clip(&database, &edited).unwrap();
+        assert!(search_clips(&database, "cosine", 10).unwrap().is_empty());
+        assert_eq!(search_clips(&database, "dot", 10).unwrap().len(), 1);
+        assert_eq!(query_clips(&database, 10).unwrap().len(), 1, "editing must not duplicate");
+
+        database.execute("DELETE FROM clips WHERE id=?1", params!["clip-1"]).unwrap();
+        let indexed: i64 = database
+            .query_row("SELECT COUNT(*) FROM clips_fts", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(indexed, 0, "deleting a clip must clear its FTS row");
     }
 
     #[test]
