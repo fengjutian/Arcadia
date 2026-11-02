@@ -534,3 +534,12 @@ Agent/用户提出调用
 - 清理了一个并行产生的临时诊断页 `tmp-tabs.tsx`，它会让 i18n 扫描失败。
 - 测试：Rust 268 通过 + 4 项忽略；前端 108 文件 / 770 用例通过。
 
+### 12.26 第二十六批：修复 Chat 线协议的 camelCase 契约（2026-11-02）
+
+- `ChatRequest` / `ChatResponse` 增加 `#[serde(rename_all = "camelCase")]`。此前前端发送 `maxTokens`、读取 `promptTokens`，后端却按 `max_tokens` / `prompt_tokens` 序列化，导致：
+  - `maxTokens` 从未生效；
+  - 研究 Agent 的 token 预算始终统计为 0，预算保护形同虚设。
+- 修复后线协议与 `types.ts` 完全一致；研究 Agent 的 `promptTokens` 累计与预算中止开始真实生效。
+- 这也是 Provider 原生 tool-calling 的前置修复：`tools` / `toolCalls` 将沿用同一套 camelCase 契约。
+- 测试：新增序列化/反序列化契约用例；Rust 269 通过 + 4 项忽略，前端 770 通过。
+

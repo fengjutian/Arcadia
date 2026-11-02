@@ -12,6 +12,7 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatRequest {
     pub messages: Vec<ChatMessage>,
     pub temperature: Option<f32>,
@@ -19,6 +20,7 @@ pub struct ChatRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatResponse {
     pub content: String,
     pub prompt_tokens: Option<u64>,
@@ -105,7 +107,24 @@ pub(crate) fn decode_complete_lines(pending: &mut Vec<u8>, chunk: &[u8], out: &m
 
 #[cfg(test)]
 mod tests {
-    use super::decode_complete_lines;
+    use super::{decode_complete_lines, ChatRequest, ChatResponse};
+
+    #[test]
+    fn chat_wire_types_use_camel_case() {
+        let request: ChatRequest =
+            serde_json::from_str(r#"{"messages":[],"maxTokens":12}"#).expect("request");
+        assert_eq!(request.max_tokens, Some(12));
+
+        let response = ChatResponse {
+            content: "hello".into(),
+            prompt_tokens: Some(7),
+            completion_tokens: Some(3),
+        };
+        let value = serde_json::to_value(&response).expect("response");
+        assert_eq!(value["promptTokens"], 7);
+        assert_eq!(value["completionTokens"], 3);
+        assert!(value.get("prompt_tokens").is_none());
+    }
 
     #[test]
     fn decodes_utf8_split_across_chunks() {
