@@ -54,17 +54,17 @@ export function BulkSummaryPalette({ open, onClose, onRun, busy, progress }: Bul
   >
     <div className="bulk-summary-palette">
       <Typography.Title level={5} style={{ margin: '0 0 8px' }}>{t("多链接 AI 摘要")}</Typography.Title>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>{t("每行一个 URL（仅 http/https）。每个页面会单独调用 AI 摘要并存为文档，最后再把所有摘要合并成一份综述。")} 
-
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        {t("每行一个 URL（仅 http/https）。每个页面会单独调用 AI 摘要并存为文档，最后再把所有摘要合并成一份综述。")}
       </Typography.Paragraph>
-      <Space wrap style={{ marginBottom: 8 }}>
-        <Segmented<SummaryKind>
-          value={kind}
-          onChange={value => setKind(value as SummaryKind)}
-          options={SUMMARY_KINDS.map(          (option                                                )=>({label:summaryKindLabelSafe(option),value:option}))}
-        />
+      <Segmented<SummaryKind>
+        value={kind}
+        onChange={value => setKind(value as SummaryKind)}
+        options={SUMMARY_KINDS.map(option => ({ label: summaryKindLabelSafe(option), value: option }))}
+      />
+      <div className="bulk-summary-palette__meta">
         <Typography.Text type="secondary">{t("识别到")} {urls.length} {t("个 URL")}</Typography.Text>
-      </Space>
+      </div>
       <Input.TextArea
         value={raw}
         onChange={event => setRaw(event.target.value)}

@@ -52,6 +52,7 @@ import remarkGfm from 'remark-gfm'
 import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listDocuments, ragAnswer, saveDocument, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse } from '../../api'
 import type { RagQuery } from '../../api'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
+import { PeekDrawer, type PeekTarget } from '../../features/peek/PeekDrawer'
 import { buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
 import type { AIProvider, Document, View } from '../../types'
 import { compactChatHistory, restoreConversation } from '../../features/ai/conversation'
@@ -189,6 +190,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
   const [busy, setBusy] = useState(false)
   const [conversationHydrated, setConversationHydrated] = useState(false)
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null)
+  const [peek, setPeek] = useState<PeekTarget | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -979,7 +981,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                         className="assistant-citation"
                         key={doc.id}
                         title={t("打开：{value0}",{value0:doc.title})}
-                        onClick={() => setSelectedDoc(doc)}
+                        onClick={() => setPeek({ kind: 'document', document: doc })}
                       >
                         <span className="assistant-citation__index">{index + 1}</span>
                         <span className="assistant-citation__title">{doc.title}</span>
@@ -1304,6 +1306,19 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         <DocumentDetailDrawer document={selectedDoc}
           onClose={() => setSelectedDoc(null)}
           onDeleted={() => setSelectedDoc(null)}
+        />
+        <PeekDrawer
+          target={peek}
+          onClose={() => setPeek(null)}
+          onOpenUrl={url => {
+            window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
+            onNavigate?.('browser')
+          }}
+          onOpenFull={full => {
+            if (full.kind !== 'document') return
+            setPeek(null)
+            setSelectedDoc(full.document)
+          }}
         />
         <Drawer
           title={t("深度研究记录")}

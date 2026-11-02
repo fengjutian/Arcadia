@@ -1,5 +1,5 @@
 import { t } from '../../i18n'
-import { Button, Input, message, Modal, Segmented, Skeleton, Tabs, Tag, Typography, Upload } from '../../components/ui'
+import { Button, Input, message, Modal, Segmented, Select, Skeleton, Switch, Tabs, Tag, Typography, Upload } from '../../components/ui'
 import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DocumentCard } from '../../features/documents/DocumentCard'
@@ -22,6 +22,12 @@ import {
 } from '../../api'
 import type { HistoryEntry } from '../../features/history/dedupeHistory'
 import { formatArchivedAt, groupArchivedTabs } from '../../features/archive/archive'
+import {
+  AUTO_ARCHIVE_HOUR_OPTIONS,
+  readAutoArchiveSettings,
+  writeAutoArchiveSettings,
+  type AutoArchiveSettings,
+} from '../../features/archive/archiveSettings'
 import { formatQueuedAt, queueHost } from '../../features/reading-queue/readingQueue'
 import { trackDownload, type DownloadEntry } from '../../features/downloads/trackDownload'
 import { useDownloadCenter } from '../../features/downloads/useDownloadCenter'
@@ -65,6 +71,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [archived, setArchived] = useState<ArchivedTab[]>([])
   const [queue, setQueue] = useState<ReadingQueueEntry[]>([])
+  const [autoArchive, setAutoArchive] = useState<AutoArchiveSettings>(readAutoArchiveSettings)
   const [downloads, setDownloads] = useState<DownloadEntry[]>([])
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortMode>('recent')
@@ -227,6 +234,26 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     }
   }
 
+  function openQueued(entry: ReadingQueueEntry) {
+    window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url: entry.url } }))
+    onOpenBrowser?.()
+  }
+
+  async function removeQueued(id: string) {
+    try {
+      await removeFromReadingQueue(id)
+      setQueue(items => items.filter(item => item.id !== id))
+      messageApi.success('已移出待读')
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '移出待读失败')
+    }
+  }
+
+  function updateAutoArchive(next: AutoArchiveSettings) {
+    setAutoArchive(next)
+    writeAutoArchiveSettings(next)
+  }
+
   const visibleDocuments = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const filtered = needle
@@ -367,7 +394,21 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         <h2>{t("归档")}</h2>
         <p>{t("从标签栏收起但还没有保存的页面。可按标题或网址找回，也可以随时删除。")}</p>
       </div>
-      <span className="library-result-count">{archived.length} {t("条")}</span>
+      <div className="library-section-head__tools library-archive-controls">
+        <label className="library-archive-controls__toggle">
+          <Switch checked={autoArchive.enabled} onChange={enabled => updateAutoArchive({ ...autoArchive, enabled })}/>
+          <span>{t("自动归档")}</span>
+        </label>
+        <Select<number>
+          className="library-archive-controls__idle"
+          ariaLabel={t("自动归档空闲时长")}
+          disabled={!autoArchive.enabled}
+          options={AUTO_ARCHIVE_HOUR_OPTIONS.map(option => ({ label: t(option.label), value: option.value }))}
+          value={autoArchive.idleHours}
+          onChange={value => updateAutoArchive({ ...autoArchive, idleHours: Number(value) })}
+        />
+        <span className="library-result-count">{archived.length} {t("条")}</span>
+      </div>
     </div>
     {archived.length === 0
       ? <div className="library-empty-state library-empty-state--compact">
@@ -389,6 +430,35 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
             <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("删除归档")} onClick={()=>void removeArchived(item.id)}/>
           </div>)}
         </section>)}
+  </div>
+
+  const queueContent = <div className="library-module">
+    <div className="library-section-head">
+      <div>
+        <h2>{t("待读")}</h2>
+        <p>{t("先收起来、之后再看的页面。读完可以保存到知识库，也可以直接移出。")}</p>
+      </div>
+      <span className="library-result-count">{queue.length} {t("条")}</span>
+    </div>
+    {queue.length === 0
+      ? <div className="library-empty-state library-empty-state--compact">
+          <span className="library-empty-state__icon"><ClockCircleOutlined/></span>
+          <h3>{t("待读列表是空的")}</h3>
+          <p>{t("在浏览器里右键标签选择「稍后读」，或从命令栏执行；它只记链接，不占知识库。")}</p>
+        </div>
+      : <div className="library-activity-list">
+          {queue.map(item => <div className="library-archive-row" key={item.id}>
+            <button type="button" className="library-activity" onClick={() => openQueued(item)}>
+              <span className="library-activity__icon"><ClockCircleOutlined/></span>
+              <span className="library-activity__body">
+                <strong title={item.title || item.url}>{item.title || item.url}</strong>
+                <small><span>{queueHost(item.url)}</span><span>{formatQueuedAt(item.addedAt)}</span></small>
+              </span>
+              <RightOutlined className="library-activity__arrow"/>
+            </button>
+            <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("移出待读")} onClick={() => void removeQueued(item.id)}/>
+          </div>)}
+        </div>}
   </div>
 
   const downloadContent = <div className="library-module">
@@ -462,6 +532,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
             { key: 'collections', label: <TabLabel label={t("集合")} count={collections.length}/>,children:collectionContent},
             { key: 'history', label: <TabLabel label={t("近期浏览")} count={recentHistory.length}/>,children:historyContent},
             { key: 'archive', label: <TabLabel label={t("归档")} count={archived.length}/>,children:archiveContent},
+            { key: 'queue', label: <TabLabel label={t("待读")} count={queue.length}/>, children: queueContent },
             { key: 'downloads', label: <TabLabel label={t("下载记录")} count={downloadCenter.records.length}/>,children:downloadContent},
           ]}
         />

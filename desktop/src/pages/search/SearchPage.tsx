@@ -4,7 +4,9 @@ import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, In
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { deleteDocument, deleteReadingSnapshot, searchDocuments, searchPageNotes, listReadingActivity, getSearchSuggestions, getSession, setSession, type DocumentSearchHit, type PageNote } from '../../api'
+import { deleteDocument, deleteReadingSnapshot, listArchivedTabs, searchDocuments, searchPageNotes, listReadingActivity, getSearchSuggestions, getSession, setSession, type ArchivedTab, type DocumentSearchHit, type PageNote } from '../../api'
+import { formatArchivedAt } from '../../features/archive/archive'
+import { PeekDrawer, type PeekTarget } from '../../features/peek/PeekDrawer'
 import type { ReadingActivity } from '../../types'
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { renderHighlightedSnippet } from '../../features/search/renderSnippet'
@@ -27,6 +29,8 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const [documents, setDocuments] = useState<DocumentSearchHit[]>([])
   const [reading, setReading] = useState<ReadingActivity[]>([])
   const [notes, setNotes] = useState<PageNote[]>([])
+  const [archived, setArchived] = useState<ArchivedTab[]>([])
+  const [peek, setPeek] = useState<PeekTarget | null>(null)
   const [selected, setSelected] = useState<DocumentSearchHit | null>(null)
   const [selectedReading, setSelectedReading] = useState<ReadingActivity | null>(null)
   const [loading, setLoading] = useState(true)
@@ -78,12 +82,16 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     const noteResults = advancedQuery.text.trim()
       ? searchPageNotes(advancedQuery.text)
       : Promise.resolve<PageNote[]>([])
-    void Promise.all([searchDocuments(advancedQuery.text), listReadingActivity(), noteResults])
-      .then(([items, activity, noteItems]) => {
+    const archivedResults = advancedQuery.text.trim()
+      ? listArchivedTabs(advancedQuery.text, 50)
+      : Promise.resolve<ArchivedTab[]>([])
+    void Promise.all([searchDocuments(advancedQuery.text), listReadingActivity(), noteResults, archivedResults])
+      .then(([items, activity, noteItems, archivedItems]) => {
         if (!current) return
         setDocuments(items)
         setReading(activity)
         setNotes(noteItems)
+        setArchived(archivedItems)
         setUnavailable(false)
         setLoadError(null)
         setDurationMs(Math.round(performance.now() - startedAt))
@@ -98,6 +106,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
         setDocuments([])
         setReading([])
         setNotes([])
+        setArchived([])
         setUnavailable(true)
         setLoadError(detail ||t("未知错误"))
       })
@@ -162,7 +171,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const terms = useMemo(() => debouncedQuery.trim().split(/\s+/).filter(Boolean), [debouncedQuery])
   const hasQuery = debouncedQuery.trim().length > 0
   const hasFilters = tagFilter.length > 0 || starredOnly || includeArchived || readOnly
-  const total = filtered.length + unsavedReading.length + notes.length
+  const total = filtered.length + unsavedReading.length + notes.length + archived.length
   const showEmpty = !loading && total === 0
 
   const sortOptions = useMemo(() => hasQuery ? [{ label:t("相关度"),value:'relevance'as const},...SORT_OPTIONS]:SORT_OPTIONS,[hasQuery])
@@ -187,8 +196,13 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
 
   const openNote = useCallback((note: PageNote) => {
     if (debouncedQuery.trim()) rememberQuery(debouncedQuery)
-    onOpenUrl?.(note.url)
-  }, [debouncedQuery, rememberQuery, onOpenUrl])
+    setPeek({ kind: 'note', note })
+  }, [debouncedQuery, rememberQuery])
+
+  const openArchived = useCallback((item: ArchivedTab) => {
+    if (debouncedQuery.trim()) rememberQuery(debouncedQuery)
+    setPeek({ kind: 'archive', entry: item })
+  }, [debouncedQuery, rememberQuery])
 
   const removeDocument = useCallback(async (item: DocumentSearchHit) => {
     try {
@@ -339,6 +353,21 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
             </div>
           </section>}
 
+          {archived.length > 0 && <section className="search-section search-section--archive">
+            <SectionHeading title={t("浏览痕迹")} count={archived.length} hint={t("从标签栏归档的页面，尚未保存进知识库")}/>
+            <div className="result-grid">
+              {archived.map(item => <ResultCard
+                key={item.id}
+                title={<Highlight text={item.title || item.url} terms={terms}/>}
+                titleText={item.title || item.url}
+                url={item.url}
+                snippet={<span className="search-note-snippet__comment">{t("归档于 {value0}",{value0:formatArchivedAt(item.archivedAt)})}</span>}
+                actionLabel={t("打开归档页：{value0}",{value0:item.title||item.url})}
+                onOpen={() => openArchived(item)}
+              />)}
+            </div>
+          </section>}
+
           {unsavedReading.length > 0 && <section className="search-section search-section--reading">
             <SectionHeading title={t("读过但未保存")} count={unsavedReading.length} hint={t("保留了阅读轨迹，尚未写入知识库")}/>
             <div className="result-grid">
@@ -392,6 +421,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
       </>}
     </Modal>
     <DocumentDetailDrawer document={selected} onClose={() => setSelected(null)} onDeleted={id => setDocuments(items => items.filter(item => item.id !== id))}/>
+    <PeekDrawer target={peek} onClose={() => setPeek(null)} onOpenUrl={url => onOpenUrl?.(url)}/>
   </section>
 }
 

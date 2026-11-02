@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Arcadia aperture mark">
+  <title>Arcadia — The Aperture</title>
+  <g fill="none" stroke="#c6ff3d" stroke-width="34" stroke-linecap="butt">
+    <circle cx="256" cy="244" r="150" stroke-dasharray="753.98 188.5" transform="rotate(-9 256 244)"/>
+  </g>
+  <circle cx="362.1" cy="137.9" r="30" fill="#c6ff3d"/>
+  <g stroke="#f2f3ea" stroke-width="2" opacity=".34">
+    <path d="M64 356h384"/>
+    <path d="M64 347v18M448 347v18"/>
+  </g>
+</svg>

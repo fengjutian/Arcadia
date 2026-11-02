@@ -5,7 +5,7 @@ import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlin
 import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
-import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab } from '../../api'
+import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue } from '../../api'
 import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
@@ -22,6 +22,9 @@ import { formatBytes as formatProcessBytes } from '../../services/processMemory'
 import { interpretShortcut, readShortcutOverrides } from '../../features/browser/shortcuts'
 import { popClosedTab, recordClosedTab, type ClosedTab } from '../../features/browser/closedTabs'
 import { archivedTabFromBrowserTab } from '../../features/archive/archive'
+import { planAutoArchive } from '../../features/archive/autoArchive'
+import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
+import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
 import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '../../features/ai/floatingAssistant'
 import { listen } from '@tauri-apps/api/event'
@@ -199,6 +202,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const comparisonRef = useRef<ComparisonSession | null>(null)
   const visibleRef = useRef(visible)
   const lastActiveAtRef = useRef(new Map<string, number>([['new', Date.now()]]))
+  const autoArchiveCheckedRef = useRef(false)
   const lastHistoryUrl = useRef<string>('')
   const shortcutsEnabledRef = useRef(getBrowserShortcutsEnabled())
   const readingSecondsRef = useRef(new Map<string, number>())
@@ -673,6 +677,35 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     return () => { disposed = true }
   }, [active.url])
   useEffect(() => { tabsRef.current = tabs }, [tabs])
+  // One startup sweep: tabs untouched for AUTO_ARCHIVE_IDLE_MS leave the strip
+  // and become searchable archive entries instead of silently disappearing.
+  useEffect(() => {
+    if (!hydrated || autoArchiveCheckedRef.current) return
+    autoArchiveCheckedRef.current = true
+    if (!isNativeBrowserAvailable()) return
+    const settings = readAutoArchiveSettings()
+    if (!settings.enabled) return
+    const dueIds = planAutoArchive(tabsRef.current, activeTabIdRef.current, Date.now(), idleMsFor(settings))
+    if (dueIds.length === 0) return
+    void (async () => {
+      let archived = 0
+      for (const id of dueIds) {
+        const target = tabsRef.current.find(tab => tab.id === id)
+        if (!target) continue
+        const entry = archivedTabFromBrowserTab(target, 'auto')
+        if (!entry) continue
+        try {
+          await archiveTab(entry)
+          archived += 1
+          closeTab(id)
+        } catch { /* keep the tab when the archive write fails */ }
+      }
+      if (archived > 0) {
+        messageApi.info(`已自动归档 ${archived} 个空闲标签，可在知识库「归档」中找回`, 5)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated])
   useEffect(() => {
     let disposed = false
     void loadPageNotes()
@@ -1834,6 +1867,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       return
     }
     const tab = options.private ? makePrivateTab() : newTab()
+    tab.lastActiveAt = Date.now()
     const currentId = activeTabIdRef.current
     if (currentId) void hideNativeTab(currentId)
     if (url) { tab.url = url; tab.title =translate("正在加载\u2026");tab.loading=true}
@@ -1870,7 +1904,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     const selected = tabs.find(tab => tab.id === id)
     const currentId = activeTabIdRef.current
     if (currentId) void hideNativeTab(currentId)
-    setTabs(current => current.map(       (tab                              )=>({...tab,active:tab.id===id})))
+    setTabs(current => current.map(       (tab                              )=>({...tab,active:tab.id===id,lastActiveAt:tab.id===id?Date.now():tab.lastActiveAt})))
     setActiveTabId(id)
     activeTabIdRef.current = id
     lastActiveAtRef.current.set(id, Date.now())
@@ -1939,6 +1973,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       { key: 'duplicate', label:translate("复制标签页"),disabled:!tab.url,onClick:()=>duplicateTab(tab)},
       { key: 'pin', label: tab.pinned ?translate("取消固定"):translate("固定标签页"),onClick:()=>togglePinned(tab.id)},
       { key: 'archive', label:translate("归档标签页"),disabled:!tab.url||tab.private,onClick:()=>{void archiveTabToStore(tab)}},
+      { key: 'queue', label:translate("稍后读"),disabled:!tab.url||tab.private,onClick:()=>{void queueTabForLater(tab)}},
       { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
       { type: 'divider' },
       { key: 'close', label:translate("关闭标签页"),disabled:tab.pinned,onClick:()=>closeTab(tab.id)},
@@ -2047,6 +2082,21 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       closeTab(target.id)
     } catch (error) {
       messageApi.error(translate("归档失败：{value0}",{value0:String(error)}))
+    }
+  }
+
+  /** Put a tab on the read-later queue without saving it to the knowledge base. */
+  async function queueTabForLater(target: BrowserTab) {
+    const entry = readingQueueEntryFromTab(target)
+    if (!entry) {
+      messageApi.warning(translate("当前页面无法加入待读（仅支持 http/https，私密标签不加入）"))
+      return
+    }
+    try {
+      await addToReadingQueue(entry)
+      messageApi.success(translate("已加入待读，可在知识库「待读」中查看"), 2)
+    } catch (error) {
+      messageApi.error(translate("加入待读失败：{value0}",{value0:String(error)}))
     }
   }
 
@@ -2262,6 +2312,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       onSavePage={() => void save()}
       onBookmarkPage={() => void addCurrentAsBookmark()}
       onArchiveTab={() => void archiveTabToStore(active)}
+      onQueueTab={() => void queueTabForLater(active)}
       onToggleAi={toggleAiAssistant}
       onToggleNotes={() => setNotesOpen(value => !value)}
       onBulkSummary={() => setBulkSummaryOpen(true)}

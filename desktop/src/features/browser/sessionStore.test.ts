@@ -133,6 +133,24 @@ describe('restoreFromSnapshot', () => {
     expect(restored.tabs[0].error).toBeUndefined()
     expect(restored.tabs[0].crashed).toBe(false)
   })
+
+  it('stamps missing lastActiveAt with the snapshot time so old sessions can be swept', () => {
+    const base = sample.windows[0].tabs.find(tab => !tab.private)!
+    const stale: SessionSnapshot = {
+      ...sample,
+      savedAt: 1_700_000_000_000,
+      windows: [{
+        ...sample.windows[0],
+        tabs: [
+          { ...base, id: 'a', lastActiveAt: undefined },
+          { ...base, id: 'b', lastActiveAt: 1_700_000_500_000 },
+        ],
+      }],
+    }
+    const restored = restoreFromSnapshot(stale)
+    expect(restored.tabs[0].lastActiveAt).toBe(1_700_000_000_000)
+    expect(restored.tabs[1].lastActiveAt).toBe(1_700_000_500_000)
+  })
 })
 
 describe('stripTransientTabState', () => {

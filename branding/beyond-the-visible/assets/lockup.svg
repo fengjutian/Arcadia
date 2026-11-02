@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 260" role="img" aria-label="Arcadia">
+  <title>Arcadia — horizontal lockup</title>
+  <g transform="translate(10 18) scale(.44)">
+    <g fill="none" stroke="#c6ff3d" stroke-width="34">
+      <circle cx="256" cy="244" r="150" stroke-dasharray="753.98 188.5" transform="rotate(-9 256 244)"/>
+    </g>
+    <circle cx="362.1" cy="137.9" r="30" fill="#c6ff3d"/>
+    <g stroke="#f2f3ea" stroke-width="2" opacity=".34">
+      <path d="M64 356h384"/><path d="M64 347v18M448 347v18"/>
+    </g>
+  </g>
+  <text x="300" y="158" fill="#f2f3ea" font-family="Noto Sans SC, Segoe UI, sans-serif" font-size="104" font-weight="600" letter-spacing="18">ARCADIA</text>
+  <text x="304" y="210" fill="#8f978b" font-family="Cascadia Mono, Consolas, monospace" font-size="22" letter-spacing="7">BEYOND THE VISIBLE</text>
+</svg>

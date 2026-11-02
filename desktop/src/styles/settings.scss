@@ -62,6 +62,7 @@
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
+  gap: 16px;
   min-width: 0;
   max-width: 100%;
 }
@@ -69,6 +70,20 @@
 // Every settings category reaches the bottom of the available pane. Categories
 // containing several cards keep their natural stack and let the final card
 // occupy the remaining space.
+//
+// Two flex defaults have to be corrected for that stack: the pane is stretched
+// to the tab height, so earlier cards shrink (and clip their content) unless
+// `flex: none`; and their body must contribute its content to the card's auto
+// height instead of resolving from a zero flex basis. Without both, the
+// language card collapsed to its header and the next card covered the cut row.
+.settings-pane > .settings-card:not(:last-child) {
+  flex: none;
+}
+
+.settings-pane > .settings-card:not(:only-child) > .ui-card__body {
+  flex-basis: auto;
+}
+
 .settings-pane > .settings-card:last-child {
   flex: 1 0 auto;
 }

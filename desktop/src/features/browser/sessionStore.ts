@@ -189,7 +189,13 @@ export function restoreFromSnapshot(snapshot: SessionSnapshot): RestoredSession 
   for (const tab of window.tabs) {
     if (!tab.id || !tab.title) { skipped++; continue }
     if (tab.private) { skipped++; continue }
-    tabs.push(stripTransientTabState(tab))
+    // Tabs saved before `lastActiveAt` existed inherit the snapshot time: if the
+    // app was closed for days they are still old enough to archive, but a
+    // just-saved session is never swept on the next launch.
+    const lastActiveAt = typeof tab.lastActiveAt === 'number' && tab.lastActiveAt > 0
+      ? tab.lastActiveAt
+      : snapshot.savedAt
+    tabs.push(stripTransientTabState({ ...tab, lastActiveAt }))
   }
   const activeTabId = tabs.some(tab => tab.id === window.activeTabId)
     ? window.activeTabId
