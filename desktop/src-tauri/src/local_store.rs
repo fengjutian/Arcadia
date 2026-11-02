@@ -1625,6 +1625,70 @@ pub fn local_search_similar(
     Ok(scored)
 }
 
+/// Placeholder returned to the UI instead of a stored secret. Saving it back
+/// unchanged keeps the existing keyring value.
+const MCP_SECRET_MASK: &str = "********";
+
+#[derive(Default, Serialize, Deserialize)]
+struct McpSecrets {
+    #[serde(default)]
+    env: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    headers: std::collections::HashMap<String, String>,
+}
+
+fn mcp_secret_account(id: &str) -> String {
+    format!("mcp-secrets:{id}")
+}
+
+fn read_mcp_secrets(id: &str) -> Option<McpSecrets> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, &mcp_secret_account(id)).ok()?;
+    let raw = entry.get_password().ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn write_mcp_secrets(id: &str, secrets: &McpSecrets) -> Result<(), String> {
+    if secrets.env.is_empty() && secrets.headers.is_empty() {
+        let _ = keyring_delete(&mcp_secret_account(id));
+        return Ok(());
+    }
+    let raw = serde_json::to_string(secrets).map_err(|error| error.to_string())?;
+    keyring_set(&mcp_secret_account(id), &raw)
+        .map_err(|error| format!("cannot store MCP secrets in the system keyring: {error}"))
+}
+
+/// Exposed to the MCP transport so it can launch/inject real values without
+/// ever sending them through the frontend.
+pub fn mcp_secrets(id: &str) -> Option<(std::collections::HashMap<String, String>, std::collections::HashMap<String, String>)> {
+    read_mcp_secrets(id).map(|secrets| (secrets.env, secrets.headers))
+}
+
+fn merge_secret_map(
+    existing: &std::collections::HashMap<String, String>,
+    incoming: &std::collections::HashMap<String, String>,
+) -> std::collections::HashMap<String, String> {
+    let mut merged = std::collections::HashMap::new();
+    for (key, value) in incoming {
+        if value == MCP_SECRET_MASK {
+            if let Some(previous) = existing.get(key) {
+                merged.insert(key.clone(), previous.clone());
+            }
+        } else {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+    merged
+}
+
+fn mask_secret_map(
+    secrets: &std::collections::HashMap<String, String>,
+) -> std::collections::HashMap<String, String> {
+    secrets
+        .keys()
+        .map(|key| (key.clone(), MCP_SECRET_MASK.to_string()))
+        .collect()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServer {
@@ -1691,39 +1755,45 @@ pub fn local_save_mcp_server(
     let new_id = format!("mcp-{}", uuid::Uuid::new_v4());
     let now = chrono::Utc::now().to_rfc3339();
     let args_json = serde_json::to_string(&server.args).map_err(|e| e.to_string())?;
-    let env_json = serde_json::to_string(&server.env).map_err(|e| e.to_string())?;
-    let headers_json = serde_json::to_string(&server.headers).map_err(|e| e.to_string())?;
-    let existing: Option<(String, String)> = database
-        .query_row(
-            "SELECT id, created_at FROM mcp_servers WHERE name=?1",
-            params![server.name],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()
-        .map_err(|e| e.to_string())?;
-    let (final_id, created_at) = match existing {
-        Some((existing_id, created_at)) => {
-            if let Some(input_id) = server.id.as_deref() {
-                if input_id != existing_id {
-                    return Err(format!("server name '{}' already exists", server.name));
-                }
-            }
-            (existing_id, created_at)
-        }
-        None => {
-            database
-                .execute(
-                    "INSERT INTO mcp_servers(id,name,transport,command,url,args_json,env_json,headers_json,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                    params![new_id, server.name, server.transport, server.command, server.url, args_json, env_json, headers_json, server.enabled as i64, now, now],
-                )
-                .map_err(|e| e.to_string())?;
-            (new_id, now.clone())
-        }
+    let existing: Option<(String, String, String, String)> = match server.id.as_deref() {
+        Some(id) => database
+            .query_row(
+                "SELECT id, created_at, env_json, headers_json FROM mcp_servers WHERE id=?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?,
+        None => database
+            .query_row(
+                "SELECT id, created_at, env_json, headers_json FROM mcp_servers WHERE name=?1",
+                params![server.name],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?,
     };
+    let (final_id, created_at, base) = match existing {
+        Some((existing_id, created_at, env_json, headers_json)) => {
+            let keyring = read_mcp_secrets(&existing_id);
+            let base = keyring.unwrap_or_else(|| McpSecrets {
+                env: serde_json::from_str(&env_json).unwrap_or_default(),
+                headers: serde_json::from_str(&headers_json).unwrap_or_default(),
+            });
+            (existing_id, created_at, base)
+        }
+        None => (new_id, now.clone(), McpSecrets::default()),
+    };
+    let secrets = McpSecrets {
+        env: merge_secret_map(&base.env, &server.env),
+        headers: merge_secret_map(&base.headers, &server.headers),
+    };
+    // Secrets only ever live in the OS keyring; the SQLite columns keep `{}`.
+    write_mcp_secrets(&final_id, &secrets)?;
     database
         .execute(
-            "UPDATE mcp_servers SET transport=?1, command=?2, url=?3, args_json=?4, env_json=?5, headers_json=?6, enabled=?7, updated_at=?8 WHERE id=?9",
-            params![server.transport, server.command, server.url, args_json, env_json, headers_json, server.enabled as i64, now, final_id],
+            "INSERT INTO mcp_servers(id,name,transport,command,url,args_json,env_json,headers_json,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, transport=excluded.transport, command=excluded.command, url=excluded.url, args_json=excluded.args_json, env_json=excluded.env_json, headers_json=excluded.headers_json, enabled=excluded.enabled, updated_at=excluded.updated_at",
+            params![final_id, server.name, server.transport, server.command, server.url, args_json, "{}", "{}", server.enabled as i64, created_at, now],
         )
         .map_err(|e| e.to_string())?;
     Ok(McpServer {
@@ -1733,8 +1803,8 @@ pub fn local_save_mcp_server(
         command: server.command,
         url: server.url,
         args: server.args,
-        env: server.env,
-        headers: server.headers,
+        env: mask_secret_map(&secrets.env),
+        headers: mask_secret_map(&secrets.headers),
         enabled: server.enabled,
         created_at,
         updated_at: now,
@@ -1764,14 +1834,42 @@ fn row_mcp_server(row: &rusqlite::Row<'_>) -> rusqlite::Result<McpServer> {
 #[tauri::command]
 pub fn local_list_mcp_servers(app: tauri::AppHandle) -> Result<Vec<McpServer>, String> {
     let database = connection(&app)?;
-    let mut statement = database
-        .prepare("SELECT id,name,transport,command,url,args_json,env_json,headers_json,enabled,created_at,updated_at FROM mcp_servers ORDER BY name")
-        .map_err(|e| e.to_string())?;
-    let rows = statement
-        .query_map(params![], row_mcp_server)
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+    let mut servers = {
+        let mut statement = database
+            .prepare("SELECT id,name,transport,command,url,args_json,env_json,headers_json,enabled,created_at,updated_at FROM mcp_servers ORDER BY name")
+            .map_err(|e| e.to_string())?;
+        let rows = statement
+            .query_map(params![], row_mcp_server)
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
+    for server in &mut servers {
+        let db_env = std::mem::take(&mut server.env);
+        let db_headers = std::mem::take(&mut server.headers);
+        let mut secrets = McpSecrets {
+            env: db_env.clone(),
+            headers: db_headers.clone(),
+        };
+        if let Some(keyring) = read_mcp_secrets(&server.id) {
+            secrets.env.extend(keyring.env);
+            secrets.headers.extend(keyring.headers);
+        }
+        // One-time migration for rows written before secrets moved to the
+        // keyring. If the keyring is unavailable the legacy values stay in
+        // SQLite and the server keeps working.
+        if (!db_env.is_empty() || !db_headers.is_empty())
+            && write_mcp_secrets(&server.id, &secrets).is_ok()
+        {
+            let _ = database.execute(
+                "UPDATE mcp_servers SET env_json='{}', headers_json='{}' WHERE id=?1",
+                params![server.id],
+            );
+        }
+        server.env = mask_secret_map(&secrets.env);
+        server.headers = mask_secret_map(&secrets.headers);
+    }
+    Ok(servers)
 }
 
 #[tauri::command]
@@ -1780,6 +1878,9 @@ pub fn local_delete_mcp_server(app: tauri::AppHandle, id: String) -> Result<bool
     let removed = database
         .execute("DELETE FROM mcp_servers WHERE id=?", params![id])
         .map_err(|e| e.to_string())?;
+    if removed > 0 {
+        let _ = keyring_delete(&mcp_secret_account(&id));
+    }
     Ok(removed > 0)
 }
 
@@ -5203,6 +5304,29 @@ mod tests {
             enabled: true,
         };
         assert!(save_mcp_server_for_test(&database, bad).is_err());
+    }
+
+    #[test]
+    fn mcp_secret_merge_keeps_masked_values_and_masks_output() {
+        let existing = [
+            ("TOKEN".to_string(), "real-secret".to_string()),
+            ("GONE".to_string(), "old".to_string()),
+        ]
+        .into_iter()
+        .collect::<std::collections::HashMap<_, _>>();
+        let incoming = [
+            ("TOKEN".to_string(), MCP_SECRET_MASK.to_string()),
+            ("NEW".to_string(), "fresh".to_string()),
+        ]
+        .into_iter()
+        .collect::<std::collections::HashMap<_, _>>();
+        let merged = merge_secret_map(&existing, &incoming);
+        assert_eq!(merged.get("TOKEN").map(String::as_str), Some("real-secret"));
+        assert_eq!(merged.get("NEW").map(String::as_str), Some("fresh"));
+        assert!(!merged.contains_key("GONE"));
+        let masked = mask_secret_map(&merged);
+        assert_eq!(masked.get("TOKEN").map(String::as_str), Some(MCP_SECRET_MASK));
+        assert_eq!(masked.len(), merged.len());
     }
 
     fn save_mcp_server_for_test(

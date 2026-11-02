@@ -117,8 +117,16 @@ fn load_server(app: &tauri::AppHandle, id: &str) -> Result<ServerConfig, String>
     }
 
     let mut headers = HeaderMap::new();
-    let values: HashMap<String, String> =
+    let mut values: HashMap<String, String> =
         serde_json::from_str(&raw_headers).map_err(|e| e.to_string())?;
+    let mut env: HashMap<String, String> =
+        serde_json::from_str(&raw_env).map_err(|e| e.to_string())?;
+    // Secrets live in the OS keyring; legacy rows may still carry them in
+    // SQLite until the list command migrates them.
+    if let Some((secret_env, secret_headers)) = crate::local_store::mcp_secrets(id) {
+        env.extend(secret_env);
+        values.extend(secret_headers);
+    }
     for (name, value) in values {
         let lower = name.to_ascii_lowercase();
         if matches!(
@@ -148,7 +156,7 @@ fn load_server(app: &tauri::AppHandle, id: &str) -> Result<ServerConfig, String>
         url,
         command,
         args: serde_json::from_str(&raw_args).map_err(|e| e.to_string())?,
-        env: serde_json::from_str(&raw_env).map_err(|e| e.to_string())?,
+        env,
         headers,
     })
 }
@@ -1004,7 +1012,7 @@ pub struct McpAuditEntry {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerStatus {
     pub server_id: String,
@@ -1316,6 +1324,27 @@ mod tests {
         assert_ne!(first, config.fingerprint());
     }
 
+    #[test]
+    fn transient_failures_are_retried_but_config_errors_are_not() {
+        assert!(is_transient_failure("MCP stdio server closed: boom"));
+        assert!(is_transient_failure("MCP connection failed: timed out"));
+        assert!(is_transient_failure("MCP stdio server is not running"));
+        assert!(!is_transient_failure("MCP server is disabled"));
+        assert!(!is_transient_failure("remote MCP URLs must use HTTPS"));
+        assert!(!is_transient_failure("MCP server not found"));
+    }
+
+    #[test]
+    fn disconnected_status_starts_clean() {
+        let status = McpServerStatus::disconnected("mcp-1");
+        assert!(!status.connected);
+        assert_eq!(status.server_id, "mcp-1");
+        assert!(status.last_error.is_none());
+        let failed = status.with_error("boom");
+        assert_eq!(failed.last_error.as_deref(), Some("boom"));
+        assert_eq!(failed.failure_count, 1);
+    }
+
     /// Drives the real HTTP transport against a one-request-at-a-time mock so
     /// the initialize handshake, session id propagation and request dispatch
     /// are covered without a network dependency.
@@ -1398,6 +1427,7 @@ mod tests {
             fingerprint: "test".into(),
             transport: Transport::Http(transport),
             initialized: tokio::sync::Mutex::new(None),
+            runtime: Mutex::new(RuntimeState::default()),
         };
 
         let result = session

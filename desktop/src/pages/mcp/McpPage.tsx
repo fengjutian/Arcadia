@@ -82,7 +82,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
 
   async function refreshStatuses(next: McpServer[]) {
     const entries = await Promise.all(next.map(async server => {
-      const value = await getMcpServerStatus(server.id).catch(() => EMPTY_STATUS)
+      const value = await getMcpServerStatus(server.id).catch(() => ({ ...EMPTY_STATUS, serverId: server.id }))
       return [server.id, value] as const
     }))
     setStatuses(Object.fromEntries(entries))
@@ -98,6 +98,19 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   }
 
   useEffect(() => { void reload() }, [])
+
+  // The backend pushes health transitions instead of having the page poll.
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    void listen<McpServerStatus>('mcp://status', event => {
+      setStatuses(current => ({ ...current, [event.payload.serverId]: event.payload }))
+    }).then(off => {
+      if (disposed) off()
+      else unlisten = off
+    }).catch(() => undefined)
+    return () => { disposed = true; unlisten?.() }
+  }, [])
 
   function clearCapabilities() {
     setTools([])
@@ -127,7 +140,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
       if (toolResponse.status === 'fulfilled') setTools((toolResponse.value as { tools?: McpTool[] }).tools ?? [])
       if (resourceResponse.status === 'fulfilled') setResources((resourceResponse.value as { resources?: McpResource[] }).resources ?? [])
       if (promptResponse.status === 'fulfilled') setPrompts((promptResponse.value as { prompts?: McpPrompt[] }).prompts ?? [])
-      const nextStatus = await getMcpServerStatus(server.id).catch(() => EMPTY_STATUS)
+      const nextStatus = await getMcpServerStatus(server.id).catch(() => ({ ...EMPTY_STATUS, serverId: server.id }))
       setStatuses(current => ({ ...current, [server.id]: nextStatus }))
       messageApi.success(t("已连接 {value0}",{value0:server.name}))
     } catch (error) { messageApi.error(t("连接失败：{value0}",{value0:String(error)}))}
@@ -136,8 +149,18 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
 
   async function disconnect(server: McpServer) {
     try { await disconnectMcpServer(server.id) } catch (error) { messageApi.error(String(error)) }
-    setStatuses(current => ({ ...current, [server.id]: EMPTY_STATUS }))
+    setStatuses(current => ({ ...current, [server.id]: { ...EMPTY_STATUS, serverId: server.id } }))
     clearCapabilities()
+  }
+
+  async function ping(server: McpServer) {
+    setBusy(true)
+    try {
+      const latency = await pingMcpServer(server.id)
+      messageApi.success(t("连接正常，延迟 {value0} ms",{value0:String(latency)}))
+    } catch (error) {
+      messageApi.error(t("健康检查失败：{value0}",{value0:String(error)}))
+    } finally { setBusy(false) }
   }
 
   async function invoke(tool: McpTool) {
@@ -318,10 +341,14 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
               <Popconfirm title={t("删除这个 MCP Server？")} onConfirm={()=>void removeServer(selected)}><Button size="small" danger icon={<Trash2 size={14}/>}>{t("删除")}</Button></Popconfirm>
               <Button size="small" icon={<History size={14}/>} onClick={()=>void openAudit()}>{t("审计")}</Button>
               {connected
-                ? <Button size="small" onClick={()=>void disconnect(selected)}>{t("断开连接")}</Button>
+                ? <>
+                    <Button size="small" loading={busy} onClick={()=>void ping(selected)}>{t("检测")}</Button>
+                    <Button size="small" onClick={()=>void disconnect(selected)}>{t("断开连接")}</Button>
+                  </>
                 : <Button type="primary" loading={busy} disabled={!selected.enabled} icon={<PlugZap size={16}/>} onClick={()=>void connect(selected)}>{t("连接并发现")}</Button>}
             </div>
           </div>
+          {!connected && status.lastError && <Alert type="error" showIcon message={t("最近一次连接错误")} description={status.lastError}/>}
           <Alert type="info" showIcon message={t("安全调用")} description={t("工具名称、参数会在执行前展示。只有确认后，Arcadia 才会发送本次调用。")}/>
           {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("正在发现服务能力…")}</span></div>:<div className="mcp-capabilities">
             <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("工具")}</span><Tag>{tools.length}</Tag></div>
@@ -354,6 +381,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
         <label><span>{t("传输方式")}</span><Segmented value={transport} onChange={value=>setTransport(value as McpTransport)} options={[{label:'stdio',value:'stdio'},{label:'HTTP',value:'http'},{label:'SSE',value:'sse'}]}/></label>
         {transport === 'stdio' ? <><label><span>{t("启动命令")}</span><Input value={command} onChange={event=>setCommand(event.target.value)} placeholder={t("例如 npx")}/></label><label><span>{t("参数（每行一个）")}</span><Input.TextArea rows={4} value={args} onChange={event=>setArgs(event.target.value)} placeholder={'-y\n@modelcontextprotocol/server-filesystem\nD:\\Documents'}/></label></>:<label><span>{t("服务地址")}</span><Input value={url} onChange={event=>setUrl(event.target.value)} placeholder="https://example.com/mcp"/></label>}
         <div className="mcp-add-form__split"><label><span>{t("环境变量 JSON")}</span><Input.TextArea rows={3} value={env} onChange={event=>setEnv(event.target.value)} placeholder='{"TOKEN":"..."}'/></label><label><span>{t("请求头 JSON")}</span><Input.TextArea rows={3} value={headers} onChange={event=>setHeaders(event.target.value)} placeholder='{"Authorization":"Bearer ..."}'/></label></div>
+        {editingId && <p className="mcp-add-form__hint">{t("密钥保存在系统密钥环；保留 ******** 表示不修改。")}</p>}
         <label className="mcp-add-form__toggle"><Switch checked={enabled} onChange={setEnabled}/><span>{t("添加后启用")}</span></label>
       </div>
     </Modal>
