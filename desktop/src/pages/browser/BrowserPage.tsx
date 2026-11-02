@@ -87,6 +87,7 @@ import { ADVANCED_SETTINGS_EVENT, readAdvancedSettings, type AdvancedSettings } 
 import { cleanTrackingParameters, isTrackingCleanerEnabled, TRACKING_CLEANER_EVENT } from '../../features/plugins/trackingCleaner'
 import { AD_BLOCKER_EVENT, isAdBlockerEnabled, setAdBlockerEnabled } from '../../features/plugins/adBlocker'
 import { newTab, tabGroupColor } from '../../features/browser/browserUtils'
+import { isPageNewWindowUrl, reusableNewTabId } from '../../features/browser/newTabTarget'
 import { classifyNavigationError, diagnoseNavigationError, safeFileName } from '../../features/browser/navigationErrors'
 import { addBlockedSite, findBlockingEntry, hostFromUrl, loadSiteBlacklist, removeBlockedSite, subscribeSiteBlacklist } from '../../features/privacy/siteBlacklist'
 import { renderSuggestion } from '../../features/browser/suggestionRenderer'
@@ -1213,7 +1214,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   useEffect(() => {
     let disposed = false
     let unlisten: (() => void) | undefined
-    void onNativeNewTab((url, options) => openNewTab(url, options)).then(stop => {
+    void onNativeNewTab((url, options) => {
+      // WebView2 reports a popup as soon as the page calls `window.open`,
+      // which can happen before the popup has a URL. Those requests are not
+      // links and used to leave a blank tab beside the page that was asked for.
+      if (!isPageNewWindowUrl(url)) return
+      openNewTab(url, options)
+    }).then(stop => {
       if (disposed) stop()
       else unlisten = stop
     })
@@ -2301,12 +2308,28 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   }
 
   function openNewTab(url?: string, options: { private?: boolean; background?: boolean } = {}): string | undefined {
+    // A blank URL is only meaningful for an explicit "new tab" action. A
+    // page-initiated request without a real address (about:blank preload,
+    // popup that never receives a location) must not leave an empty tab.
+    const requestedUrl = typeof url === 'string' ? url.trim() : undefined
+    if (url !== undefined && !requestedUrl) return undefined
     if (url && !isNativeBrowserAvailable()) {
       window.open(url, '_blank', 'noopener,noreferrer')
       messageApi.info(translate("网页预览模式下已使用系统浏览器打开"))
       return undefined
     }
     const background = options.background === true
+    // Opening a page while an untouched new-tab page is in front means the
+    // page belongs in that tab: reuse it instead of leaving a second, empty
+    // "新标签页" behind. Only the live active tab qualifies — a stale id or a
+    // background/private request still needs its own tab.
+    const reusableId = requestedUrl && active.id === activeTabIdRef.current
+      ? reusableNewTabId(tabsRef.current, activeTabIdRef.current, { background, private: options.private })
+      : undefined
+    if (reusableId && requestedUrl) {
+      void navigate(requestedUrl)
+      return reusableId
+    }
     const tab = options.private ? makePrivateTab() : newTab()
     tab.lastActiveAt = Date.now()
     const currentId = activeTabIdRef.current

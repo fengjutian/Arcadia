@@ -474,3 +474,11 @@ Agent/用户提出调用
 - 体积控制：序列化超过 20KB 的结果替换为截断文本块；对话持久化时同样丢弃超过 20KB 的 `result`，避免历史记录被 base64 图片撑爆。
 - 测试：新增结构化结果保留/超限丢弃用例；前端全量 107 文件 / 761 用例通过。
 
+### 12.18 第十八批：停用未接入的后端 Agent supervisor（2026-11-02）
+
+- 应用启动时不再构建 `ToolRegistry`、也不再启动 `AgentSupervisor`。核查结论：前端从未调用 `agent_start`，而 supervisor 查询的是大写状态（`PLANNING/RUNNING`），前端写入的是小写（`running/completed`），该循环实际上永远匹配不到运行。
+- 从 Tauri 注册表中移除 14 个 `agent_*` 命令（start/pause/resume/cancel/get_run/record_step/request_approval/approve/deny/verify_approval/save_checkpoint/latest_checkpoint/mark_unknown_runs/recover_interrupted）。
+- 移除前端 `api.ts` 中对应的 `agentStart` 等函数与 `AgentRunMeta` / `AgentBudgetLimits` 类型，避免继续暴露不可用的 API。
+- Rust 侧模块（`supervisor`、`runtime`、`tools`、`approval`、`budget`、`checkpoint`）暂时保留并在 `agent/mod.rs` 标注“未启动、为未来后端 Agent 预留”；产品研究 Agent 继续通过 `local_record_agent_run` 记录运行。
+- 测试：行为无变化；Rust 296 通过 + 2 项忽略，前端 761 通过。
+
