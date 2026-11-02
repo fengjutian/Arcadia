@@ -283,11 +283,11 @@
 
 ## 进行中
 
-无。界面布局与滚动所有权已于 2026-11-02 收口：`html/body` 与 `.app-content` 锁定不滚，只有 `.route-view` 纵向滚动，browser 路由自己管理内部面板。`src/styles/layoutContract.test.ts` 直接读取 `compact.scss` 断言这条契约，防止以后再加嵌套滚动容器。下一步（`6.4` Space）已开始，见该条目。
+无。界面布局与滚动所有权已于 2026-11-02 收口：`html/body` 与 `.app-content` 锁定不滚，只有 `.route-view` 纵向滚动，browser 路由自己管理内部面板。`src/styles/layoutContract.test.ts` 直接读取 `compact.scss` 断言这条契约，防止以后再加嵌套滚动容器。Iteration 6 已全部完成。
 
 ## 测试现状
 
-`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **103 个文件 / 734 用例全部通过**（含 i18n 完整性、布局契约、Space 范围/身份/图标/命名空间/迁移、站点路由与规则暂停/路由提示、阅读偏好与站点 CSS、标签重命名与沉淀动效、书签与标签清单导入及文件夹分组、Little Arc 与全局快捷键、分屏几何/文档并排/对话并排/双文档对比、睡眠规则与新标签页模型）。Rust 侧 `cargo check` 已恢复通过（刷新锁文件消除了 `webview2-com` 0.38 残留）；全量测试最近一次为 269 通过 + 1 个既有的 CJK 拼音索引环境失败。
+`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **103 个文件 / 734 用例全部通过**（含 i18n 完整性、布局契约、Space 范围/身份/图标/命名空间/迁移、站点路由与规则暂停/路由提示、阅读偏好与站点 CSS、标签重命名与沉淀动效、书签与标签清单导入及文件夹分组、Little Arc 与全局快捷键、分屏几何/文档并排/对话并排/双文档对比、睡眠规则与新标签页模型）。Rust 侧 **278 个用例全部通过**：CJK 拼音查询改为前缀匹配（`"nanjing"*`）后，`cjk_index_matches_title_by_pinyin_and_initials` 已修复。
 
 直接用 `cargo test` 会让测试二进制在加载阶段以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出：`tauri` 默认特性 `common-controls-v6` 与 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6` 都会静态导入 `comctl32!TaskDialogIndirect`，该导出只存在于 comctl32 v6 组件，需要应用清单声明 `Microsoft.Windows.Common-Controls`。应用主程序由 `tauri-build` 注入清单，测试 harness 没有。
 
@@ -298,13 +298,13 @@
 ## 下一步（按优先级）
 
 1. ~~提交布局收尾改动，结束当前工作流。~~ 已完成：滚动所有权收口 + 布局契约测试。
-2. 清理残留：`tauri.conf.json` 的 CSP 仍白名单已删除的 `http://127.0.0.1:8787`；统一 `package.json`（0.3.0）与 `tauri.conf.json`（0.1.0）的版本号。
-3. 补齐搜索分页，缓解文档量增长后的列表端压力。
+2. ~~清理残留：CSP 白名单与版本号。~~ 已完成：CSP 已移除 `127.0.0.1:8787`，`package.json` 与 `tauri.conf.json` 统一为 0.6.0。
+3. ~~补齐搜索分页。~~ 已完成：搜索结果支持 12/24/48 每页与 `pageWindow` 分页。
 4. 扩展插件宿主能力，覆盖知识库写入、AI 调用之外的常用能力。
-5. macOS / Linux 的隐私拦截与证书拦截等价实现（受平台接口限制，需先做可行性验证）。
-6. ~~`6.4` Space 化~~ 已完成（2026-11-02）。Iteration 6 的全部条目均已有 V1 实现；剩余工作集中在各条目的「待补」：6.5 路由管理页与路由到 Space、6.7 全局快捷键与集合选择、6.9 纯 CSS 隐藏、6.10 图标与动效、6.11 标签清单导入、6.12 对象级分屏、6.16 面板内过滤开关。
-7. ~~Iteration 6 收尾~~ 已完成（2026-11-02）：不依赖布局的 `6.1` / `6.2` / `6.3` / `6.6` / `6.13` / `6.14` / `6.15` 全部落地，含命令栏、归档与自动归档、笔记/剪藏/归档的检索与 RAG 引用、阅读队列、睡眠标签与站点例外。
-8. ~~Iteration 7 的第 1 步：把 webview 承载层收口为 `PageEngine` trait，作为日后接入 Chromium 的前置条件；只做抽象，不改变现有行为，可在 `6.4` 之前并行。~~ 已完成（2026-11-02）：见 `desktop/src-tauri/src/engine/`。布局已收口，接下来只在有明确收益时评估 CEF 第二阶段——启动条件第 2 条（版本探测）已具备，第 3 条需要书面结论。
+5. 插件市场与签名校验。
+6. macOS / Linux 的隐私拦截与证书拦截等价实现（受平台接口限制，需先做可行性验证）。
+7. ~~Iteration 6 收尾~~ 已完成（2026-11-02）：16 个条目全部完成，含 Space、命令栏、归档、笔记/剪藏、阅读队列、睡眠标签、站点路由、站点面板、分屏、随手收与全局快捷键。
+8. ~~Iteration 7 的第 1 步：把 webview 承载层收口为 `PageEngine` trait~~ 已完成（2026-11-02）：见 `desktop/src-tauri/src/engine/`。CEF 第二阶段列为远期规划，不提供界面上的引擎切换。
 
 ## 决策记录
 

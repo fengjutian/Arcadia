@@ -303,3 +303,26 @@ Agent/用户提出调用
 
 首个可交付里程碑建议定义为：**一个本地 `stdio` Server 和一个远程 HTTP Server 能稳定保持会话，工具可被 Agent 发现，R2 调用逐次审批，调用全程可取消且有脱敏审计记录。**
 
+## 12. 实施进展（2026-11-02）
+
+本轮开发落地了“长连接 + 可观测 + 资源/Prompt + 审计查看”的第一批能力：
+
+- `mcp.rs` 重写为 `McpHost` 会话管理器：
+  - `stdio` 进程每个 Server 只启动一次，按 JSON-RPC `id` 多路复用请求，断线/超时/退出时回收子进程；应用退出时统一 `shutdown_all`。
+  - HTTP 传输执行标准 `initialize` → `notifications/initialized` 握手，保存并复用 `Mcp-Session-Id` 与协商后的 `MCP-Protocol-Version`；会话过期（HTTP 404）时自动重新初始化一次。
+  - 不再使用自定义的 `server/discover`，改为协议内的 `initialize`。
+- 新增命令：`mcp_list_prompts`、`mcp_read_resource`、`mcp_get_prompt`、`mcp_disconnect`、`mcp_server_status`、`mcp_list_audit`、`mcp_clear_audit`。
+- 远程地址策略接入请求路径：HTTPS/本地 HTTP 白名单、云元数据与私网/链路本地地址拦截、DNS 解析校验、重定向二次校验（公共地址不可重定向到本地）。
+- 工作台补齐：Server 编辑/删除/启停、连接状态与协议版本、断开连接、资源正文读取、Prompt 列表与查看、审计日志查看与清空。
+- 测试：新增 HTTP 握手的真实 mock server 测试（校验只初始化一次、会话头透传、方法顺序），Rust 279 项测试与前端 734 项测试全部通过。
+
+仍未完成（按优先级）：
+
+1. `stdio` 进程健康检查、指数退避重连、熔断与状态事件；HTTP 断线重连目前只覆盖 404。
+2. 敏感 env / headers 迁移系统密钥环，前端不再回显明文。
+3. R0–R3 风险分级、持久授权、速率/并发/预算限制。
+4. 能力快照持久化与变更对比；资源和 Prompt 的订阅、MIME 安全解析。
+5. Assistant 对话内的 MCP 工具动态注册与审批卡片（当前仍只有两个 Agent 元工具）。
+6. 标准 MCP 的 SSE 传输（当前 `sse` 仍复用 Streamable HTTP 的 POST + SSE 响应解析）。
+7. 设置页与工作台配置逻辑合并、配置导入导出、兼容性测试矩阵。
+

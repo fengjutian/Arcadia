@@ -24,8 +24,8 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
-use tauri::Manager;
+use std::time::{Duration, Instant};
+use tauri::{Emitter, Manager};
 
 use crate::agent::mcp_security::{is_cloud_metadata_host, is_loopback_url};
 
@@ -495,13 +495,18 @@ struct HttpTransport {
 impl HttpTransport {
     fn new(config: &ServerConfig, parsed: url::Url) -> Result<Self, String> {
         ensure_public_resolution(&parsed)?;
+        let allow_loopback = is_loopback_url(&parsed);
         let client = reqwest::Client::builder()
             .timeout(REQUEST_TIMEOUT)
-            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            .redirect(reqwest::redirect::Policy::custom(move |attempt| {
                 if attempt.previous().len() >= 5 {
                     return attempt.error("too many MCP redirects");
                 }
-                match validate_url_for_config(attempt.url().as_str()) {
+                let next = attempt.url();
+                if is_loopback_url(next) && !allow_loopback {
+                    return attempt.error("MCP redirect to a local address is blocked");
+                }
+                match validate_url_for_config(next.as_str()) {
                     Ok(_) => attempt.follow(),
                     Err(_) => attempt.error("MCP redirect points at a blocked URL"),
                 }
@@ -644,6 +649,14 @@ struct Session {
     fingerprint: String,
     transport: Transport,
     initialized: tokio::sync::Mutex<Option<Value>>,
+    runtime: Mutex<RuntimeState>,
+}
+
+#[derive(Default)]
+struct RuntimeState {
+    last_error: Option<String>,
+    last_ok_at: Option<String>,
+    failure_count: u32,
 }
 
 impl Session {
@@ -658,11 +671,56 @@ impl Session {
             fingerprint,
             transport,
             initialized: tokio::sync::Mutex::new(None),
+            runtime: Mutex::new(RuntimeState::default()),
         })
     }
 
     fn is_http(&self) -> bool {
         matches!(self.transport, Transport::Http(_))
+    }
+
+    /// A stdio session dies with its child; HTTP sessions are stateless, so the
+    /// only way to know they are healthy is the next request (or `ping`).
+    fn is_alive(&self) -> bool {
+        match &self.transport {
+            Transport::Stdio(transport) => !transport.closed.load(Ordering::SeqCst),
+            Transport::Http(_) => true,
+        }
+    }
+
+    fn record_ok(&self) {
+        let mut state = lock(&self.runtime);
+        state.last_error = None;
+        state.failure_count = 0;
+        state.last_ok_at = Some(chrono::Utc::now().to_rfc3339());
+    }
+
+    fn record_error(&self, error: &str) {
+        // JSON-RPC business errors prove the session is alive; only transport
+        // and handshake failures count towards the health state.
+        if error.starts_with("MCP error:") || error.starts_with("MCP HTTP 4") {
+            return;
+        }
+        let mut state = lock(&self.runtime);
+        state.last_error = Some(error.to_string());
+        state.failure_count = state.failure_count.saturating_add(1);
+    }
+
+    fn snapshot(&self, server_id: &str) -> McpServerStatus {
+        let info = self.initialized.try_lock().ok().and_then(|value| value.clone());
+        let runtime = lock(&self.runtime);
+        McpServerStatus {
+            server_id: server_id.to_string(),
+            connected: info.is_some() && self.is_alive(),
+            protocol_version: self.protocol_version(),
+            server_info: info
+                .as_ref()
+                .and_then(|value| value.get("serverInfo"))
+                .cloned(),
+            last_error: runtime.last_error.clone(),
+            last_ok_at: runtime.last_ok_at.clone(),
+            failure_count: runtime.failure_count,
+        }
     }
 
     async fn initialize(&self) -> Result<Value, String> {
@@ -682,18 +740,32 @@ impl Session {
     }
 
     async fn ensure_ready(&self) -> Result<Value, String> {
+        if !self.is_alive() {
+            let error = match &self.transport {
+                Transport::Stdio(transport) => transport.closed_error(),
+                Transport::Http(_) => "MCP session is not running".into(),
+            };
+            self.record_error(&error);
+            return Err(error);
+        }
         let mut initialized = self.initialized.lock().await;
         if let Some(info) = initialized.as_ref() {
             return Ok(info.clone());
         }
-        let info = self
-            .initialize()
-            .await
-            .map_err(|error| format!("MCP initialize failed: {error}"))?;
+        let info = self.initialize().await.map_err(|error| {
+            let message = format!("MCP initialize failed: {error}");
+            self.record_error(&message);
+            message
+        })?;
         self.notify("notifications/initialized", json!({}))
             .await
-            .map_err(|error| format!("MCP initialize handshake failed: {error}"))?;
+            .map_err(|error| {
+                let message = format!("MCP initialize handshake failed: {error}");
+                self.record_error(&message);
+                message
+            })?;
         *initialized = Some(info.clone());
+        self.record_ok();
         Ok(info)
     }
 
@@ -714,8 +786,16 @@ impl Session {
                     transport.clear_negotiation();
                 }
                 self.ensure_ready().await?;
-                return self.dispatch(method, params, name).await;
+                let retried = self.dispatch(method, params, name).await;
+                match &retried {
+                    Ok(_) => self.record_ok(),
+                    Err(error) => self.record_error(error),
+                }
+                return retried;
             }
+            self.record_error(error);
+        } else {
+            self.record_ok();
         }
         first
     }
@@ -734,6 +814,26 @@ impl Session {
 
     async fn info(&self) -> Option<Value> {
         self.initialized.lock().await.clone()
+    }
+
+    async fn ping(&self, timeout: Duration) -> Result<u64, String> {
+        self.ensure_ready().await?;
+        let started = Instant::now();
+        match tokio::time::timeout(timeout, self.dispatch("ping", json!({}), None)).await {
+            Ok(Ok(_)) => {
+                self.record_ok();
+                Ok(started.elapsed().as_millis() as u64)
+            }
+            Ok(Err(error)) => {
+                self.record_error(&error);
+                Err(error)
+            }
+            Err(_) => {
+                let error = format!("MCP ping timed out after {} ms", timeout.as_millis());
+                self.record_error(&error);
+                Err(error)
+            }
+        }
     }
 
     fn shutdown(&self) {
@@ -782,12 +882,64 @@ impl McpHost {
     }
 
     async fn ready(&self, app: &tauri::AppHandle, server_id: &str) -> Result<Arc<Session>, String> {
-        let session = self.get(app, server_id)?;
-        if let Err(error) = session.ensure_ready().await {
-            self.remove(server_id);
-            return Err(error);
+        let mut last_error = String::new();
+        for attempt in 0..3u32 {
+            let session = match self.get_or_reconnect(app, server_id) {
+                Ok(session) => session,
+                Err(error) => {
+                    last_error = error;
+                    if !is_transient_failure(&last_error) || attempt == 2 {
+                        self.publish_error(app, server_id, &last_error);
+                        return Err(last_error);
+                    }
+                    tokio::time::sleep(Duration::from_millis(250 * (1 << attempt))).await;
+                    continue;
+                }
+            };
+            match session.ensure_ready().await {
+                Ok(_) => {
+                    self.publish(app, server_id, &session);
+                    return Ok(session);
+                }
+                Err(error) => {
+                    last_error = error;
+                    self.remove(server_id);
+                    if !is_transient_failure(&last_error) || attempt == 2 {
+                        self.publish_error(app, server_id, &last_error);
+                        return Err(last_error);
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(250 * (1 << attempt))).await;
         }
-        Ok(session)
+        self.publish_error(app, server_id, &last_error);
+        Err(last_error)
+    }
+
+    fn get_or_reconnect(
+        &self,
+        app: &tauri::AppHandle,
+        server_id: &str,
+    ) -> Result<Arc<Session>, String> {
+        let session = self.get(app, server_id)?;
+        if session.is_alive() {
+            return Ok(session);
+        }
+        // The child exited behind our back: drop the stale session and spawn a
+        // fresh one before the next request.
+        self.remove(server_id);
+        self.get(app, server_id)
+    }
+
+    fn publish(&self, app: &tauri::AppHandle, server_id: &str, session: &Session) {
+        let _ = app.emit("mcp://status", session.snapshot(server_id));
+    }
+
+    fn publish_error(&self, app: &tauri::AppHandle, server_id: &str, error: &str) {
+        let _ = app.emit(
+            "mcp://status",
+            McpServerStatus::disconnected(server_id).with_error(error),
+        );
     }
 
     fn remove(&self, server_id: &str) {
@@ -797,9 +949,11 @@ impl McpHost {
         }
     }
 
-    fn status(&self, server_id: &str) -> Option<(Option<String>, Option<Value>)> {
-        let session = lock(&self.sessions).get(server_id).cloned()?;
-        Some((session.protocol_version(), session.initialized.try_lock().ok().and_then(|value| value.clone())))
+    fn status(&self, server_id: &str) -> McpServerStatus {
+        match lock(&self.sessions).get(server_id).cloned() {
+            Some(session) => session.snapshot(server_id),
+            None => McpServerStatus::disconnected(server_id),
+        }
     }
 
     /// Kills every stdio child. Called from the app exit hook so `npx` and
@@ -853,9 +1007,52 @@ pub struct McpAuditEntry {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerStatus {
+    pub server_id: String,
     pub connected: bool,
     pub protocol_version: Option<String>,
     pub server_info: Option<Value>,
+    pub last_error: Option<String>,
+    pub last_ok_at: Option<String>,
+    pub failure_count: u32,
+}
+
+impl McpServerStatus {
+    fn disconnected(server_id: &str) -> Self {
+        Self {
+            server_id: server_id.to_string(),
+            connected: false,
+            protocol_version: None,
+            server_info: None,
+            last_error: None,
+            last_ok_at: None,
+            failure_count: 0,
+        }
+    }
+
+    fn with_error(mut self, error: &str) -> Self {
+        self.last_error = Some(error.to_string());
+        self.failure_count = 1;
+        self
+    }
+}
+
+/// Transport-level failures are worth retrying; configuration errors are not.
+fn is_transient_failure(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    [
+        "closed",
+        "timed out",
+        "timeout",
+        "connection",
+        "not running",
+        "broken pipe",
+        "os error",
+        "refused",
+        "dns",
+        "failed to launch",
+    ]
+    .iter()
+    .any(|needle| error.contains(needle))
 }
 
 // ---------------------------------------------------------------------------
@@ -960,7 +1157,27 @@ pub async fn mcp_call_tool(
 #[tauri::command]
 pub fn mcp_disconnect(app: tauri::AppHandle, server_id: String) -> Result<(), String> {
     app.state::<McpHost>().remove(&server_id);
+    let _ = app.emit(
+        "mcp://status",
+        McpServerStatus::disconnected(&server_id),
+    );
     Ok(())
+}
+
+#[tauri::command]
+pub async fn mcp_ping(app: tauri::AppHandle, server_id: String) -> Result<u64, String> {
+    let host = app.state::<McpHost>();
+    let session = host.ready(&app, &server_id).await?;
+    match session.ping(Duration::from_secs(8)).await {
+        Ok(latency) => {
+            host.publish(&app, &server_id, &session);
+            Ok(latency)
+        }
+        Err(error) => {
+            host.publish(&app, &server_id, &session);
+            Err(error)
+        }
+    }
 }
 
 #[tauri::command]
@@ -968,19 +1185,7 @@ pub async fn mcp_server_status(
     app: tauri::AppHandle,
     server_id: String,
 ) -> Result<McpServerStatus, String> {
-    let host = app.state::<McpHost>();
-    match host.status(&server_id) {
-        Some((protocol_version, server_info)) => Ok(McpServerStatus {
-            connected: true,
-            protocol_version,
-            server_info,
-        }),
-        None => Ok(McpServerStatus {
-            connected: false,
-            protocol_version: None,
-            server_info: None,
-        }),
-    }
+    Ok(app.state::<McpHost>().status(&server_id))
 }
 
 #[tauri::command]
@@ -1109,5 +1314,129 @@ mod tests {
         let first = config.fingerprint();
         config.args.push("--debug".into());
         assert_ne!(first, config.fingerprint());
+    }
+
+    /// Drives the real HTTP transport against a one-request-at-a-time mock so
+    /// the initialize handshake, session id propagation and request dispatch
+    /// are covered without a network dependency.
+    #[tokio::test]
+    async fn http_session_negotiates_and_reuses_session_id() {
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+        let address = listener.local_addr().expect("mock address");
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let server_seen = seen.clone();
+
+        let server = std::thread::spawn(move || {
+            for _ in 0..3 {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let (headers, body) = read_http_request(&mut stream);
+                let value: Value = serde_json::from_str(&body).expect("json body");
+                let method = value["method"].as_str().unwrap_or_default().to_string();
+                server_seen.lock().unwrap().push(method.clone());
+                let id = value["id"].clone();
+                let (status, extra, response_body) = match method.as_str() {
+                    "initialize" => (
+                        "200 OK",
+                        Some(("Mcp-Session-Id", "session-42")),
+                        json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "protocolVersion": "2025-06-18",
+                                "serverInfo": {"name": "mock", "version": "1.0.0"},
+                                "capabilities": {"tools": {}}
+                            }
+                        })
+                        .to_string(),
+                    ),
+                    "notifications/initialized" => ("202 Accepted", None, String::new()),
+                    "tools/list" => {
+                        assert_eq!(
+                            headers.get("mcp-session-id").map(String::as_str),
+                            Some("session-42"),
+                            "tools/list must carry the negotiated session id"
+                        );
+                        (
+                            "200 OK",
+                            None,
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {"tools": [{"name": "echo"}]}
+                            })
+                            .to_string(),
+                        )
+                    }
+                    other => panic!("unexpected MCP method {other}"),
+                };
+                let mut response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n",
+                    response_body.len()
+                );
+                if let Some((name, value)) = extra {
+                    response.push_str(&format!("{name}: {value}\r\n"));
+                }
+                response.push_str("\r\n");
+                response.push_str(&response_body);
+                stream.write_all(response.as_bytes()).expect("write response");
+            }
+        });
+
+        let config = ServerConfig {
+            transport: "http".into(),
+            url: Some(format!("http://{address}/mcp")),
+            command: None,
+            args: Vec::new(),
+            env: HashMap::new(),
+            headers: HeaderMap::new(),
+        };
+        let parsed = validate_url_for_config(config.url.as_deref().unwrap()).expect("url");
+        let transport = HttpTransport::new(&config, parsed).expect("transport");
+        let session = Session {
+            fingerprint: "test".into(),
+            transport: Transport::Http(transport),
+            initialized: tokio::sync::Mutex::new(None),
+        };
+
+        let result = session
+            .call("tools/list", json!({}), None)
+            .await
+            .expect("tools/list");
+        assert_eq!(result["tools"][0]["name"], "echo");
+        server.join().expect("mock server");
+        assert_eq!(
+            seen.lock().unwrap().as_slice(),
+            ["initialize", "notifications/initialized", "tools/list"]
+        );
+    }
+
+    fn read_http_request(stream: &mut std::net::TcpStream) -> (HashMap<String, String>, String) {
+        use std::io::Read;
+        let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
+        let mut request_line = String::new();
+        reader.read_line(&mut request_line).expect("request line");
+        let mut headers = HashMap::new();
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("header line");
+            if line == "\r\n" || line.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+            }
+        }
+        let length = headers
+            .get("content-length")
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(0);
+        let mut body = vec![0u8; length];
+        reader.read_exact(&mut body).expect("request body");
+        (
+            headers,
+            String::from_utf8(body).expect("utf8 request body"),
+        )
     }
 }

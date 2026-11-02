@@ -1,5 +1,6 @@
 import { t } from '../../i18n'
 import { useEffect, useMemo, useState } from 'react'
+import { listen } from '@tauri-apps/api/event'
 import {
   Boxes,
   ChevronRight,
@@ -29,6 +30,7 @@ import {
   listMcpResources,
   listMcpServers,
   listMcpTools,
+  pingMcpServer,
   readMcpResource,
   saveMcpServer,
   type McpAuditEntry,
@@ -46,7 +48,7 @@ type McpPrompt = { name: string; description?: string; arguments?: Array<{ name:
 
 type Viewer = { title: string; body: string; kind: 'resource' | 'prompt' }
 
-const EMPTY_STATUS: McpServerStatus = { connected: false }
+const EMPTY_STATUS: McpServerStatus = { serverId: '', connected: false, failureCount: 0 }
 
 export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [messageApi, contextHolder] = message.useMessage()

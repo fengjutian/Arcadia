@@ -480,14 +480,23 @@ export async function disconnectMcpServer(serverId: string): Promise<void> {
 }
 
 export interface McpServerStatus {
+  serverId: string
   connected: boolean
   protocolVersion?: string
   serverInfo?: Record<string, unknown>
+  lastError?: string
+  lastOkAt?: string
+  failureCount: number
 }
 
 export async function getMcpServerStatus(serverId: string): Promise<McpServerStatus> {
-  if (!isTauri()) return { connected: false }
+  if (!isTauri()) return { serverId, connected: false, failureCount: 0 }
   return invoke<McpServerStatus>('mcp_server_status', { serverId })
+}
+
+export async function pingMcpServer(serverId: string): Promise<number> {
+  if (!isTauri()) throw new Error('MCP requires the desktop app')
+  return invoke<number>('mcp_ping', { serverId })
 }
 
 export interface McpAuditEntry {
