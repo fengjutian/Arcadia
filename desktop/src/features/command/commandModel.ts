@@ -60,6 +60,8 @@ const MODE_CYCLE: readonly CommandMode[] = ['all', 'tabs', 'bookmarks', 'history
 
 /** `Tab` inside the bar cycles the provider, mirroring Chrome's domain switch. */
 export function nextCommandMode(mode: CommandMode, step = 1): CommandMode {
+  // `ask` is a pseudo-mode: leaving it returns to the mixed view.
+  if (mode === 'ask') return 'all'
   const index = MODE_CYCLE.indexOf(mode)
   const start = index === -1 ? 0 : index
   const next = (start + step + MODE_CYCLE.length) % MODE_CYCLE.length
