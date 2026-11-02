@@ -171,3 +171,9 @@ body[data-theme='dark'] .workspaces-editor__desc{color:#9aa69e}
 .command-row kbd{flex:none;padding:1px 5px;border:1px solid #e2e7e3;border-radius:4px;font-size:11px;color:#8a948d}
 .command-row .ui-tag{flex:none}
 .command-palette__mode{font-size:11px;color:#8a948d;white-space:nowrap}
+/* Archive tab in the library */
+.library-archive-group{margin-bottom:14px}
+.library-archive-group__title{display:flex;align-items:center;gap:8px;margin:12px 0 6px;font-size:12px;font-weight:600;color:#748078}
+.library-archive-group__title span{font-weight:500;color:#9aa49d}
+.library-archive-row{display:flex;align-items:center;gap:6px}
+.library-archive-row .library-activity{flex:1;min-width:0}

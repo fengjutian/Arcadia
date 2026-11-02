@@ -6,14 +6,18 @@ import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDra
 import { loadDocuments } from '../../features/documents/documentService'
 import {
   createCollection,
+  deleteArchivedTab,
   deleteCollection,
+  listArchivedTabs,
   listBrowserHistory,
   listCollections,
   saveDocument,
   toggleStarred,
+  type ArchivedTab,
   type Collection,
 } from '../../api'
 import type { HistoryEntry } from '../../features/history/dedupeHistory'
+import { formatArchivedAt, groupArchivedTabs } from '../../features/archive/archive'
 import { trackDownload, type DownloadEntry } from '../../features/downloads/trackDownload'
 import { useDownloadCenter } from '../../features/downloads/useDownloadCenter'
 import { DownloadCenter } from '../../features/downloads/DownloadCenter'
@@ -54,6 +58,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [unavailable, setUnavailable] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [archived, setArchived] = useState<ArchivedTab[]>([])
   const [downloads, setDownloads] = useState<DownloadEntry[]>([])
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortMode>('recent')
@@ -84,6 +89,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         reloadDocuments(),
         refreshCollections(),
         listBrowserHistory().then(setHistory),
+        listArchivedTabs().then(setArchived),
         downloadCenter.refresh(),
       ])
       messageApi.success('知识库已刷新')
@@ -97,6 +103,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   useEffect(() => {
     void reloadDocuments()
     void listBrowserHistory().then(setHistory)
+    void listArchivedTabs().then(setArchived)
     void refreshCollections()
   }, [])
 
@@ -197,6 +204,21 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     onOpenBrowser?.()
   }
 
+  function openArchived(entry: ArchivedTab) {
+    window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url: entry.url } }))
+    onOpenBrowser?.()
+  }
+
+  async function removeArchived(id: string) {
+    try {
+      await deleteArchivedTab(id)
+      setArchived(items => items.filter(item => item.id !== id))
+      messageApi.success('已删除归档')
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '删除归档失败')
+    }
+  }
+
   const visibleDocuments = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const filtered = needle
@@ -213,6 +235,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
 
   const starredCount = documents.filter(item => item.starred).length
   const recentHistory = history.slice(0, 8)
+  const archiveSections = groupArchivedTabs(archived)
 
   const documentsContent = <div className="library-module">
     <div className="library-section-head">
@@ -330,6 +353,36 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         </div>}
   </div>
 
+  const archiveContent = <div className="library-module">
+    <div className="library-section-head">
+      <div>
+        <h2>归档</h2>
+        <p>从标签栏收起但还没有保存的页面。可按标题或网址找回，也可以随时删除。</p>
+      </div>
+      <span className="library-result-count">{archived.length} 条</span>
+    </div>
+    {archived.length === 0
+      ? <div className="library-empty-state library-empty-state--compact">
+          <span className="library-empty-state__icon"><ClockCircleOutlined/></span>
+          <h3>还没有归档</h3>
+          <p>在标签页右键选择「归档标签页」，或从命令栏执行归档。归档不会删除页面，只是让它离开标签栏。</p>
+        </div>
+      : archiveSections.map(section => <section key={section.bucket} className="library-archive-group">
+          <h3 className="library-archive-group__title">{section.label}<span>{section.items.length}</span></h3>
+          {section.items.map(item => <div className="library-archive-row" key={item.id}>
+            <button type="button" className="library-activity" onClick={() => openArchived(item)}>
+              <span className="library-activity__icon"><GlobalOutlined/></span>
+              <span className="library-activity__body">
+                <strong title={item.title || item.url}>{item.title || item.url}</strong>
+                <small><span>{hostOf(item.url) || item.url}</span><span>{formatArchivedAt(item.archivedAt)}</span></small>
+              </span>
+              <RightOutlined className="library-activity__arrow"/>
+            </button>
+            <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label="删除归档" onClick={() => void removeArchived(item.id)}/>
+          </div>)}
+        </section>)}
+  </div>
+
   const downloadContent = <div className="library-module">
     <div className="library-section-head">
       <div>
@@ -400,6 +453,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
             { key: 'documents', label: <TabLabel label="最近保存" count={documents.length}/>, children: documentsContent },
             { key: 'collections', label: <TabLabel label="集合" count={collections.length}/>, children: collectionContent },
             { key: 'history', label: <TabLabel label="近期浏览" count={recentHistory.length}/>, children: historyContent },
+            { key: 'archive', label: <TabLabel label="归档" count={archived.length}/>, children: archiveContent },
             { key: 'downloads', label: <TabLabel label="下载记录" count={downloadCenter.records.length}/>, children: downloadContent },
           ]}
         />

@@ -4,6 +4,7 @@ import {
   ClockCircleOutlined,
   FileTextOutlined,
   GlobalOutlined,
+  InboxOutlined,
   SearchOutlined,
   StarOutlined,
   ThunderboltOutlined,
@@ -11,7 +12,8 @@ import {
 import type { BrowserTab } from '../../types'
 import type { HistoryEntry } from '../history/dedupeHistory'
 import type { BookmarkRecord } from '../../services/bookmarks'
-import { searchDocuments } from '../../api'
+import { listArchivedTabs, searchDocuments } from '../../api'
+import { formatArchivedAt } from '../archive/archive'
 import {
   groupCommandItems,
   nextCommandMode,
@@ -28,6 +30,7 @@ const MODE_LABEL: Record<CommandMode, string> = {
   tabs: '标签页',
   bookmarks: '收藏',
   history: '历史',
+  archive: '归档',
   knowledge: '知识库',
   actions: '动作',
 }
@@ -36,6 +39,7 @@ const KIND_ICON: Record<CommandKind, ReactNode> = {
   tab: <GlobalOutlined />,
   history: <ClockCircleOutlined />,
   bookmark: <StarOutlined />,
+  archive: <InboxOutlined />,
   document: <FileTextOutlined />,
   action: <ThunderboltOutlined />,
 }
@@ -54,6 +58,7 @@ export interface CommandPaletteProps {
   onNewTab: () => void
   onSavePage: () => void
   onBookmarkPage: () => void
+  onArchiveTab: () => void
   onToggleAi: () => void
   onToggleNotes: () => void
   onBulkSummary: () => void
@@ -79,6 +84,7 @@ export function CommandPalette({
   onNewTab,
   onSavePage,
   onBookmarkPage,
+  onArchiveTab,
   onToggleAi,
   onToggleNotes,
   onBulkSummary,
@@ -88,6 +94,7 @@ export function CommandPalette({
   const [mode, setMode] = useState<CommandMode>('all')
   const [highlight, setHighlight] = useState(0)
   const [documents, setDocuments] = useState<CommandItem[]>([])
+  const [archived, setArchived] = useState<CommandItem[]>([])
   const inputRef = useRef<InputRef | null>(null)
 
   const parsed = useMemo(() => parseCommandQuery(query), [query])
@@ -138,11 +145,12 @@ export function CommandPalette({
     { id: 'action:close-tab', kind: 'action', title: '关闭当前标签页', shortcut: 'Ctrl + W', keywords: 'close tab', run: () => onCloseTab(activeId) },
     { id: 'action:save-page', kind: 'action', title: '保存当前页到知识库', keywords: 'save markdown', run: onSavePage },
     { id: 'action:bookmark', kind: 'action', title: '收藏当前页', shortcut: 'Ctrl + D', keywords: 'bookmark', run: onBookmarkPage },
+    { id: 'action:archive-tab', kind: 'action', title: '归档当前标签页', keywords: 'archive close', run: onArchiveTab },
     { id: 'action:ai', kind: 'action', title: '打开 AI 助手', keywords: 'assistant', run: onToggleAi },
     { id: 'action:notes', kind: 'action', title: '网页笔记面板', shortcut: 'Ctrl + Shift + N', keywords: 'notes', run: onToggleNotes },
     { id: 'action:bulk-summary', kind: 'action', title: '多链接 AI 摘要', shortcut: 'Ctrl + Shift + S', keywords: 'bulk summary', run: onBulkSummary },
     { id: 'action:workspace', kind: 'action', title: '保存当前标签为工作区', shortcut: 'Ctrl + Shift + W', keywords: 'workspace', run: onSaveWorkspace },
-  ], [activeId, onNewTab, onCloseTab, onSavePage, onBookmarkPage, onToggleAi, onToggleNotes, onBulkSummary, onSaveWorkspace])
+  ], [activeId, onNewTab, onCloseTab, onSavePage, onBookmarkPage, onArchiveTab, onToggleAi, onToggleNotes, onBulkSummary, onSaveWorkspace])
 
   useEffect(() => {
     if (!open) return
@@ -171,6 +179,29 @@ export function CommandPalette({
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [open, effectiveMode, effectiveQuery, onNavigate])
 
+  const archiveLookup = effectiveMode === 'archive' ? effectiveQuery.trim() : ''
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void listArchivedTabs(archiveLookup, 50)
+        .then(rows => {
+          if (cancelled) return
+          setArchived(rows.map(row => ({
+            id: `archive:${row.id}`,
+            kind: 'archive' as const,
+            title: row.title || row.url,
+            subtitle: row.url,
+            meta: formatArchivedAt(row.archivedAt),
+            run: () => onNavigate(row.url),
+          })))
+        })
+        .catch(() => { if (!cancelled) setArchived([]) })
+    }, archiveLookup ? 160 : 0)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [open, archiveLookup, onNavigate])
+
   const askItem: CommandItem | null = effectiveMode === 'ask' && effectiveQuery
     ? {
         id: 'ask',
@@ -181,7 +212,7 @@ export function CommandPalette({
       }
     : null
 
-  const items = [...tabItems, ...historyItems, ...bookmarkItems, ...actionItems, ...documents]
+  const items = [...tabItems, ...historyItems, ...bookmarkItems, ...archived, ...actionItems, ...documents]
   const sections: CommandSection[] = askItem
     ? [{ kind: 'action', label: 'AI', items: [askItem] }]
     : groupCommandItems(items, effectiveMode, effectiveQuery)
@@ -232,7 +263,7 @@ export function CommandPalette({
         ref={inputRef}
         value={query}
         onChange={event => { setQuery(event.target.value); setHighlight(0) }}
-        placeholder="搜索标签、历史、收藏、知识库，或输入 @ / ? > 切换范围"
+        placeholder="搜索标签、历史、收藏、归档、知识库，或输入 @ ~ / ? > 切换范围"
         size="large"
         prefix={<SearchOutlined />}
         suffix={<span className="command-palette__mode">{MODE_LABEL[effectiveMode]} · Tab 切换</span>}

@@ -16,6 +16,7 @@ function item(kind: CommandKind, title: string, patch: Partial<CommandItem> = {}
 describe('parseCommandQuery', () => {
   it('maps prefixes to providers and strips them', () => {
     expect(parseCommandQuery('@git')).toEqual({ mode: 'tabs', query: 'git' })
+    expect(parseCommandQuery('~rag')).toEqual({ mode: 'archive', query: 'rag' })
     expect(parseCommandQuery('/rag')).toEqual({ mode: 'knowledge', query: 'rag' })
     expect(parseCommandQuery('?总结这篇')).toEqual({ mode: 'ask', query: '总结这篇' })
     expect(parseCommandQuery('>save')).toEqual({ mode: 'actions', query: 'save' })
@@ -35,6 +36,8 @@ describe('nextCommandMode', () => {
   it('cycles forward through providers', () => {
     expect(nextCommandMode('all')).toBe('tabs')
     expect(nextCommandMode('tabs')).toBe('bookmarks')
+    expect(nextCommandMode('history')).toBe('archive')
+    expect(nextCommandMode('archive')).toBe('knowledge')
     expect(nextCommandMode('actions')).toBe('all')
   })
 
@@ -103,6 +106,13 @@ describe('groupCommandItems', () => {
     const sections = groupCommandItems(items, 'knowledge', '')
     expect(sections).toHaveLength(1)
     expect(sections[0].kind).toBe('document')
+  })
+
+  it('keeps archived tabs in their own provider', () => {
+    const withArchive = [...items, item('archive', '旧页面')]
+    const sections = groupCommandItems(withArchive, 'archive', '')
+    expect(sections).toHaveLength(1)
+    expect(sections[0].items.map(entry => entry.title)).toEqual(['旧页面'])
   })
 
   it('returns nothing for the ask pseudo-mode', () => {

@@ -11,13 +11,13 @@
  * can be unit-tested without rendering React.
  */
 
-export type CommandKind = 'tab' | 'history' | 'bookmark' | 'document' | 'action'
+export type CommandKind = 'tab' | 'history' | 'bookmark' | 'archive' | 'document' | 'action'
 
 /**
  * `all` is the default mixed view. `ask` is not a provider: it turns the typed
  * text into a single "ask the assistant" row.
  */
-export type CommandMode = 'all' | 'ask' | 'tabs' | 'bookmarks' | 'history' | 'knowledge' | 'actions'
+export type CommandMode = 'all' | 'ask' | 'tabs' | 'bookmarks' | 'history' | 'archive' | 'knowledge' | 'actions'
 
 export interface CommandItem {
   id: string
@@ -40,6 +40,7 @@ export interface ParsedCommandQuery {
 
 const PREFIXES: ReadonlyArray<readonly [string, CommandMode]> = [
   ['@', 'tabs'],
+  ['~', 'archive'],
   ['/', 'knowledge'],
   ['?', 'ask'],
   ['>', 'actions'],
@@ -56,7 +57,7 @@ export function parseCommandQuery(raw: string): ParsedCommandQuery {
   return { mode: 'all', query: trimmed.trimEnd() }
 }
 
-const MODE_CYCLE: readonly CommandMode[] = ['all', 'tabs', 'bookmarks', 'history', 'knowledge', 'actions']
+const MODE_CYCLE: readonly CommandMode[] = ['all', 'tabs', 'bookmarks', 'history', 'archive', 'knowledge', 'actions']
 
 /** `Tab` inside the bar cycles the provider, mirroring Chrome's domain switch. */
 export function nextCommandMode(mode: CommandMode, step = 1): CommandMode {
@@ -128,15 +129,17 @@ export const COMMAND_KIND_LABEL: Record<CommandKind, string> = {
   action: '动作',
   bookmark: '收藏',
   history: '历史',
+  archive: '归档',
   document: '知识库',
 }
 
-const EVERY_KIND: readonly CommandKind[] = ['tab', 'action', 'bookmark', 'history', 'document']
+const EVERY_KIND: readonly CommandKind[] = ['tab', 'action', 'bookmark', 'history', 'archive', 'document']
 
 const MODE_KINDS: Record<Exclude<CommandMode, 'all' | 'ask'>, readonly CommandKind[]> = {
   tabs: ['tab'],
   bookmarks: ['bookmark'],
   history: ['history'],
+  archive: ['archive'],
   knowledge: ['document'],
   actions: ['action'],
 }
@@ -146,6 +149,7 @@ const KIND_LIMIT: Record<CommandKind, number> = {
   action: 8,
   bookmark: 4,
   history: 4,
+  archive: 4,
   document: 6,
 }
 
@@ -162,7 +166,7 @@ export function groupCommandItems(
   if (mode === 'ask') return []
   const kinds = mode === 'all' ? EVERY_KIND : MODE_KINDS[mode]
   const order = query.trim().length === 0
-    ? (['action', 'tab', 'bookmark', 'history', 'document'] as const)
+    ? (['action', 'tab', 'bookmark', 'history', 'archive', 'document'] as const)
     : EVERY_KIND
   const sections: CommandSection[] = []
   for (const kind of order) {

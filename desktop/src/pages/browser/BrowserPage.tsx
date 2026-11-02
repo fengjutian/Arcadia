@@ -4,7 +4,7 @@ import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlin
 import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
-import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred } from '../../api'
+import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab } from '../../api'
 import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
@@ -20,6 +20,7 @@ import { useProcessMemory } from '../../features/browser/useProcessMemory'
 import { formatBytes as formatProcessBytes } from '../../services/processMemory'
 import { interpretShortcut, readShortcutOverrides } from '../../features/browser/shortcuts'
 import { popClosedTab, recordClosedTab, type ClosedTab } from '../../features/browser/closedTabs'
+import { archivedTabFromBrowserTab } from '../../features/archive/archive'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
 import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '../../features/ai/floatingAssistant'
 import { listen } from '@tauri-apps/api/event'
@@ -1925,6 +1926,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       { key: 'reload', label: '重新加载', disabled: !hasNativeTab(tab.id), onClick: () => void reloadNativeTab(tab.id) },
       { key: 'duplicate', label: '复制标签页', disabled: !tab.url, onClick: () => duplicateTab(tab) },
       { key: 'pin', label: tab.pinned ? '取消固定' : '固定标签页', onClick: () => togglePinned(tab.id) },
+      { key: 'archive', label: '归档标签页', disabled: !tab.url || tab.private, onClick: () => { void archiveTabToStore(tab) } },
       { key: 'mute', label: tab.muted ? '取消静音此标签页' : '静音此标签页', onClick: () => toggleMuted(tab.id) },
       { type: 'divider' },
       { key: 'close', label: '关闭标签页', disabled: tab.pinned, onClick: () => closeTab(tab.id) },
@@ -2017,6 +2019,22 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       messageApi.success('已加入收藏夹', 2)
     } catch (error) {
       messageApi.error(`加入收藏夹失败：${String(error)}`)
+    }
+  }
+
+  /** Move a tab out of the tab strip and into the searchable archive. */
+  async function archiveTabToStore(target: BrowserTab) {
+    const entry = archivedTabFromBrowserTab(target)
+    if (!entry) {
+      messageApi.warning('当前页面无法归档（仅支持 http/https，私密标签不归档）')
+      return
+    }
+    try {
+      await archiveTab(entry)
+      messageApi.success('已归档，可在知识库「归档」中找回', 2)
+      closeTab(target.id)
+    } catch (error) {
+      messageApi.error(`归档失败：${String(error)}`)
     }
   }
 
@@ -2231,6 +2249,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       onNewTab={() => openNewTab()}
       onSavePage={() => void save()}
       onBookmarkPage={() => void addCurrentAsBookmark()}
+      onArchiveTab={() => void archiveTabToStore(active)}
       onToggleAi={toggleAiAssistant}
       onToggleNotes={() => setNotesOpen(value => !value)}
       onBulkSummary={() => setBulkSummaryOpen(true)}
