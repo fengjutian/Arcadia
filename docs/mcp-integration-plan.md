@@ -482,3 +482,10 @@ Agent/用户提出调用
 - Rust 侧模块（`supervisor`、`runtime`、`tools`、`approval`、`budget`、`checkpoint`）暂时保留并在 `agent/mod.rs` 标注“未启动、为未来后端 Agent 预留”；产品研究 Agent 继续通过 `local_record_agent_run` 记录运行。
 - 测试：行为无变化；Rust 296 通过 + 2 项忽略，前端 761 通过。
 
+### 12.19 第十九批：官方 everything Server 真实冒烟（2026-11-02）
+
+- 新增 `smoke_real_everything_server`（`#[ignore]`，需网络）：拉起 `npx -y @modelcontextprotocol/server-everything`。
+- 实测覆盖：`tools/list`（echo / get-sum / 资源链接 / 图片 / 结构化内容等 17 个工具）、`resources/list`、`prompts/list`、`tools/call(get-sum)` 返回正确结果。
+- 本机 2.21 秒通过，补上了此前只用 mock 覆盖的 resources / prompts 真实链路。
+- 真实兼容矩阵现为：本地 stdio filesystem、本地 stdio everything（tools+resources+prompts）、远程 Streamable HTTP DeepWiki；Rust 296 通过 + 3 项忽略冒烟。
+
