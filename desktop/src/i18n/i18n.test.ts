@@ -34,6 +34,10 @@ const CHINESE_DATA_FILES = new Set([
   'features/browser/mediaResources.ts',
   'features/settings/typography.ts',
   'features/history/visitStats.ts',
+  'features/archive/archiveSettings.ts',
+  'features/browser/sleepSettings.ts',
+  'features/clips/clips.ts',
+  'features/command/siteSearch.ts',
 ])
 
 function walk(dir: string): string[] {

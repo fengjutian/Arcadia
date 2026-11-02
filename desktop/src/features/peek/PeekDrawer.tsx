@@ -1,10 +1,12 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useEffect, useRef } from 'react'
 import { t } from '../../i18n'
 import { Button, Descriptions, Drawer, Space, Typography } from '../../components/ui'
 import { LinkOutlined } from '../../components/ui/icons'
 import type { ArchivedTab, Clip, PageNote } from '../../api'
 import type { Document } from '../../types'
+import { diagnosticLog } from '../../shared/diagnostics'
 import { formatArchivedAt } from '../archive/archive'
 import { CLIP_KIND_LABEL, clipSourceHost } from '../clips/clips'
 import { queueHost } from '../reading-queue/readingQueue'
@@ -36,6 +38,36 @@ export function PeekDrawer({
   onOpenUrl: (url: string) => void
   onOpenFull?: (target: PeekTarget) => void
 }) {
+  const targetKey = target
+    ? target.kind === 'note' ? target.note.id
+      : target.kind === 'archive' ? target.entry.id
+        : target.kind === 'clip' ? target.clip.id
+          : target.document.id
+    : ''
+  const openedAtRef = useRef<number | null>(null)
+
+  // Measure "click → first paint" so the 300ms budget for Peek can be checked
+  // from the diagnostic log instead of guessed at.
+  useEffect(() => {
+    if (!target) {
+      openedAtRef.current = null
+      return
+    }
+    openedAtRef.current = typeof performance !== 'undefined' ? performance.now() : null
+    const frame = requestAnimationFrame(() => {
+      if (openedAtRef.current === null) return
+      diagnosticLog('peek.first-paint', 'info', {
+        kind: target.kind,
+        ms: Math.round(performance.now() - openedAtRef.current),
+      })
+      openedAtRef.current = null
+    })
+    return () => cancelAnimationFrame(frame)
+    // The kind + id identify a peek; re-measuring on every parent render would
+    // pollute the log.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey, target?.kind])
+
   const url = target
     ? target.kind === 'note' ? target.note.url
       : target.kind === 'archive' ? target.entry.url

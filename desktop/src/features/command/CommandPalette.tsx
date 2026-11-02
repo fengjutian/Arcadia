@@ -166,7 +166,7 @@ export function CommandPalette({
     { id: 'action:bookmark', kind: 'action', title:t("收藏当前页"),shortcut:'Ctrl + D',keywords:'bookmark',run:onBookmarkPage},
     { id: 'action:archive-tab', kind: 'action', title:t("归档当前标签页"),keywords:'archive close',run:onArchiveTab},
     { id: 'action:queue-tab', kind: 'action', title:t("稍后读（加入待读）"),keywords:'read later queue',run:onQueueTab},
-    { id: 'action:clip-page', kind: 'action', title:t("剪藏当前页"),keywords:'clip collection 剪藏',run:onClipPage},
+    { id: 'action:clip-page', kind: 'action', title:t("剪藏当前页"),keywords:'clip collection page',run:onClipPage},
     { id: 'action:ai', kind: 'action', title:t("打开 AI 助手"),keywords:'assistant',run:onToggleAi},
     { id: 'action:notes', kind: 'action', title:t("网页笔记面板"),shortcut:'Ctrl + Shift + N',keywords:'notes',run:onToggleNotes},
     { id: 'action:bulk-summary', kind: 'action', title:t("多链接 AI 摘要"),shortcut:'Ctrl + Shift + S',keywords:'bulk summary',run:onBulkSummary},
@@ -240,7 +240,7 @@ export function CommandPalette({
     ? {
         id: 'site-search',
         kind: 'action',
-        title: `用 ${siteSearch.shortcut.label} 搜索：${siteSearch.query}`,
+        title: t("用 {value0} 搜索：{value1}", { value0: siteSearch.shortcut.label, value1: siteSearch.query }),
         subtitle: t("! 快捷搜索"),
         run: () => onOpenUrlInNewTab(siteSearch.url),
       }
@@ -249,7 +249,7 @@ export function CommandPalette({
     ? {
         id: 'site-mode-search',
         kind: 'action',
-        title: `在 ${siteMode.label} 搜索：${effectiveQuery}`,
+        title: t("在 {value0} 搜索：{value1}", { value0: siteMode.label, value1: effectiveQuery }),
         subtitle: t("站内搜索"),
         run: () => onOpenUrlInNewTab(buildSiteSearchUrl(siteMode, effectiveQuery)),
       }

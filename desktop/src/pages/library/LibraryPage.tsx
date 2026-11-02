@@ -284,9 +284,9 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     try {
       await removeFromReadingQueue(id)
       setQueue(items => items.filter(item => item.id !== id))
-      messageApi.success('已移出待读')
+      messageApi.success(t("已移出待读"))
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message : '移出待读失败')
+      messageApi.error(error instanceof Error ? error.message : t("移出待读失败"))
     }
   }
 

@@ -4,7 +4,6 @@ import {
   isSleepExcluded,
   normalizeSleepHost,
   readSleepExceptions,
-  sleepReasonLabel,
   toggleSleepException,
   writeSleepExceptions,
 } from './sleepSettings'
@@ -57,13 +56,5 @@ describe('isSleepExcluded', () => {
     expect(isSleepExcluded('https://www.example.com', ['example.com'])).toBe(true)
     expect(isSleepExcluded('https://other.com', ['example.com'])).toBe(false)
     expect(isSleepExcluded('nope', ['example.com'])).toBe(false)
-  })
-})
-
-describe('sleepReasonLabel', () => {
-  it('distinguishes automatic reclamation from manual sleep', () => {
-    expect(sleepReasonLabel('lru')).toContain('自动回收')
-    expect(sleepReasonLabel('manual')).toBe('已休眠，点击可恢复')
-    expect(sleepReasonLabel(undefined)).toBe('已休眠，点击可恢复')
   })
 })

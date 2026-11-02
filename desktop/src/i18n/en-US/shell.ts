@@ -3,7 +3,7 @@ import type { Messages } from '../types'
 export const shell: Messages = {
   '· Tab 切换': '· Tab to switch',
   '{value0} 字': { one: '{value0} character', other: '{value0} characters' },
-  '↑↓ 选择 · Enter 执行 · Tab 切换范围 · Esc 关闭': '↑↓ to select · Enter to run · Tab to change scope · Esc to close',
+  '↑↓ 选择 · Enter 执行 · Tab 切换范围 · !gh 站内搜索 · Esc 关闭': '↑↓ to select · Enter to run · Tab to change scope · !gh for site search · Esc to close',
   '保存当前页到知识库': 'Save this page to the library',
   '保护已开启': 'Protection is on',
   '本地工作区': 'Local workspace',
@@ -23,7 +23,7 @@ export const shell: Messages = {
   '收藏': 'Favorites',
   '书签': 'Bookmarks',
   '搜索 "{value0}"': 'Search "{value0}"',
-  '搜索标签、历史、收藏、归档、知识库，或输入 @ ~ / ? > 切换范围': 'Search tabs, history, favorites, archive, and the library, or type @ ~ / ? > to change scope',
+  '搜索标签、历史、收藏、归档、知识库，或输入 @ ~ / ? > ! 前缀': 'Search tabs, history, favorites, archive, and the library, or type @ ~ / ? > ! to change scope',
   '网页笔记面板': 'Page notes panel',
   '问 AI': 'Ask AI',
   '问 AI：{value0}': 'Ask AI: {value0}',

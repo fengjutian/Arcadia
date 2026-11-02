@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "ai-knowledge-browser"
 version = "0.6.0"
 description = "AI-powered desktop knowledge browser"

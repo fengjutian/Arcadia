@@ -22,8 +22,9 @@ import { settings } from './settings'
 import { privacy } from './privacy'
 import { mcp } from './mcp'
 import { skillhub } from './skillhub'
+import { iteration6 } from './iteration6'
 
-const fragments: Messages[] = [common, shell, browser, library, search, assistant, settings, privacy, mcp, skillhub]
+const fragments: Messages[] = [common, shell, browser, library, search, assistant, settings, privacy, mcp, skillhub, iteration6]
 
 export const enUS: Messages = Object.assign({}, ...fragments)
 
@@ -39,6 +40,7 @@ export const EN_US_FRAGMENTS: ReadonlyArray<readonly [string, Messages]> = [
   ['privacy', privacy],
   ['mcp', mcp],
   ['skillhub', skillhub],
+  ['iteration6', iteration6],
 ]
 
 export type { MessageValue }

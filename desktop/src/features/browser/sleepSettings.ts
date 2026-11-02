@@ -56,8 +56,3 @@ export function toggleSleepException(exceptions: readonly string[], url: string)
     ? exceptions.filter(item => item !== host)
     : [...exceptions, host]
 }
-
-/** Why a tab is asleep, phrased for the tab tooltip. */
-export function sleepReasonLabel(reason: 'lru' | 'manual' | undefined): string {
-  return reason === 'lru' ? '已休眠（自动回收），点击可恢复' : '已休眠，点击可恢复'
-}

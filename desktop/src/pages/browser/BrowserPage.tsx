@@ -25,7 +25,7 @@ import { archivedTabFromBrowserTab } from '../../features/archive/archive'
 import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
-import { normalizeSleepHost, readSleepExceptions, sleepReasonLabel, toggleSleepException, writeSleepExceptions } from '../../features/browser/sleepSettings'
+import { normalizeSleepHost, readSleepExceptions, toggleSleepException, writeSleepExceptions } from '../../features/browser/sleepSettings'
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
 import { scheduleExtrasSync } from '../../features/search/extrasSync'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
@@ -700,7 +700,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         } catch { /* keep the tab when the archive write fails */ }
       }
       if (archived > 0) {
-        messageApi.info(`已自动归档 ${archived} 个空闲标签，可在知识库「归档」中找回`, 5)
+        messageApi.info(translate("已自动归档 {value0} 个空闲标签，可在知识库「归档」中找回", { value0: archived }), 5)
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2360,7 +2360,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
                 onDrop={onTabDrop(index)}
                 onDragEnd={onTabDragEnd}
                 className={`browser-tab-title${isDragging ? ' is-dragging' : ''}${isDropTarget ? ' is-drop-target' : ''}${tab.private ? ' browser-tab-title--private' : ''}`}
-              >{tab.crashed ? <WarningOutlined aria-label={translate("标签页崩溃")} className="browser-tab-crash"/>:tab.loading?<span className="browser-tab-loading" role="status" aria-label={translate("正在加载")}/>:tab.suspended?<Tooltip title={translate(sleepReasonLabel(tab.suspendedReason))} mouseEnterDelay={0.4}><MoonOutlined aria-label={translate("已休眠")} className="browser-tab-sleep"/></Tooltip>:tab.private?<LockOutlined/>:<TabFavicon key={tab.favicon??tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted?<Tooltip title={translate("已静音")} mouseEnterDelay={0.6}><AudioMutedOutlined aria-label={translate("已静音")} className="browser-tab-audio"/></Tooltip>:tab.audible?<Tooltip title={translate("正在播放音频")} mouseEnterDelay={0.6}><SoundOutlined aria-label={translate("正在播放音频")} className="browser-tab-audio"/></Tooltip>:null}<span>{tab.title}</span></span>
+              >{tab.crashed ? <WarningOutlined aria-label={translate("标签页崩溃")} className="browser-tab-crash"/>:tab.loading?<span className="browser-tab-loading" role="status" aria-label={translate("正在加载")}/>:tab.suspended?<Tooltip title={tab.suspendedReason === 'lru' ? translate("已休眠（自动回收），点击可恢复") : translate("已休眠，点击可恢复")} mouseEnterDelay={0.4}><MoonOutlined aria-label={translate("已休眠")} className="browser-tab-sleep"/></Tooltip>:tab.private?<LockOutlined/>:<TabFavicon key={tab.favicon??tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted?<Tooltip title={translate("已静音")} mouseEnterDelay={0.6}><AudioMutedOutlined aria-label={translate("已静音")} className="browser-tab-audio"/></Tooltip>:tab.audible?<Tooltip title={translate("正在播放音频")} mouseEnterDelay={0.6}><SoundOutlined aria-label={translate("正在播放音频")} className="browser-tab-audio"/></Tooltip>:null}<span>{tab.title}</span></span>
               </Tooltip>
             </Dropdown>,
             style: group.groupId ?( { '--tab-group-color': groupColor } as CSSProperties) : undefined,
