@@ -11,4 +11,9 @@ describe('snapshotTabsToPayload privacy', () => {
     expect(payload.tabs).toEqual([expect.objectContaining({ id: 'normal', private: false })])
     expect(payload.activeTabId).toBe('normal')
   })
+
+  it('tags the payload with a version for future migration', () => {
+    const payload = snapshotTabsToPayload([{ id: 'a', url: 'https://a', title: 'A' }])
+    expect(payload.version).toBe(2)
+  })
 })

@@ -797,9 +797,13 @@
 .search-result-tabs {
   > .ui-tabs__nav {
     align-items: flex-end;
-    gap: 22px;
     border-bottom: 1px solid var(--search-line);
   }
+
+  // The tabs sit in `.ant-tabs-nav-list` (not in `.ui-tabs__nav`), so the
+  // separation has to be expressed there — otherwise the count badge of one tab
+  // ends up glued to the label of the next one.
+  .ant-tabs-nav-list { gap: 30px; }
 
   .ant-tabs-tab {
     position: relative;

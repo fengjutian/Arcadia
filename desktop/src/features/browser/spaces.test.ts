@@ -3,6 +3,9 @@ import {
   SPACE_STORAGE_KEY,
   activeCollectionId,
   autoSpaceName,
+  clearCurrentSpace,
+  currentSpaceNamespace,
+  documentInScope,
   readCurrentSpace,
   readSpaceScopes,
   writeCurrentSpace,
@@ -66,5 +69,22 @@ describe('space knowledge scopes', () => {
     expect(readSpaceScopes()).toEqual({})
     localStorage.setItem('arcadia.space.scope.v1', '{"w1":42}')
     expect(readSpaceScopes()).toEqual({})
+  })
+
+  it('filters documents only when a scope is set', () => {
+    expect(documentInScope(null, 'd1')).toBe(true)
+    const scope = new Set(['d1'])
+    expect(documentInScope(scope, 'd1')).toBe(true)
+    expect(documentInScope(scope, 'd2')).toBe(false)
+    expect(documentInScope(new Set(), 'd1')).toBe(false)
+  })
+
+  it('uses the space id as the conversation namespace', () => {
+    expect(currentSpaceNamespace()).toBe('default')
+    writeCurrentSpace({ id: 'w1', name: 'Research' })
+    expect(currentSpaceNamespace()).toBe('w1')
+    clearCurrentSpace()
+    expect(readCurrentSpace()).toBeNull()
+    expect(currentSpaceNamespace()).toBe('default')
   })
 })

@@ -60,7 +60,9 @@ export function snapshotsFromWorkspace(workspace: WorkspaceRecord | null | undef
   rawTabs.forEach((raw, index) => {
     const id = `${fallbackId}-${index}`
     const normalised = normaliseSnapshot(raw, id)
-    if (normalised) snapshots.push(normalised)
+    // Legacy payloads (before the private-tab filter) could contain private
+    // tabs. Never restore those: a private URL must not reappear from storage.
+    if (normalised && normalised.private !== true) snapshots.push(normalised)
   })
   if (snapshots.length === 0) return empty
   const active = firstString(workspace.payload?.activeTabId)

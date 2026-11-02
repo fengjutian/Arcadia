@@ -4,6 +4,8 @@ import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, In
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
+import { documentInScope } from '../../features/browser/spaces'
+import { useSpaceCollectionFilter } from '../../features/browser/spaceScope'
 import { deleteDocument, deleteReadingSnapshot, listArchivedTabs, searchClips, searchDocuments, searchPageNotes, listReadingActivity, getSearchSuggestions, getSession, setSession, type ArchivedTab, type Clip, type DocumentSearchHit, type PageNote } from '../../api'
 import { CLIP_KIND_LABEL, clipPreview } from '../../features/clips/clips'
 import { formatArchivedAt } from '../../features/archive/archive'
@@ -33,6 +35,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const debouncedQuery = useDebouncedValue(query, 250)
   const advancedQuery = useMemo(() => parseAdvancedSearch(debouncedQuery), [debouncedQuery])
   const [documents, setDocuments] = useState<DocumentSearchHit[]>([])
+  const spaceScope = useSpaceCollectionFilter()
   const [reading, setReading] = useState<ReadingActivity[]>([])
   const [notes, setNotes] = useState<PageNote[]>([])
   const [archived, setArchived] = useState<ArchivedTab[]>([])
@@ -164,6 +167,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const filtered = useMemo(() => {
     return dedupeSearchResults(documents
       .filter(doc => {
+        if (!documentInScope(spaceScope, doc.id)) return false
         if (starredOnly && !doc.starred) return false
         if (readOnly && readingStatus(readingByUrl.get(doc.url)) === 'seen') return false
         if (!includeArchived && doc.status === 'ARCHIVED') return false
@@ -183,7 +187,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
         if (sort === 'relevance') return 0
         return (readingByUrl.get(b.url)?.lastVisitedAt ?? Date.parse(b.createdAt) / 1000) -( readingByUrl.get(a.url)?.lastVisitedAt ?? Date.parse(a.createdAt) / 1000)
       })
-  }, [documents, advancedQuery, starredOnly, includeArchived, tagFilter, sort, readOnly, readingByUrl])
+  }, [documents, advancedQuery, starredOnly, includeArchived, tagFilter, sort, readOnly, readingByUrl, spaceScope])
 
   const terms = useMemo(() => debouncedQuery.trim().split(/\s+/).filter(Boolean), [debouncedQuery])
   const hasQuery = debouncedQuery.trim().length > 0

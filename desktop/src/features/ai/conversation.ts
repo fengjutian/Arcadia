@@ -8,6 +8,8 @@ export interface StoredConversationTurn {
   docIds?: number[]
   /** Real document ids emitted by the RAG pipeline. Preferred over `docIds`. */
   documentIds?: string[]
+  /** Full citation payload, including note/clip/archive sources without a document row. */
+  citations?: Array<{ citationId: string; documentId: string; chunkId: string; title: string; url: string; excerpt: string }>
   notFound?: boolean
   error?: string
   pending?: boolean

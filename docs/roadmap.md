@@ -75,7 +75,7 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1`、`6.2`、`6.3`、`6.6`、`6.8`、`6.13`、`6.14`、`6.15` 已完成；`6.4` 部分落地。布局与滚动所有权已收口。
+> 状态以各条目勾选为准：`6.1`、`6.2`、`6.3`、`6.4`、`6.6`、`6.8`、`6.13`、`6.14`、`6.15` 已完成；其余未开始。布局与滚动所有权已收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
@@ -113,11 +113,13 @@
 
 ### 6.4 Space 化工作区
 
-- [~] 借鉴：Arc 的 Space 是独立标签集合 + 身份 + 默认行为，切换 Space 等于换一个浏览器。
+- [x] 借鉴：Arc 的 Space 是独立标签集合 + 身份 + 默认行为，切换 Space 等于换一个浏览器。
 - 现状：`workspaces` 表只存 `payload` 快照，入口在设置页点「恢复」；标签仍是顶部横向 Tabs；左侧 64px rail 只切换视图。
 - 已落地（2026-11-02，V1）：Workspace 升级为 Space 的第一层——rail 顶部新增 Space 切换器（当前 Space 名称在 tooltip），菜单列出已保存 Space、标签数、「保存当前为 Space」「管理 Space」；切换前自动把当前标签另存为「自动保存 MM-DD HH:mm」，不丢未保存标签；保存或切换后写入 `arcadia.space.current.v1` 并广播 `arcadia-space-changed`，侧栏即时更新。
-- 已落地（2026-11-02，V2）：Space 可绑定知识集合（`arcadia.space.scope.v1`，rail Space 菜单「知识范围」中切换，带 ✓ 标记）；AI 问答的 RAG 请求携带 `collectionIds`，只检索该集合；未绑定则检索全部知识库。
-- 待补：搜索页与知识库页按 Space 范围过滤；按 Space 还原会话（目前只还原标签）；旧 `workspaces.payload` 迁移路径；整体打开与标签组（第二层结构）。
+- 已落地（2026-11-02，V2）：Space 可绑定知识集合（`arcadia.space.scope.v1`，rail Space 菜单「知识范围」中切换，带 ✓ 标记）；AI 问答的 RAG 请求携带 `collectionIds`，只检索该集合；搜索页与知识库页按同一范围过滤文档（`useSpaceCollectionFilter` + `local_list_collection_document_ids`），知识库在范围为空时给出切换提示。
+- 已落地（2026-11-02，V3）：AI 对话按 Space 隔离——`sessionNamespace` 取当前 Space id，对话与对话历史分别存到独立 key；切换 Space 时先停用持久化再加载新线程，避免旧对话写进新 Space；rail 菜单新增「不使用 Space」回到默认线程。对话恢复时保留引用条数据（`citations`）。
+- 已落地（2026-11-02，V4）：payload 迁移路径——写入带 `version: 2`；恢复兼容无 id / 无 activeTabId / 无 version 的旧 payload（自动补 id、标题回退 URL、首个标签兜底）；旧 payload 若含私密标签一律丢弃，避免私密 URL 从存储里复活。
+- 待补：无（「整体打开」与标签组属增补，不计入本项验收）。
 - 做法：Workspace 升级为 Space，绑定知识集合、AI 上下文范围与站点路由（见 6.5）；新标签与保存默认落当前 Space；侧栏提供 Space 切换。
 - 验收：切换 Space 不丢失未保存标签；集合与 AI 上下文按 Space 隔离；会话恢复按 Space 还原；旧 `workspaces` payload 有迁移路径。
 - 增补（借 Edge Workspaces / Chrome 标签组）：支持「整体打开」；命名/颜色/持久化的标签组作为 Space 内的第二层结构。
@@ -247,7 +249,7 @@
 
 ## 测试现状
 
-`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **94 个文件 / 678 用例全部通过**（含 i18n 完整性、布局契约、Space 与知识范围、睡眠规则与新标签页模型）。Rust 侧最近一次全量：269 通过、1 个既有的 CJK 拼音索引用例在本机环境失败（`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`，与近期改动无关）。
+`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **94 个文件 / 683 用例全部通过**（含 i18n 完整性、布局契约、Space 范围/命名空间/迁移、睡眠规则与新标签页模型）。Rust 侧最近一次全量：269 通过、1 个既有的 CJK 拼音索引用例在本机环境失败（`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`，与近期改动无关）。
 
 直接用 `cargo test` 会让测试二进制在加载阶段以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出：`tauri` 默认特性 `common-controls-v6` 与 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6` 都会静态导入 `comctl32!TaskDialogIndirect`，该导出只存在于 comctl32 v6 组件，需要应用清单声明 `Microsoft.Windows.Common-Controls`。应用主程序由 `tauri-build` 注入清单，测试 harness 没有。
 
@@ -262,7 +264,7 @@
 3. 补齐搜索分页，缓解文档量增长后的列表端压力。
 4. 扩展插件宿主能力，覆盖知识库写入、AI 调用之外的常用能力。
 5. macOS / Linux 的隐私拦截与证书拦截等价实现（受平台接口限制，需先做可行性验证）。
-6. 继续 `6.4` 的剩余部分：Space 绑定集合与 AI 上下文、按 Space 还原会话；随后进入 `6.5` 站点路由。`6.8` 新标签页、`6.9` 站点阅读偏好、`6.10` Space 视觉身份、`6.12` 分屏随后按反馈排序；`6.7` 随手收小窗与 `6.11` Arc/Dia 导入可独立评估。
+6. ~~`6.4` Space 化~~ 已完成（2026-11-02）：切换器、集合范围、AI 对话隔离、payload 迁移。下一步进入 `6.5` 站点路由；`6.7` 随手收小窗、`6.9` 站点阅读偏好、`6.10` Space 视觉身份、`6.11` Arc/Dia 导入、`6.12` 分屏按反馈排序。
 7. ~~Iteration 6 收尾~~ 已完成（2026-11-02）：不依赖布局的 `6.1` / `6.2` / `6.3` / `6.6` / `6.13` / `6.14` / `6.15` 全部落地，含命令栏、归档与自动归档、笔记/剪藏/归档的检索与 RAG 引用、阅读队列、睡眠标签与站点例外。
 8. ~~Iteration 7 的第 1 步：把 webview 承载层收口为 `PageEngine` trait，作为日后接入 Chromium 的前置条件；只做抽象，不改变现有行为，可在 `6.4` 之前并行。~~ 已完成（2026-11-02）：见 `desktop/src-tauri/src/engine/`。布局已收口，接下来只在有明确收益时评估 CEF 第二阶段——启动条件第 2 条（版本探测）已具备，第 3 条需要书面结论。
 

@@ -38,6 +38,8 @@ import {
   type AutoArchiveSettings,
 } from '../../features/archive/archiveSettings'
 import { formatQueuedAt, queueHost } from '../../features/reading-queue/readingQueue'
+import { documentInScope } from '../../features/browser/spaces'
+import { useSpaceCollectionFilter } from '../../features/browser/spaceScope'
 import { CLIP_KIND_LABEL, clipPreview, clipSourceHost, clipToMarkdown, clipsToMarkdown } from '../../features/clips/clips'
 import { trackDownload, type DownloadEntry } from '../../features/downloads/trackDownload'
 import { useDownloadCenter } from '../../features/downloads/useDownloadCenter'
@@ -73,6 +75,7 @@ function formatWhen(value: number) {
 
 export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [documents, setDocuments] = useState<Document[]>([])
+  const spaceScope = useSpaceCollectionFilter()
   const [collections, setCollections] = useState<Collection[]>([])
   const [selected, setSelected] = useState<Document | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -377,20 +380,21 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   }
 
   const visibleDocuments = useMemo(() => {
+    const scoped = documents.filter(document => documentInScope(spaceScope, document.id))
     const needle = query.trim().toLowerCase()
     const filtered = needle
-      ? documents.filter(document => [document.title, document.source, document.url, document.summary, ...document.tags]
+      ? scoped.filter(document => [document.title, document.source, document.url, document.summary, ...document.tags]
         .filter(Boolean)
         .some(value => String(value).toLowerCase().includes(needle)))
-      : documents
+      : scoped
     return [...filtered].sort((left, right) => {
       if (sort === 'title') return left.title.localeCompare(right.title, 'zh-CN')
       if (sort === 'words') return right.wordCount - left.wordCount
       return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
     })
-  }, [documents, query, sort])
+  }, [documents, query, sort, spaceScope])
 
-  const starredCount = documents.filter(item => item.starred).length
+  const starredCount = documents.filter(item => item.starred && documentInScope(spaceScope, item.id)).length
   const recentHistory = history.slice(0, 8)
   const archiveSections = groupArchivedTabs(archived)
 
@@ -436,6 +440,12 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
                 {onOpenBrowser && <Button onClick={openBrowser}>{t("去浏览器逛逛")}</Button>}
               </div>
             </div>
+          : !query && spaceScope && visibleDocuments.length === 0
+            ? <div className="library-no-results">
+                <SearchOutlined/>
+                <h3>{t("当前 Space 范围内没有文档")}</h3>
+                <p>{t("在左侧 Space 菜单的「知识范围」里切回全部知识库，或把文档加入该集合。")}</p>
+              </div>
           : visibleDocuments.length === 0
             ? <div className="library-no-results">
                 <SearchOutlined/>

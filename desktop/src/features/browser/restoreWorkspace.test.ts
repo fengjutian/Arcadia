@@ -60,6 +60,26 @@ describe('snapshotsFromWorkspace', () => {
     const { snapshots } = snapshotsFromWorkspace(null)
     expect(snapshots).toEqual([])
   })
+
+  it('normalises a legacy payload without ids, version or active tab', () => {
+    const legacy: WorkspaceRecord = {
+      id: 'ws-legacy', name: 'legacy', description: '', tabCount: 2,
+      createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
+      payload: { tabs: [{ url: 'https://a', title: 'A' }, { url: 'https://b' }] },
+    }
+    const { snapshots, activeTabId } = snapshotsFromWorkspace(legacy)
+    expect(snapshots.map(snapshot => snapshot.url)).toEqual(['https://a', 'https://b'])
+    expect(snapshots[1].title).toBe('https://b')
+    expect(activeTabId).toBe(snapshots[0].id)
+  })
+
+  it('drops private tabs left behind by legacy payloads', () => {
+    const { snapshots } = snapshotsFromWorkspace(ws([
+      { id: 'secret', url: 'https://secret', private: true },
+      { id: 'public', url: 'https://public' },
+    ]))
+    expect(snapshots.map(snapshot => snapshot.id)).toEqual(['public'])
+  })
 })
 
 describe('restoreTabsFromWorkspace', () => {

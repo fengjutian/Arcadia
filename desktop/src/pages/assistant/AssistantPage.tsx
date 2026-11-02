@@ -210,6 +210,10 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
   const autoSubmittedRef = useRef(false)
 
   useEffect(() => {
+    // A namespace change means a different Space's conversation: block the
+    // persistence effect until the new thread has loaded, otherwise the old
+    // turns would be written under the new key.
+    setConversationHydrated(false)
     void listDocuments()
       .then(items => setDocuments(items.filter(item => item.status !== 'ARCHIVED')))
       .catch(() => setDocuments([]))
@@ -228,6 +232,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
             content:turn.content,
             docIds:turn.docIds,
             documentIds:turn.documentIds,
+            citations:turn.citations,
             notFound:turn.notFound === true,
             pending:turn.pending === true,
             interrupted:turn.interrupted === true,

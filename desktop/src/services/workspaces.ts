@@ -19,7 +19,7 @@ export interface WorkspaceSummary {
  * the raw tab snapshot saved at the time of capture.
  */
 export interface WorkspaceRecord extends WorkspaceSummary {
-  payload: { tabs?: unknown[]; activeTabId?: string } & Record<string, unknown>
+  payload: { tabs?: unknown[]; activeTabId?: string; version?: number } & Record<string, unknown>
 }
 
 export interface WorkspaceSaveInput {
@@ -73,9 +73,10 @@ export function snapshotTabsToPayload(tabs: readonly BrowserTabLike[]): Workspac
     private: false,
     groupId: tab.groupId ?? null,
   }))
-  return { tabs: cleaned, activeTabId: cleaned[0]?.id ?? '' }
+  // `version` lets a future payload change migrate instead of guessing from
+  // field presence. Restore treats a missing version as the original format.
+  return { version: 2, tabs: cleaned, activeTabId: cleaned[0]?.id ?? '' }
 }
-
 export function emptyWorkspacePayload(): WorkspaceRecord['payload'] {
   return { ...FALLBACK_PAYLOAD, tabs: [] }
 }

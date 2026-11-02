@@ -95,3 +95,24 @@ export function activeCollectionId(space: CurrentSpace | null = readCurrentSpace
   if (!space) return null
   return readSpaceScopes()[space.id] ?? null
 }
+
+/** A document passes the Space scope when no scope is set or it is listed. */
+export function documentInScope(scope: ReadonlySet<string> | null, documentId: string): boolean {
+  return scope === null || scope.has(documentId)
+}
+
+/**
+ * Namespace for state that should survive per Space (AI conversations,
+ * search context). Falls back to `default` when no Space is active so the
+ * pre-Space conversation stays reachable.
+ */
+export function currentSpaceNamespace(): string {
+  return readCurrentSpace()?.id ?? 'default'
+}
+
+/** Leave Space mode; the rail chip and conversation return to `default`. */
+export function clearCurrentSpace(): void {
+  writeCurrentSpace(null)
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(SPACE_CHANGED_EVENT, { detail: null }))
+}

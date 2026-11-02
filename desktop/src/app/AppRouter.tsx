@@ -3,6 +3,7 @@ import { Spin } from '../components/ui'
 import { AppLayout } from '../layouts/AppLayout'
 import { takeViewAfterReload } from './returnView'
 import { scheduleExtrasSync } from '../features/search/extrasSync'
+import { SPACE_CHANGED_EVENT, currentSpaceNamespace } from '../features/browser/spaces'
 import type { View } from '../types'
 
 const BrowserPage=lazy(()=>import('../pages/browser/BrowserPage').then(module=>({default:module.BrowserPage})))
@@ -16,8 +17,15 @@ export function AppRouter() {
   const [view, setView] = useState<View>(() => takeViewAfterReload() ?? 'browser')
   const [mountedViews, setMountedViews] = useState<Set<View>>(() => new Set([view]))
   const [knowledgeQuery, setKnowledgeQuery] = useState('')
+  const [spaceNamespace, setSpaceNamespace] = useState(() => currentSpaceNamespace())
   // Bring the extra-source vector index up to date once the app has settled.
   useEffect(() => { scheduleExtrasSync(2_000) }, [])
+  // AI conversations and their history are scoped to the active Space.
+  useEffect(() => {
+    const sync = () => setSpaceNamespace(currentSpaceNamespace())
+    window.addEventListener(SPACE_CHANGED_EVENT, sync)
+    return () => window.removeEventListener(SPACE_CHANGED_EVENT, sync)
+  }, [])
   const changeView = (next: View) => {
     setMountedViews(current => {
       if (current.has(next)) return current
@@ -33,7 +41,7 @@ export function AppRouter() {
       window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
       changeView('browser')
     }} />,
-    ai: <AssistantPage onNavigate={changeView} />,
+    ai: <AssistantPage onNavigate={changeView} sessionNamespace={spaceNamespace} />,
     mcp: <McpPage onOpenUrl={url => {
       window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
       changeView('browser')

@@ -9,7 +9,7 @@ import { TopBarPortalProvider } from '../app/TopBarPortal'
 import { diagnosticLog } from '../shared/diagnostics'
 import { listWorkspaces, type WorkspaceSummary } from '../services/workspaces'
 import { listCollections, type Collection } from '../api'
-import { SPACE_CHANGED_EVENT, SPACE_SCOPE_EVENT, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
+import { SPACE_CHANGED_EVENT, SPACE_SCOPE_EVENT, clearCurrentSpace, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label:t("浏览器")},{key:'library',icon:<BookOpen/>,label:t("知识库")},{key:'search',icon:<Search/>,label:t("搜索")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const
 
@@ -35,8 +35,9 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   useEffect(() => {
     void refreshSpaces()
     const onChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ id?: string; name?: string }>).detail
+      const detail = (event as CustomEvent<{ id?: string; name?: string } | null>).detail
       if (detail?.id && detail?.name) setCurrentSpace({ id: detail.id, name: detail.name })
+      else if (detail === null) setCurrentSpace(null)
       void refreshSpaces()
     }
     window.addEventListener(SPACE_CHANGED_EVENT, onChanged)
@@ -82,6 +83,7 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
       { type: 'divider' as const },
       { key: 'save', label: t("保存当前为 Space"), onClick: () => dispatchSpaceSave() },
       { key: 'manage', label: t("管理 Space"), onClick: () => onViewChange('settings') },
+      ...(currentSpace ? [{ key: 'leave', label: t("不使用 Space"), onClick: () => clearCurrentSpace() }] : []),
       ...(currentSpace ? [{ type: 'divider' as const }, { key: 'scope', label: t("知识范围"), children: scopeItems }] : []),
     ],
   }
