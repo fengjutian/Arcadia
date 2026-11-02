@@ -14,6 +14,7 @@ import {
   PlugZap,
   Plus,
   RefreshCw,
+  Search,
   Server,
   Store,
   Trash2,
@@ -30,6 +31,7 @@ import {
   exportMcpConfig,
   getMcpPrompt,
   getMcpServerStatus,
+  getMcpCachedCapabilities,
   importMcpConfig,
   listMcpAudit,
   listMcpPrompts,
@@ -42,6 +44,7 @@ import {
   revokeMcpToolGrant,
   saveMcpServer,
   type McpAuditEntry,
+  type McpCachedCapabilities,
   type McpCapabilityDiff,
   type McpConfigExport,
   type McpConfigPreview,
@@ -106,6 +109,14 @@ function capabilityKindLabel(kind: string): string {
   }
 }
 
+function cachedItemLabel(item: unknown): { name: string; detail?: string } {
+  if (!item || typeof item !== 'object') return { name: String(item) }
+  const record = item as Record<string, unknown>
+  const name = [record.name, record.uri, record.title].find((value): value is string => typeof value === 'string' && value.length > 0)
+  const detail = [record.description, record.mimeType].find((value): value is string => typeof value === 'string' && value.length > 0)
+  return { name: name ?? '—', detail }
+}
+
 function diagnosticStageLabel(name: string): string {
   switch (name) {
     case 'initialize': return t("初始化")
@@ -166,11 +177,27 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [diagnoseOpen, setDiagnoseOpen] = useState(false)
   const [diagnoseBusy, setDiagnoseBusy] = useState(false)
   const [diagnostic, setDiagnostic] = useState<McpDiagnosticReport>()
+  const [cachedOpen, setCachedOpen] = useState(false)
+  const [cachedBusy, setCachedBusy] = useState(false)
+  const [cachedCapabilities, setCachedCapabilities] = useState<McpCachedCapabilities>()
   const [capabilityNotice, setCapabilityNotice] = useState<Array<{ kind: 'tools' | 'resources' | 'prompts'; diff: McpCapabilityDiff }>>()
+  const [toolFilter, setToolFilter] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selected = useMemo(() => servers.find(server => server.id === selectedId), [selectedId, servers])
   const status = selectedId ? statuses[selectedId] ?? EMPTY_STATUS : EMPTY_STATUS
+  const visibleTools = useMemo(() => {
+    const query = toolFilter.trim().toLowerCase()
+    if (!query) return tools
+    return tools.filter(tool => `${tool.name} ${tool.description ?? ''}`.toLowerCase().includes(query))
+  }, [tools, toolFilter])
+  const cachedSections = cachedCapabilities
+    ? [
+        { key: 'tools', label: t("工具"), items: cachedCapabilities.tools },
+        { key: 'resources', label: t("资源"), items: cachedCapabilities.resources },
+        { key: 'prompts', label: t("提示词"), items: cachedCapabilities.prompts },
+      ]
+    : []
 
   async function refreshStatuses(next: McpServer[]) {
     const entries = await Promise.all(next.map(async server => {
@@ -210,6 +237,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     setPrompts([])
     setResult(undefined)
     setCapabilityNotice(undefined)
+    setToolFilter('')
   }
 
   function selectServer(id: string) {
@@ -500,6 +528,18 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     } finally { setDiagnoseBusy(false) }
   }
 
+  async function openCached(server: McpServer) {
+    setCachedOpen(true)
+    setCachedBusy(true)
+    setCachedCapabilities(undefined)
+    try {
+      setCachedCapabilities(await getMcpCachedCapabilities(server.id))
+    } catch (error) {
+      messageApi.error(t("读取缓存失败：{value0}",{value0:String(error)}))
+      setCachedOpen(false)
+    } finally { setCachedBusy(false) }
+  }
+
   const connected = status.connected
   const statusLabel = !selected?.enabled ? t("已停用") : connected ? t("已连接") : t("未连接")
 
@@ -548,6 +588,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
               <Popconfirm title={t("删除这个 MCP Server？")} onConfirm={()=>void removeServer(selected)}><Button size="small" danger icon={<Trash2 size={14}/>}>{t("删除")}</Button></Popconfirm>
               <Button size="small" icon={<History size={14}/>} onClick={()=>void openAudit()}>{t("审计")}</Button>
               <Button size="small" loading={diagnoseBusy} onClick={()=>void runDiagnose(selected)}>{t("诊断")}</Button>
+              <Button size="small" onClick={()=>void openCached(selected)}>{t("查看缓存")}</Button>
               {connected
                 ? <>
                     <Button size="small" loading={busy} onClick={()=>void ping(selected)}>{t("检测")}</Button>
@@ -560,8 +601,9 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
           {capabilityNotice && <Alert type="warning" showIcon closable message={t("服务能力已变化")} description={<ul className="mcp-capability-changes">{capabilityNotice.map(item => <li key={item.kind}>{t("{value0}：新增 {value1}、移除 {value2}、变更 {value3}",{value0:capabilityKindLabel(item.kind),value1:String(item.diff.added.length),value2:String(item.diff.removed.length),value3:String(item.diff.changed.length)})}</li>)}</ul>}/>}
           <Alert type="info" showIcon message={t("安全调用")} description={t("工具名称、参数会在执行前展示。只有确认后，Arcadia 才会发送本次调用。")}/>
           {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("正在发现服务能力…")}</span></div>:<div className="mcp-capabilities">
-            <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("工具")}</span><Tag>{tools.length}</Tag></div>
-              {tools.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回工具") : t("连接 Server 后显示工具")}</div>:tools.map(tool => {
+            <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("工具")}</span><Tag>{toolFilter ? `${visibleTools.length}/${tools.length}` : tools.length}</Tag></div>
+              {tools.length > 5 && <div className="mcp-tool-filter"><Input allowClear value={toolFilter} prefix={<Search size={15}/>} onChange={event=>setToolFilter(event.target.value)} placeholder={t("筛选工具…")} aria-label={t("筛选工具…")}/></div>}
+              {tools.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回工具") : t("连接 Server 后显示工具")}</div>:visibleTools.length === 0 ? <div className="mcp-placeholder">{t("没有匹配的工具")}</div>:visibleTools.map(tool => {
                 const args = toolArgs[tool.name] ?? initialArguments(tool.inputSchema)
                 return <Card key={tool.name} className="mcp-tool-card">
                   <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("无描述")}</p></div><div className="mcp-tool-card__actions">
@@ -641,6 +683,20 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
           <span className="mcp-diagnose__time">{stage.durationMs} ms</span>
           {stage.error && <p>{stage.error}</p>}
         </div>)}</div>
+      </>}
+    </Drawer>
+
+    <Drawer title={t("离线能力快照")} open={cachedOpen} onClose={()=>setCachedOpen(false)} width={640}>
+      {cachedBusy ? <div className="mcp-loading"><Spin/></div> : cachedCapabilities && <>
+        <p className="mcp-diagnose__summary">{cachedCapabilities.capturedAt ? t("上次更新：{value0}",{value0:new Date(cachedCapabilities.capturedAt).toLocaleString()}) : t("暂无缓存")}</p>
+        {cachedSections.filter(section => section.items.length > 0).map(section => <section key={section.key}>
+          <div className="mcp-section-title"><span>{section.label}</span><Tag>{section.items.length}</Tag></div>
+          <div className="mcp-cached-list">{section.items.map((item, index) => {
+            const info = cachedItemLabel(item)
+            return <div className="mcp-resource" key={`${section.key}-${index}`}><span><b>{info.name}</b>{info.detail && <small>{info.detail}</small>}</span></div>
+          })}</div>
+        </section>)}
+        {cachedSections.every(section => section.items.length === 0) && <div className="mcp-placeholder">{t("暂无缓存")}</div>}
       </>}
     </Drawer>
 

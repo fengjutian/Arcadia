@@ -397,6 +397,19 @@ struct CapabilityEntry {
     digest: String,
 }
 
+/// Stored payload for one kind. Older builds stored a bare `Vec<CapabilityEntry>`;
+/// the reader accepts both shapes.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct CapabilitySnapshot {
+    #[serde(default)]
+    entries: Vec<CapabilityEntry>,
+    #[serde(default)]
+    items: Vec<Value>,
+}
+
+const CAPABILITY_ITEM_BYTES: usize = 200_000;
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityDiff {
@@ -463,26 +476,47 @@ fn capability_entries(value: &Value, key: &str) -> Vec<CapabilityEntry> {
         .unwrap_or_default()
 }
 
+fn capability_items(value: &Value, key: &str) -> Vec<Value> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
 fn read_capability_snapshot(
     app: &tauri::AppHandle,
     server_id: &str,
     kind: &str,
-) -> Vec<CapabilityEntry> {
+) -> (CapabilitySnapshot, Option<String>) {
     let Ok(database) = crate::local_store::connection(app) else {
-        return Vec::new();
+        return (CapabilitySnapshot::default(), None);
     };
-    let payload: Option<String> = database
+    let row: Option<(String, String)> = database
         .query_row(
-            "SELECT payload_json FROM mcp_capability_snapshots WHERE server_id=?1 AND kind=?2",
+            "SELECT payload_json, captured_at FROM mcp_capability_snapshots WHERE server_id=?1 AND kind=?2",
             params![server_id, kind],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
         .ok()
         .flatten();
-    payload
-        .and_then(|raw| serde_json::from_str::<Vec<CapabilityEntry>>(&raw).ok())
-        .unwrap_or_default()
+    let Some((raw, captured_at)) = row else {
+        return (CapabilitySnapshot::default(), None);
+    };
+    if let Ok(entries) = serde_json::from_str::<Vec<CapabilityEntry>>(&raw) {
+        return (
+            CapabilitySnapshot {
+                entries,
+                items: Vec::new(),
+            },
+            Some(captured_at),
+        );
+    }
+    (
+        serde_json::from_str::<CapabilitySnapshot>(&raw).unwrap_or_default(),
+        Some(captured_at),
+    )
 }
 
 fn record_capability(
@@ -490,11 +524,20 @@ fn record_capability(
     server_id: &str,
     kind: &str,
     current: &[CapabilityEntry],
+    items: &[Value],
 ) -> CapabilityDiff {
-    let previous = read_capability_snapshot(app, server_id, kind);
-    let diff = diff_capabilities(&previous, current);
+    let (previous, _) = read_capability_snapshot(app, server_id, kind);
+    let diff = diff_capabilities(&previous.entries, current);
+    let mut items = items.to_vec();
+    if serde_json::to_string(&items).map(|raw| raw.len()).unwrap_or(0) > CAPABILITY_ITEM_BYTES {
+        items.clear();
+    }
     if let Ok(database) = crate::local_store::connection(app) {
-        let payload = serde_json::to_string(current).unwrap_or_else(|_| "[]".into());
+        let payload = serde_json::to_string(&CapabilitySnapshot {
+            entries: current.to_vec(),
+            items,
+        })
+        .unwrap_or_else(|_| "{\"entries\":[],\"items\":[]}".into());
         let _ = database.execute(
             "INSERT INTO mcp_capability_snapshots(server_id,kind,payload_json,captured_at) VALUES(?1,?2,?3,?4)
              ON CONFLICT(server_id,kind) DO UPDATE SET payload_json=excluded.payload_json, captured_at=excluded.captured_at",
@@ -2328,6 +2371,35 @@ pub async fn mcp_diagnose(
     Ok(report)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpCachedCapabilities {
+    pub tools: Vec<Value>,
+    pub resources: Vec<Value>,
+    pub prompts: Vec<Value>,
+    pub captured_at: Option<String>,
+}
+
+#[tauri::command]
+pub fn mcp_cached_capabilities(
+    app: tauri::AppHandle,
+    server_id: String,
+) -> Result<McpCachedCapabilities, String> {
+    let (tools, tools_at) = read_capability_snapshot(&app, &server_id, "tools");
+    let (resources, resources_at) = read_capability_snapshot(&app, &server_id, "resources");
+    let (prompts, prompts_at) = read_capability_snapshot(&app, &server_id, "prompts");
+    let captured_at = [tools_at, resources_at, prompts_at]
+        .into_iter()
+        .flatten()
+        .max();
+    Ok(McpCachedCapabilities {
+        tools: tools.items,
+        resources: resources.items,
+        prompts: prompts.items,
+        captured_at,
+    })
+}
+
 #[tauri::command]
 pub async fn mcp_discover(app: tauri::AppHandle, server_id: String) -> Result<Value, String> {    let host = app.state::<McpHost>();
     let session = host.ready(&app, &server_id).await?;
@@ -2343,7 +2415,8 @@ pub async fn mcp_list_tools(app: tauri::AppHandle, server_id: String) -> Result<
     let session = host.ready(&app, &server_id).await?;
     let mut value = session.call("tools/list", json!({}), None).await?;
     let entries = capability_entries(&value, "tools");
-    let diff = record_capability(&app, &server_id, "tools", &entries);
+    let items = capability_items(&value, "tools");
+    let diff = record_capability(&app, &server_id, "tools", &entries, &items);
     let cached = enrich_tools(&app, &server_id, &mut value);
     session.store_tools(cached);
     attach_capability_diff(&mut value, &diff);
@@ -2367,12 +2440,9 @@ pub async fn mcp_list_resources(
     let host = app.state::<McpHost>();
     let session = host.ready(&app, &server_id).await?;
     let mut value = session.call("resources/list", json!({}), None).await?;
-    let diff = record_capability(
-        &app,
-        &server_id,
-        "resources",
-        &capability_entries(&value, "resources"),
-    );
+    let entries = capability_entries(&value, "resources");
+    let items = capability_items(&value, "resources");
+    let diff = record_capability(&app, &server_id, "resources", &entries, &items);
     attach_capability_diff(&mut value, &diff);
     Ok(value)
 }
@@ -2382,12 +2452,9 @@ pub async fn mcp_list_prompts(app: tauri::AppHandle, server_id: String) -> Resul
     let host = app.state::<McpHost>();
     let session = host.ready(&app, &server_id).await?;
     let mut value = session.call("prompts/list", json!({}), None).await?;
-    let diff = record_capability(
-        &app,
-        &server_id,
-        "prompts",
-        &capability_entries(&value, "prompts"),
-    );
+    let entries = capability_entries(&value, "prompts");
+    let items = capability_items(&value, "prompts");
+    let diff = record_capability(&app, &server_id, "prompts", &entries, &items);
     attach_capability_diff(&mut value, &diff);
     Ok(value)
 }

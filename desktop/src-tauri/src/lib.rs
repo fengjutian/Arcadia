@@ -2282,6 +2282,7 @@ pub fn run() {
             local_store::local_list_mcp_servers,
             local_store::local_delete_mcp_server,
             mcp::mcp_discover,
+            mcp::mcp_cached_capabilities,
             mcp::mcp_diagnose,
             mcp::mcp_export_config,
             mcp::mcp_preview_config,

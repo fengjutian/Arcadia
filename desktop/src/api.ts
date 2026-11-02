@@ -558,6 +558,18 @@ export interface McpCapabilityDiff {
   firstSeen: boolean
 }
 
+export interface McpCachedCapabilities {
+  tools: unknown[]
+  resources: unknown[]
+  prompts: unknown[]
+  capturedAt?: string
+}
+
+export async function getMcpCachedCapabilities(serverId: string): Promise<McpCachedCapabilities> {
+  if (!isTauri()) return { tools: [], resources: [], prompts: [] }
+  return invoke<McpCachedCapabilities>('mcp_cached_capabilities', { serverId })
+}
+
 export async function diagnoseMcpServer(serverId: string): Promise<McpDiagnosticReport> {
   if (!isTauri()) throw new Error('MCP requires the desktop app')
   return invoke<McpDiagnosticReport>('mcp_diagnose', { serverId })

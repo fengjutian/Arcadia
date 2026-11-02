@@ -285,6 +285,41 @@ describe('runResearchAgent', () => {
     expect(step?.result).toEqual(payload)
   })
 
+  it('runs independent tool calls in parallel', async () => {
+    let active = 0
+    let maxActive = 0
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise(resolve => setTimeout(resolve, 20))
+      active -= 1
+      return { ok: true }
+    })
+    let plannerCalls = 0
+    const aiChat = vi.fn(async (_provider: string, request: ChatRequest) => {
+      const system = typeof request.messages[0]?.content === 'string' ? request.messages[0].content : ''
+      if (!system.includes('MCP tool selector')) return { content: 'final answer', promptTokens: 5 }
+      plannerCalls += 1
+      return {
+        content: plannerCalls === 1
+          ? '{"calls":[{"server":"srv","tool":"first_tool","arguments":{}},{"server":"srv","tool":"second_tool","arguments":{}}]}'
+          : '{"tool":null}',
+        promptTokens: 5,
+      }
+    })
+    const d = deps({
+      aiChat,
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'first_tool' }, { name: 'second_tool' }] } },
+      callMcpTool: callTool,
+    })
+    const result = await runResearchAgent(d, 'q', { ...options, requestApproval: async () => true })
+
+    expect(maxActive).toBe(2)
+    expect(callTool.mock.calls.map(call => call[1])).toEqual(['first_tool', 'second_tool'])
+    expect(result.steps.filter(step => step.summary.startsWith('调用 MCP 工具'))).toHaveLength(2)
+  })
+
   it('honours an explicit "no tool" decision from the model', async () => {
     const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({}))
     const aiChat = vi.fn(async (_provider: string, request: ChatRequest) => {

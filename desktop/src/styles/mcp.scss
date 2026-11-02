@@ -18,6 +18,7 @@
 .mcp-tool-card { margin-bottom: 10px; .ui-card__body, .ant-card-body { padding: 14px; } }
 .mcp-tool-card__title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; p { margin: 4px 0 0; color: #78837c; font-size: 13px; line-height: 1.45; } }
 .mcp-tool-card__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.mcp-tool-filter { margin-bottom: 10px; }
 .mcp-page__header-actions { display: flex; align-items: center; gap: 8px; }
 .mcp-export-json { font: 12px/1.5 ui-monospace, monospace; }
 .mcp-import__list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; margin: 10px 0; overflow: auto; }

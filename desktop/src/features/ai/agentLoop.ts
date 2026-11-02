@@ -173,14 +173,12 @@ export async function runResearchAgent(
     let toolContext = ''
     if (candidates.length > 0) {
       while (toolCalls < maxToolCalls && steps.length < maxSteps) {
-        // Let the model pick the next tool with the observations so far;
-        // malformed output on the first round falls back to keywords.
-        const selection = await selectToolWithModel(deps, options.providerId, question, candidates, observations)
+        // Let the model pick the next batch of tools with the observations so
+        // far; malformed output on the first round falls back to keywords.
+        const selection = await selectToolsWithModel(deps, options.providerId, question, candidates, observations)
         promptTokens += selection.promptTokens
-        const modelChoice = selection.choice
-        let tool: McpToolCandidate | null = null
-        let args: Record<string, unknown> = {}
-        if (modelChoice === undefined) {
+        let calls: ModelToolCall[] = []
+        if (selection.calls === undefined) {
           if (observations.length > 0) {
             steps.push({
               index: steps.length + 1,
@@ -191,9 +189,10 @@ export async function runResearchAgent(
             await record()
             break
           }
-          tool = chooseTool(candidates, question)
-          if (tool) args = buildToolArguments(tool, question)
-        } else if (modelChoice === null) {
+          const fallback = chooseTool(candidates, question)
+          if (!fallback) break
+          calls = [{ tool: fallback, arguments: buildToolArguments(fallback, question) }]
+        } else if (selection.calls === null || selection.calls.length === 0) {
           steps.push({
             index: steps.length + 1,
             kind: 'mcp_tool',
@@ -203,79 +202,99 @@ export async function runResearchAgent(
           await record()
           break
         } else {
-          tool = modelChoice.tool
-          args = modelChoice.arguments
-          const issues = validateArguments(tool.inputSchema, args)
+          calls = selection.calls
+        }
+        calls = calls.slice(0, maxToolCalls - toolCalls)
+        if (calls.length === 0) break
+
+        const approvedCalls: ModelToolCall[] = []
+        let denied = false
+        for (const call of calls) {
+          const issues = validateArguments(call.tool.inputSchema, call.arguments)
           if (issues.length > 0) {
             steps.push({
               index: steps.length + 1,
               kind: 'mcp_tool',
               summary: t('模型生成的参数不完整，已跳过'),
-              detail: issues.map(issue => issue.field).join(', '),
+              detail: `${call.tool.name}: ${issues.map(issue => issue.field).join(', ')}`,
               at: now(),
             })
-            await record()
+            continue
+          }
+          const risk = call.tool.risk ?? 'R2'
+          const autoApproved = risk === 'R0' || call.tool.granted === true
+          const approved = autoApproved
+            ? true
+            : options.requestApproval
+              ? await options.requestApproval({
+                  serverId: call.tool.serverId,
+                  serverName: call.tool.serverName,
+                  toolName: call.tool.name,
+                  description: call.tool.description,
+                  risk,
+                  arguments: call.arguments,
+                })
+              : options.approveToolCalls === true
+          if (!approved) {
+            steps.push({
+              index: steps.length + 1,
+              kind: 'mcp_tool',
+              summary: t('发现 MCP 工具 {value0}，未获授权故跳过', { value0: call.tool.name }),
+              at: now(),
+            })
+            denied = true
             break
           }
+          approvedCalls.push(call)
         }
-        if (!tool) break
-        const risk = tool.risk ?? 'R2'
-        const autoApproved = risk === 'R0' || tool.granted === true
-        const approved = autoApproved
-          ? true
-          : options.requestApproval
-            ? await options.requestApproval({
-                serverId: tool.serverId,
-                serverName: tool.serverName,
-                toolName: tool.name,
-                description: tool.description,
-                risk,
-                arguments: args,
-              })
-            : options.approveToolCalls === true
-        if (!approved) {
-          steps.push({
-            index: steps.length + 1,
-            kind: 'mcp_tool',
-            summary: t('发现 MCP 工具 {value0}，未获授权故跳过', { value0: tool.name }),
-            at: now(),
-          })
+        if (approvedCalls.length === 0) {
           await record()
           break
         }
-        toolCalls += 1
-        try {
-          const result = await withToolTimeout(
-            deps.callMcpTool(tool.serverId, tool.name, args, true),
-            MCP_TOOL_TIMEOUT_MS,
-          )
-          const observation = excerpt(JSON.stringify(result) ?? '', 2000)
-          const serialized = JSON.stringify(result) ?? ''
+
+        toolCalls += approvedCalls.length
+        const outcomes = await Promise.all(approvedCalls.map(async call => {
+          try {
+            const result = await withToolTimeout(
+              deps.callMcpTool(call.tool.serverId, call.tool.name, call.arguments, true),
+              MCP_TOOL_TIMEOUT_MS,
+            )
+            return { ok: true as const, call, result }
+          } catch (error) {
+            return { ok: false as const, call, error }
+          }
+        }))
+        let failed = false
+        for (const outcome of outcomes) {
+          if (!outcome.ok) {
+            failed = true
+            steps.push({
+              index: steps.length + 1,
+              kind: 'mcp_tool',
+              summary: t('MCP 工具 {value0} 调用失败，已跳过', { value0: outcome.call.tool.name }),
+              detail: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
+              at: now(),
+            })
+            continue
+          }
+          const serialized = JSON.stringify(outcome.result) ?? ''
+          const observation = excerpt(serialized, 2000)
           const storedResult = serialized.length <= 20_000
-            ? result
+            ? outcome.result
             : { content: [{ type: 'text', text: excerpt(serialized, 4000) }], arcadiaTruncated: true }
-          observations.push(`${tool.serverName} · ${tool.name}\n${observation}`)
-          toolContext = observations.join('\n\n')
+          observations.push(`${outcome.call.tool.serverName} · ${outcome.call.tool.name}\n${observation}`)
           steps.push({
             index: steps.length + 1,
             kind: 'mcp_tool',
-            summary: t('调用 MCP 工具 {value0}', { value0: `${tool.serverName} · ${tool.name}` }),
+            summary: t('调用 MCP 工具 {value0}', { value0: `${outcome.call.tool.serverName} · ${outcome.call.tool.name}` }),
             detail: observation,
             result: storedResult,
             at: now(),
           })
-        } catch (error) {
-          steps.push({
-            index: steps.length + 1,
-            kind: 'mcp_tool',
-            summary: t('MCP 工具 {value0} 调用失败，已跳过', { value0: tool.name }),
-            detail: error instanceof Error ? error.message : String(error),
-            at: now(),
-          })
-          await record()
-          break
         }
+        toolContext = observations.join('\n\n')
         await record()
+        if (failed || denied) break
       }
     } else if (mcpError) {
       steps.push({
@@ -419,15 +438,18 @@ function buildToolArguments(tool: McpToolCandidate, question: string): Record<st
   return { query: question }
 }
 
-type ModelToolChoice = { tool: McpToolCandidate; arguments: Record<string, unknown> } | null | undefined
+export interface ModelToolCall {
+  tool: McpToolCandidate
+  arguments: Record<string, unknown>
+}
 
 interface ModelToolSelection {
-  choice: ModelToolChoice
+  calls: ModelToolCall[] | null | undefined
   promptTokens: number
 }
 
-/** `undefined` choice means "could not parse"; the caller falls back to keywords. */
-async function selectToolWithModel(
+/** `undefined` calls means "could not parse"; the caller falls back to keywords. */
+async function selectToolsWithModel(
   deps: AgentDeps,
   providerId: string,
   question: string,
@@ -450,22 +472,38 @@ async function selectToolWithModel(
       messages: [
         {
           role: 'system',
-          content: 'You are the MCP tool selector for a research assistant. Choose at most one tool from the catalog. Reply with JSON only: {"server":"<server name>","tool":"<tool name>","arguments":{...}} when a tool is needed, or {"tool":null} when none is needed. Prefer a new tool that adds information over repeating a previous call. Arguments must match the tool schema.',
+          content: 'You are the MCP tool selector for a research assistant. Choose one or two independent tools from the catalog that can run in parallel; do not pick dependent calls in the same batch. Reply with JSON only: {"calls":[{"server":"<server name>","tool":"<tool name>","arguments":{...}}]} or {"tool":null} when none is needed. Prefer a new tool that adds information over repeating a previous call. Arguments must match the tool schema.',
         },
         { role: 'user', content: `Question: ${question}${previous}\n\nAvailable tools:\n${catalog}` },
       ],
       temperature: 0,
     })
     return {
-      choice: parseModelToolChoice(response.content, candidates),
+      calls: parseModelToolCalls(response.content, candidates),
       promptTokens: response.promptTokens ?? 0,
     }
   } catch {
-    return { choice: undefined, promptTokens: 0 }
+    return { calls: undefined, promptTokens: 0 }
   }
 }
 
-function parseModelToolChoice(content: string, candidates: McpToolCandidate[]): ModelToolChoice {
+function resolveModelCall(entry: unknown, candidates: McpToolCandidate[]): ModelToolCall | null {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+  const record = entry as Record<string, unknown>
+  if (typeof record.tool !== 'string') return null
+  const server = typeof record.server === 'string' ? record.server : undefined
+  const tool =
+    candidates.find(item => item.name === record.tool && (!server || item.serverName === server)) ??
+    candidates.find(item => item.name === record.tool)
+  if (!tool) return null
+  const args = record.arguments
+  return {
+    tool,
+    arguments: args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {},
+  }
+}
+
+function parseModelToolCalls(content: string, candidates: McpToolCandidate[]): ModelToolCall[] | null | undefined {
   const start = content.indexOf('{')
   const end = content.lastIndexOf('}')
   if (start < 0 || end <= start) return undefined
@@ -477,18 +515,17 @@ function parseModelToolChoice(content: string, candidates: McpToolCandidate[]): 
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
   const record = parsed as Record<string, unknown>
+  if (Array.isArray(record.calls)) {
+    const calls = record.calls
+      .map(entry => resolveModelCall(entry, candidates))
+      .filter((call): call is ModelToolCall => call !== null)
+      .slice(0, 2)
+    return calls.length > 0 ? calls : undefined
+  }
   if (record.tool === null) return null
   if (typeof record.tool !== 'string') return undefined
-  const server = typeof record.server === 'string' ? record.server : undefined
-  const tool =
-    candidates.find(item => item.name === record.tool && (!server || item.serverName === server)) ??
-    candidates.find(item => item.name === record.tool)
-  if (!tool) return undefined
-  const args = record.arguments
-  return {
-    tool,
-    arguments: args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {},
-  }
+  const call = resolveModelCall(record, candidates)
+  return call ? [call] : undefined
 }
 
 /** Production dependency binding for {@link runResearchAgent}. */
