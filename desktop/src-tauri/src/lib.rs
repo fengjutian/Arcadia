@@ -2099,6 +2099,7 @@ pub fn run() {
                 }
             }
             plugins::installer::restore_enabled_plugins(app.handle());
+            mcp::start_health_monitor(app.handle().clone());
             // Compile the user site blacklist into memory before the first
             // WebView exists so navigation callbacks never touch SQLite.
             if let Err(error) = site_blacklist::reload(app.handle()) {

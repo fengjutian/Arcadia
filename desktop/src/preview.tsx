@@ -26,6 +26,21 @@ document.body.dataset.theme = previewParams.get('theme') || 'beige'
 const hash = (window.location.hash || '#library').slice(1) as View
 const view: View = (['library', 'search', 'ai', 'settings'] as string[]).includes(hash) ? hash : 'library'
 
+// Diagnostic-only: `?section=系统和性能` activates a settings rail entry so the
+// corresponding card can be screenshotted without scripting a click. The retry
+// stops after a few seconds so a typo cannot leave a timer running forever.
+const previewSection = previewParams.get('section')
+if (previewSection) {
+  let attempts = 0
+  const activate = () => {
+    const tab = [...document.querySelectorAll<HTMLElement>('.settings-tabs .ant-tabs-tab-btn')]
+      .find(node => node.textContent?.trim() === previewSection)
+    if (tab) tab.click()
+    else if (++attempts < 40) setTimeout(activate, 120)
+  }
+  setTimeout(activate, 250)
+}
+
 function page() {
   if (view === 'library') return <LibraryPage onOpenBrowser={() => {}} />
   if (view === 'search') return <SearchPage initialQuery={previewQuery} onOpenUrl={() => {}} />

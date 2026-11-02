@@ -1,4 +1,4 @@
-﻿.page {
+.page {
   padding: 24px clamp(22px, 3vw, 44px);
 }
 
@@ -1565,19 +1565,43 @@ body[data-theme='dark'] {
 }
 
 body[data-theme-kind='image'] {
-  .app-topbar {
-    background-image: linear-gradient(rgba(255,255,255,.46), rgba(255,255,255,.62)), var(--app-theme-image);
-    background-position: center 18%;
+  // Scrim strength for image themes. The wallpaper layer sits on top of the
+  // surface colour and is veiled by this translucent scrim: .1 leaves the photo
+  // at 90% strength while still unifying it with the theme's base tone. One
+  // token drives the browser chrome and the new-tab backdrop so the two never
+  // drift apart; raise it (toward 1) to fade the wallpaper out.
+  --app-theme-image-opacity: .1;
+
+  .app-topbar,
+  .new-tab {
     background-size: cover;
+    background-repeat: no-repeat;
+  }
+
+  .app-topbar {
+    background-image:
+      linear-gradient(
+        color-mix(in srgb, var(--chrome-bg, #e7ebe7) calc(var(--app-theme-image-opacity) * 100%), transparent),
+        color-mix(in srgb, var(--chrome-bg, #e7ebe7) calc(var(--app-theme-image-opacity) * 100%), transparent)
+      ),
+      var(--app-theme-image);
+    background-position: center 18%;
   }
 
   .new-tab {
-    // Match the image-theme preview: mute and darken the wallpaper so the
-    // foreground workspace remains the visual focus.
-    background-image: linear-gradient(rgba(10,18,24,.28), rgba(10,18,24,.42)), var(--app-theme-image) !important;
-    background-position: center;
-    background-size: cover;
-    background-repeat: no-repeat;
+    // `!important` is required on every wallpaper longhand: the base `.new-tab`
+    // rule paints its own opaque gradient with `background: … !important`,
+    // which would otherwise drop the wallpaper or leave it tiling at its
+    // intrinsic size.
+    background-image:
+      linear-gradient(
+        color-mix(in srgb, var(--page, #f7f8f7) calc(var(--app-theme-image-opacity) * 100%), transparent),
+        color-mix(in srgb, var(--page, #f7f8f7) calc(var(--app-theme-image-opacity) * 100%), transparent)
+      ),
+      var(--app-theme-image) !important;
+    background-position: center !important;
+    background-size: cover !important;
+    background-repeat: no-repeat !important;
   }
 
   .new-tab__workspace {
@@ -1607,11 +1631,6 @@ body[data-theme-kind='image'] {
     background: rgba(255,255,255,.40) !important;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.62);
   }
-}
-
-body[data-theme='dark'][data-theme-kind='image'] {
-  .app-topbar { background-image: linear-gradient(rgba(9,14,12,.42), rgba(9,14,12,.64)), var(--app-theme-image); }
-  .new-tab { background-image: linear-gradient(rgba(9,14,12,.48), rgba(9,14,12,.66)), var(--app-theme-image) !important; }
 }
 
 .new-tab__workspace {

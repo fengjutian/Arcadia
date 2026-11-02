@@ -972,6 +972,44 @@ impl McpHost {
             session.shutdown();
         }
     }
+
+    async fn monitor_once(&self, app: &tauri::AppHandle) {
+        let sessions: Vec<(String, Arc<Session>)> = {
+            let sessions = lock(&self.sessions);
+            sessions
+                .iter()
+                .filter(|(_, session)| session.is_alive())
+                .map(|(id, session)| (id.clone(), session.clone()))
+                .collect()
+        };
+        for (server_id, session) in sessions {
+            match session.ping(Duration::from_secs(8)).await {
+                Ok(_) => self.publish(app, &server_id, &session),
+                Err(error) => {
+                    self.publish_error(app, &server_id, &error);
+                    if !session.is_alive() {
+                        self.remove(&server_id);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Periodically pings connected servers so a dead child or expired HTTP
+/// session surfaces in the UI even when the user is not calling tools.
+pub fn start_health_monitor(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            if let Some(host) = app.try_state::<McpHost>() {
+                host.monitor_once(&app).await;
+            }
+        }
+    });
 }
 
 fn audit(
@@ -1440,6 +1478,56 @@ mod tests {
             seen.lock().unwrap().as_slice(),
             ["initialize", "notifications/initialized", "tools/list"]
         );
+    }
+
+    /// Exercises the real stdio child process: one spawn must serve both
+    /// `tools/list` calls and the initialize handshake must happen once.
+    #[tokio::test]
+    async fn stdio_session_spawns_once_and_reuses_the_child() {
+        if std::process::Command::new("node")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            return;
+        }
+        let script = r#"
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
+let tools = 0, inits = 0;
+rl.on('line', line => {
+  let msg; try { msg = JSON.parse(line); } catch { return; }
+  if (!msg.id) return;
+  const reply = result => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }) + '\n');
+  if (msg.method === 'initialize') {
+    inits += 1;
+    reply({ protocolVersion: '2025-06-18', serverInfo: { name: 'mock', version: '1.0.0' }, capabilities: { tools: {} } });
+  } else if (msg.method === 'tools/list') {
+    tools += 1;
+    reply({ tools: [{ name: 'echo' }], count: tools, inits });
+  } else if (msg.method === 'ping') {
+    reply({});
+  } else {
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'unsupported' } }) + '\n');
+  }
+});
+"#;
+        let config = ServerConfig {
+            transport: "stdio".into(),
+            url: None,
+            command: Some("node".into()),
+            args: vec!["-e".into(), script.into()],
+            env: HashMap::new(),
+            headers: HeaderMap::new(),
+        };
+        let session = Session::new(config, "stdio-test".into()).expect("spawn mock");
+        let first = session.call("tools/list", json!({}), None).await.expect("first list");
+        assert_eq!(first["count"], 1);
+        assert_eq!(first["inits"], 1);
+        let second = session.call("tools/list", json!({}), None).await.expect("second list");
+        assert_eq!(second["count"], 2, "the same child must serve both calls");
+        assert_eq!(second["inits"], 1, "initialize must happen once per session");
+        session.shutdown();
     }
 
     fn read_http_request(stream: &mut std::net::TcpStream) -> (HashMap<String, String>, String) {
