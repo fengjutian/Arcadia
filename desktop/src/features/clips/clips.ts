@@ -45,6 +45,11 @@ export function clipFromImage(imageUrl: string, context: ClipContext): Clip | nu
   return base('image', imageUrl, context)
 }
 
+/** Whole-page clip: the readable Markdown, capped to stay under the DB limit. */
+export function clipFromPage(markdown: string, context: ClipContext): Clip | null {
+  return base('page', markdown.slice(0, 90_000), context)
+}
+
 /** One-line preview used by the library list. */
 export function clipPreview(clip: Clip, maxLength = 180): string {
   const collapsed = clip.content.replace(/\s+/g, ' ').trim()

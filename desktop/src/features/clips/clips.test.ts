@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clipFromImage, clipFromLink, clipFromSelection, clipPreview, clipSourceHost, clipToMarkdown, clipsToMarkdown } from './clips'
+import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection, clipPreview, clipSourceHost, clipToMarkdown, clipsToMarkdown } from './clips'
 import type { Clip } from '../../api'
 
 function clip(patch: Partial<Clip> = {}): Clip {
@@ -37,6 +37,12 @@ describe('clip builders', () => {
   it('builds link and image clips', () => {
     expect(clipFromLink('https://example.com/a', context)?.kind).toBe('link')
     expect(clipFromImage('https://example.com/a.png', context)?.kind).toBe('image')
+  })
+
+  it('caps whole-page markdown at the storage limit', () => {
+    const clip = clipFromPage('x'.repeat(100_000), context)
+    expect(clip?.kind).toBe('page')
+    expect(clip?.content).toHaveLength(90_000)
   })
 
   it('rejects empty content and missing source', () => {

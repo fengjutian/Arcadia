@@ -63,6 +63,7 @@ export interface CommandPaletteProps {
   onBookmarkPage: () => void
   onArchiveTab: () => void
   onQueueTab: () => void
+  onClipPage: () => void
   onOpenUrlInNewTab: (url: string) => void
   onToggleAi: () => void
   onToggleNotes: () => void
@@ -91,6 +92,7 @@ export function CommandPalette({
   onBookmarkPage,
   onArchiveTab,
   onQueueTab,
+  onClipPage,
   onOpenUrlInNewTab,
   onToggleAi,
   onToggleNotes,
@@ -164,12 +166,13 @@ export function CommandPalette({
     { id: 'action:bookmark', kind: 'action', title:t("收藏当前页"),shortcut:'Ctrl + D',keywords:'bookmark',run:onBookmarkPage},
     { id: 'action:archive-tab', kind: 'action', title:t("归档当前标签页"),keywords:'archive close',run:onArchiveTab},
     { id: 'action:queue-tab', kind: 'action', title:t("稍后读（加入待读）"),keywords:'read later queue',run:onQueueTab},
+    { id: 'action:clip-page', kind: 'action', title:t("剪藏当前页"),keywords:'clip collection 剪藏',run:onClipPage},
     { id: 'action:ai', kind: 'action', title:t("打开 AI 助手"),keywords:'assistant',run:onToggleAi},
     { id: 'action:notes', kind: 'action', title:t("网页笔记面板"),shortcut:'Ctrl + Shift + N',keywords:'notes',run:onToggleNotes},
     { id: 'action:bulk-summary', kind: 'action', title:t("多链接 AI 摘要"),shortcut:'Ctrl + Shift + S',keywords:'bulk summary',run:onBulkSummary},
     { id: 'action:workspace', kind: 'action', title:t("保存当前标签为工作区"),shortcut:'Ctrl + Shift + W',keywords:'workspace',run:onSaveWorkspace},
     { id: 'action:site-search', kind: 'action', title:t("管理快捷搜索词"),keywords:'bangs shortcut !',run:()=>setManagerOpen(true)},
-  ], [activeId, onNewTab, onCloseTab, onSavePage, onBookmarkPage, onArchiveTab, onQueueTab, onToggleAi, onToggleNotes, onBulkSummary, onSaveWorkspace])
+  ], [activeId, onNewTab, onCloseTab, onSavePage, onBookmarkPage, onArchiveTab, onQueueTab, onClipPage, onToggleAi, onToggleNotes, onBulkSummary, onSaveWorkspace])
 
   useEffect(() => {
     if (!open) return

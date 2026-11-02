@@ -24,7 +24,7 @@ describe('buildContextMenu', () => {
   it('page region exposes back/forward/reload/stop + print + page info', () => {
     const { sections } = buildContextMenu({ ...baseRequest, kind: 'page' }, caps)
     const actions = sections.flatMap(s => s.items).map(i => i.action)
-    expect(actions).toEqual(['back', 'forward', 'reload', 'stop', 'print', 'view-source'])
+    expect(actions).toEqual(['back', 'forward', 'reload', 'stop', 'print', 'clip-page', 'view-source'])
     const back = sections[0].items.find(i => i.action === 'back')!
     expect(back.enabled).toBe(true)
     const forward = sections[0].items.find(i => i.action === 'forward')!

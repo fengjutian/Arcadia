@@ -3,9 +3,10 @@ import remarkGfm from 'remark-gfm'
 import { t } from '../../i18n'
 import { Button, Descriptions, Drawer, Space, Typography } from '../../components/ui'
 import { LinkOutlined } from '../../components/ui/icons'
-import type { ArchivedTab, PageNote } from '../../api'
+import type { ArchivedTab, Clip, PageNote } from '../../api'
 import type { Document } from '../../types'
 import { formatArchivedAt } from '../archive/archive'
+import { CLIP_KIND_LABEL, clipSourceHost } from '../clips/clips'
 import { queueHost } from '../reading-queue/readingQueue'
 
 /** Characters rendered before the reader has to ask for the full text. */
@@ -21,6 +22,7 @@ const DOCUMENT_PREVIEW_LIMIT = 12_000
 export type PeekTarget =
   | { kind: 'note'; note: PageNote }
   | { kind: 'archive'; entry: ArchivedTab }
+  | { kind: 'clip'; clip: Clip }
   | { kind: 'document'; document: Document }
 
 export function PeekDrawer({
@@ -35,10 +37,16 @@ export function PeekDrawer({
   onOpenFull?: (target: PeekTarget) => void
 }) {
   const url = target
-    ? target.kind === 'note' ? target.note.url : target.kind === 'archive' ? target.entry.url : target.document.url
+    ? target.kind === 'note' ? target.note.url
+      : target.kind === 'archive' ? target.entry.url
+        : target.kind === 'clip' ? target.clip.sourceUrl
+          : target.document.url
     : ''
   const title = target
-    ? target.kind === 'note' ? target.note.title : target.kind === 'archive' ? target.entry.title : target.document.title
+    ? target.kind === 'note' ? target.note.title
+      : target.kind === 'archive' ? target.entry.title
+        : target.kind === 'clip' ? (target.clip.title || target.clip.sourceTitle)
+          : target.document.title
     : ''
   const markdown = target?.kind === 'document' ? target.document.markdown ?? '' : ''
   const preview = markdown.slice(0, DOCUMENT_PREVIEW_LIMIT)
@@ -69,6 +77,18 @@ export function PeekDrawer({
       <Typography.Paragraph>{t("归档只保留标题与链接，正文需要打开原文查看。")}</Typography.Paragraph>
       <Descriptions size="small" column={1} items={[
         { key: 'time', label: t("归档于"), children: formatArchivedAt(target.entry.archivedAt) },
+      ]}/>
+    </article>}
+
+    {target?.kind === 'clip' && <article className="peek">
+      {target.clip.kind === 'image' || target.clip.kind === 'link'
+        ? <Typography.Paragraph><a href={target.clip.content} target="_blank" rel="noreferrer">{target.clip.content}</a></Typography.Paragraph>
+        : <blockquote className="peek__quote">{target.clip.content}</blockquote>}
+      {target.clip.note && <Typography.Paragraph className="peek__comment">{target.clip.note}</Typography.Paragraph>}
+      <Descriptions size="small" column={1} items={[
+        { key: 'kind', label: t("类型"), children: CLIP_KIND_LABEL[target.clip.kind] },
+        { key: 'source', label: t("来源"), children: clipSourceHost(target.clip) },
+        { key: 'time', label: t("剪藏于"), children: new Date(target.clip.createdAt).toLocaleString('zh-CN') },
       ]}/>
     </article>}
 

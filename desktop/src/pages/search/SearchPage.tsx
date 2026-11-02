@@ -4,7 +4,8 @@ import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, In
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { deleteDocument, deleteReadingSnapshot, listArchivedTabs, searchDocuments, searchPageNotes, listReadingActivity, getSearchSuggestions, getSession, setSession, type ArchivedTab, type DocumentSearchHit, type PageNote } from '../../api'
+import { deleteDocument, deleteReadingSnapshot, listArchivedTabs, searchClips, searchDocuments, searchPageNotes, listReadingActivity, getSearchSuggestions, getSession, setSession, type ArchivedTab, type Clip, type DocumentSearchHit, type PageNote } from '../../api'
+import { CLIP_KIND_LABEL, clipPreview } from '../../features/clips/clips'
 import { formatArchivedAt } from '../../features/archive/archive'
 import { PeekDrawer, type PeekTarget } from '../../features/peek/PeekDrawer'
 import type { ReadingActivity } from '../../types'
@@ -30,6 +31,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const [reading, setReading] = useState<ReadingActivity[]>([])
   const [notes, setNotes] = useState<PageNote[]>([])
   const [archived, setArchived] = useState<ArchivedTab[]>([])
+  const [clips, setClips] = useState<Clip[]>([])
   const [peek, setPeek] = useState<PeekTarget | null>(null)
   const [selected, setSelected] = useState<DocumentSearchHit | null>(null)
   const [selectedReading, setSelectedReading] = useState<ReadingActivity | null>(null)
@@ -85,13 +87,17 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     const archivedResults = advancedQuery.text.trim()
       ? listArchivedTabs(advancedQuery.text, 50)
       : Promise.resolve<ArchivedTab[]>([])
-    void Promise.all([searchDocuments(advancedQuery.text), listReadingActivity(), noteResults, archivedResults])
-      .then(([items, activity, noteItems, archivedItems]) => {
+    const clipResults = advancedQuery.text.trim()
+      ? searchClips(advancedQuery.text, 50)
+      : Promise.resolve<Clip[]>([])
+    void Promise.all([searchDocuments(advancedQuery.text), listReadingActivity(), noteResults, archivedResults, clipResults])
+      .then(([items, activity, noteItems, archivedItems, clipItems]) => {
         if (!current) return
         setDocuments(items)
         setReading(activity)
         setNotes(noteItems)
         setArchived(archivedItems)
+        setClips(clipItems)
         setUnavailable(false)
         setLoadError(null)
         setDurationMs(Math.round(performance.now() - startedAt))
@@ -107,6 +113,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
         setReading([])
         setNotes([])
         setArchived([])
+        setClips([])
         setUnavailable(true)
         setLoadError(detail ||t("未知错误"))
       })
@@ -171,7 +178,7 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const terms = useMemo(() => debouncedQuery.trim().split(/\s+/).filter(Boolean), [debouncedQuery])
   const hasQuery = debouncedQuery.trim().length > 0
   const hasFilters = tagFilter.length > 0 || starredOnly || includeArchived || readOnly
-  const total = filtered.length + unsavedReading.length + notes.length + archived.length
+  const total = filtered.length + unsavedReading.length + notes.length + archived.length + clips.length
   const showEmpty = !loading && total === 0
 
   const sortOptions = useMemo(() => hasQuery ? [{ label:t("相关度"),value:'relevance'as const},...SORT_OPTIONS]:SORT_OPTIONS,[hasQuery])
@@ -202,6 +209,11 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const openArchived = useCallback((item: ArchivedTab) => {
     if (debouncedQuery.trim()) rememberQuery(debouncedQuery)
     setPeek({ kind: 'archive', entry: item })
+  }, [debouncedQuery, rememberQuery])
+
+  const openClip = useCallback((clip: Clip) => {
+    if (debouncedQuery.trim()) rememberQuery(debouncedQuery)
+    setPeek({ kind: 'clip', clip })
   }, [debouncedQuery, rememberQuery])
 
   const removeDocument = useCallback(async (item: DocumentSearchHit) => {
@@ -364,6 +376,24 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
                 snippet={<span className="search-note-snippet__comment">{t("归档于 {value0}",{value0:formatArchivedAt(item.archivedAt)})}</span>}
                 actionLabel={t("打开归档页：{value0}",{value0:item.title||item.url})}
                 onOpen={() => openArchived(item)}
+              />)}
+            </div>
+          </section>}
+
+          {clips.length > 0 && <section className="search-section search-section--clips">
+            <SectionHeading title={t("剪藏")} count={clips.length} hint={t("从网页截下来的片段，保留出处")}/>
+            <div className="result-grid">
+              {clips.map(clip => <ResultCard
+                key={clip.id}
+                title={<Highlight text={clip.title || clipPreview(clip, 60)} terms={terms}/>}
+                titleText={clip.title || clipPreview(clip, 60)}
+                url={clip.sourceUrl}
+                snippet={<span className="search-note-snippet">
+                  <span className="search-note-snippet__quote"><Highlight text={clipPreview(clip)} terms={terms}/></span>
+                  <span className="search-note-snippet__comment">{CLIP_KIND_LABEL[clip.kind]}</span>
+                </span>}
+                actionLabel={t("预览剪藏：{value0}",{value0:clip.title||clipPreview(clip,60)})}
+                onOpen={() => openClip(clip)}
               />)}
             </div>
           </section>}

@@ -31,6 +31,7 @@ export type ContextMenuAction =
   | 'clip-selection'
   | 'clip-link'
   | 'clip-image'
+  | 'clip-page'
   | 'open-link-current'
   | 'open-link-new'
   | 'open-link-external'
@@ -101,6 +102,7 @@ function buildPageSections(request: ContextMenuRequest, cap: ContextMenuCapabili
     {
       items: [
         { action: 'print', label:t("打印"),shortcut:'Ctrl+P',enabled:cap.canPrint},
+        { action: 'clip-page', label:t("剪藏整页"),enabled:true},
         { action: 'view-source', label:t("查看页面信息"),enabled:ALWAYS_ENABLED},
       ],
     },

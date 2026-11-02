@@ -25,7 +25,7 @@ import { archivedTabFromBrowserTab } from '../../features/archive/archive'
 import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
-import { clipFromImage, clipFromLink, clipFromSelection } from '../../features/clips/clips'
+import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
 import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '../../features/ai/floatingAssistant'
 import { listen } from '@tauri-apps/api/event'
@@ -1849,6 +1849,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       case 'screenshot-selection':
         if (request.selectionRect) await saveScreenshot(false, request.selectionRect)
         return
+      case 'clip-page': await clipCurrentPage(); return
       case 'open-link-current': if (request.linkUrl) void navigate(request.linkUrl); return
       case 'open-link-new': if (request.linkUrl) openNewTab(request.linkUrl); return
       case 'open-link-external': if (request.linkUrl) {
@@ -2126,6 +2127,26 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     }
   }
 
+  async function clipCurrentPage() {
+    if (!hasNativeTab(active.id)) {
+      messageApi.warning(translate("当前页面无法剪藏（仅 Tauri 桌面模式可用）"))
+      return
+    }
+    try {
+      const snapshot = await captureNativePage(active.id)
+      const article = extractArticle(snapshot)
+      const clip = clipFromPage(article.markdown ?? '', { url: active.url, title: active.title })
+      if (!clip) {
+        messageApi.warning(translate("当前页面没有可剪藏的正文"))
+        return
+      }
+      await saveClip(clip)
+      messageApi.success(translate("已剪藏整页，可在知识库「剪藏」中查看"), 2)
+    } catch (error) {
+      messageApi.error(translate("剪藏失败：{value0}", { value0: String(error) }))
+    }
+  }
+
   async function runBulkSummary(urls: string[], kind: 'one-sentence' | 'short' | 'detailed' | 'key-points') {
     const { aiChat: sendChat } = await import('../../api')
     const { extractArticle } = await import('../../features/reader/extractArticle')
@@ -2339,6 +2360,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       onBookmarkPage={() => void addCurrentAsBookmark()}
       onArchiveTab={() => void archiveTabToStore(active)}
       onQueueTab={() => void queueTabForLater(active)}
+      onClipPage={() => void clipCurrentPage()}
       onOpenUrlInNewTab={url => openNewTab(url)}
       onToggleAi={toggleAiAssistant}
       onToggleNotes={() => setNotesOpen(value => !value)}
