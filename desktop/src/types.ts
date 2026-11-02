@@ -14,6 +14,8 @@ export type AIProviderType =
   | 'minimax'
 export interface AIProvider { id:string; type:AIProviderType; baseUrl:string; model:string; embeddingModel?:string; timeoutSeconds:number; hasApiKey:boolean; createdAt:string; updatedAt:string }
 export interface ChatMessage { role: string; content: string }
-export interface ChatRequest { messages: ChatMessage[]; temperature?: number; maxTokens?: number }
-export interface ChatResponse { content: string; promptTokens?: number; completionTokens?: number }
+export interface ChatTool { name: string; description: string; parameters: Record<string, unknown> }
+export interface ChatToolCall { id: string; name: string; arguments: string }
+export interface ChatRequest { messages: ChatMessage[]; temperature?: number; maxTokens?: number; tools?: ChatTool[] }
+export interface ChatResponse { content: string; promptTokens?: number; completionTokens?: number; toolCalls?: ChatToolCall[] }
 export interface ProviderTestResult { ok: boolean; endpoint: string; status?: number; models: string[]; message: string }

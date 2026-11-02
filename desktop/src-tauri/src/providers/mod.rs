@@ -13,10 +13,29 @@ pub struct ChatMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatTool {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatToolCall {
+    pub id: String,
+    pub name: String,
+    /// Raw JSON arguments emitted by the model.
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatRequest {
     pub messages: Vec<ChatMessage>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
+    #[serde(default)]
+    pub tools: Vec<ChatTool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +44,8 @@ pub struct ChatResponse {
     pub content: String,
     pub prompt_tokens: Option<u64>,
     pub completion_tokens: Option<u64>,
+    #[serde(default)]
+    pub tool_calls: Vec<ChatToolCall>,
 }
 
 /// One delta emitted by a streaming provider. `delta` is the incremental text
@@ -119,6 +140,7 @@ mod tests {
             content: "hello".into(),
             prompt_tokens: Some(7),
             completion_tokens: Some(3),
+            tool_calls: Vec::new(),
         };
         let value = serde_json::to_value(&response).expect("response");
         assert_eq!(value["promptTokens"], 7);

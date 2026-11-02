@@ -543,3 +543,16 @@ Agent/用户提出调用
 - 这也是 Provider 原生 tool-calling 的前置修复：`tools` / `toolCalls` 将沿用同一套 camelCase 契约。
 - 测试：新增序列化/反序列化契约用例；Rust 269 通过 + 4 项忽略，前端 770 通过。
 
+### 12.27 第二十七批：Provider 原生 tool-calling（2026-11-02）
+
+- 线协议新增 `ChatTool` / `ChatToolCall`：`ChatRequest.tools`、`ChatResponse.toolCalls`，沿用 camelCase 契约。
+- OpenAI-compatible Provider：
+  - 非流式请求把工具序列化为 `tools:[{type:"function",function:{name,description,parameters}}]`；
+  - 响应解析 `choices[].message.tool_calls`，允许 `content` 为空但存在工具调用；
+  - 流式请求暂不发送 tools（保持纯文本流）。
+- 研究 Agent 新增 `nativeToolCalling`：
+  - 工具名按 `server__tool` 净化并去重，映射回 MCP 候选；
+  - 优先使用 Provider 返回的 `toolCalls` 与 JSON 参数；无工具调用或解析失败时回退现有 JSON 规划协议；
+  - 助手仅在非 Ollama Provider 上启用，避免向不支持 tools 的本地模型发送该字段。
+- 测试：新增原生 tool calls 解析用例与前端“原生选择工具”用例；Rust 270 通过 + 4 项忽略，前端 108 文件 / 771 用例通过。
+

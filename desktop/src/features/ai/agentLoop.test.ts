@@ -320,6 +320,29 @@ describe('runResearchAgent', () => {
     expect(result.steps.filter(step => step.summary.startsWith('调用 MCP 工具'))).toHaveLength(2)
   })
 
+  it('uses native provider tool calls when enabled', async () => {
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({ hits: 1 }))
+    const aiChat = vi.fn(async (_provider: string, request: ChatRequest) => {
+      const system = typeof request.messages[0]?.content === 'string' ? request.messages[0].content : ''
+      if (!system.includes('MCP tool selector')) return { content: 'final answer', promptTokens: 5 }
+      expect(request.tools?.[0]?.name).toBe('srv__search_web')
+      return {
+        content: '',
+        promptTokens: 5,
+        toolCalls: [{ id: 'call-1', name: 'srv__search_web', arguments: '{"query":"cats"}' }],
+      }
+    })
+    const d = deps({
+      aiChat,
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'search_web', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } }] } },
+      callMcpTool: callTool,
+    })
+    await runResearchAgent(d, 'cats', { ...options, nativeToolCalling: true, requestApproval: async () => true })
+
+    expect(callTool).toHaveBeenCalledWith('s1', 'search_web', { query: 'cats' }, true)
+  })
+
   it('honours an explicit "no tool" decision from the model', async () => {
     const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({}))
     const aiChat = vi.fn(async (_provider: string, request: ChatRequest) => {

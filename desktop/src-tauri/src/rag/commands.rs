@@ -328,6 +328,7 @@ pub async fn rag_answer(
         ],
         temperature: request.temperature.or(Some(0.2)),
         max_tokens: request.max_tokens.or(Some(1024)),
+        tools: Vec::new(),
     };
     let first = provider
         .chat(chat_request)
@@ -362,6 +363,7 @@ pub async fn rag_answer(
             ],
             temperature: Some(0.1),
             max_tokens: request.max_tokens.or(Some(1024)),
+            tools: Vec::new(),
         };
         if let Ok(second) = provider.chat(repair_request).await {
             current_answer = second.content;

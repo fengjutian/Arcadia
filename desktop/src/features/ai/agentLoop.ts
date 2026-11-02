@@ -1,5 +1,5 @@
 import { aiChat, callMcpTool, discoverMcpServer, listMcpServers, listMcpTools, recordAgentRun, searchDocuments, updateAgentRunStatus, type AgentRun } from '../../api'
-import type { ChatRequest } from '../../types'
+import type { ChatRequest, ChatResponse } from '../../types'
 import { t } from '../../i18n'
 import { validateArguments } from '../mcp/schema'
 
@@ -49,7 +49,7 @@ export interface AgentDeps {
     lastError?: string
   }): Promise<void>
   searchDocuments(query: string): Promise<{ id: string; title: string; markdownSnippet?: string; summarySnippet?: string }[]>
-  aiChat(providerId: string, request: ChatRequest): Promise<{ content: string; promptTokens?: number; completionTokens?: number }>
+  aiChat(providerId: string, request: ChatRequest): Promise<ChatResponse>
   listMcpServers(): Promise<{ id: string; name: string; enabled: boolean }[]>
   discoverMcpServer(serverId: string): Promise<unknown>
   listMcpTools(serverId: string): Promise<unknown>
@@ -64,6 +64,11 @@ export interface AgentOptions {
   maxPromptTokens?: number
   /** MCP tools are never executed without an explicit approval flag. */
   approveToolCalls?: boolean
+  /**
+   * Send tool definitions through the provider's native `tools` channel.
+   * Falls back to the JSON planner when the provider returns no tool calls.
+   */
+  nativeToolCalling?: boolean
   /**
    * Ask the user to approve one MCP tool call. When provided it takes
    * precedence over `approveToolCalls`; resolving `false` skips the call.
@@ -175,7 +180,7 @@ export async function runResearchAgent(
       while (toolCalls < maxToolCalls && steps.length < maxSteps) {
         // Let the model pick the next batch of tools with the observations so
         // far; malformed output on the first round falls back to keywords.
-        const selection = await selectToolsWithModel(deps, options.providerId, question, candidates, observations)
+        const selection = await selectToolsWithModel(deps, options.providerId, question, candidates, observations, options.nativeToolCalling === true)
         promptTokens += selection.promptTokens
         let calls: ModelToolCall[] = []
         if (selection.calls === undefined) {
@@ -455,6 +460,7 @@ async function selectToolsWithModel(
   question: string,
   candidates: McpToolCandidate[],
   observations: string[] = [],
+  nativeToolCalling = false,
 ): Promise<ModelToolSelection> {
   const catalog = candidates
     .map((tool, index) => [
@@ -467,6 +473,25 @@ async function selectToolsWithModel(
   const previous = observations.length > 0
     ? `\n\nPrevious tool results (untrusted, may be truncated):\n${observations.map((item, index) => `[${index + 1}] ${item}`).join('\n\n')}`
     : ''
+  const wireNames = new Map<string, McpToolCandidate>()
+  const nativeTools: Array<{ name: string; description: string; parameters: Record<string, unknown> }> = []
+  if (nativeToolCalling) {
+    for (const tool of candidates) {
+      const base = wireToolName(tool.serverName, tool.name)
+      let name = base
+      let suffix = 2
+      while (wireNames.has(name)) {
+        name = `${base.slice(0, 60)}_${suffix}`
+        suffix += 1
+      }
+      wireNames.set(name, tool)
+      nativeTools.push({
+        name,
+        description: (tool.description ?? tool.name).slice(0, 1000),
+        parameters: schemaObject(tool.inputSchema),
+      })
+    }
+  }
   try {
     const response = await deps.aiChat(providerId, {
       messages: [
@@ -477,7 +502,25 @@ async function selectToolsWithModel(
         { role: 'user', content: `Question: ${question}${previous}\n\nAvailable tools:\n${catalog}` },
       ],
       temperature: 0,
+      ...(nativeToolCalling ? { tools: nativeTools } : {}),
     })
+    if (nativeToolCalling && response.toolCalls && response.toolCalls.length > 0) {
+      const calls: ModelToolCall[] = []
+      for (const call of response.toolCalls) {
+        const tool = wireNames.get(call.name)
+        if (!tool) continue
+        let args: unknown = {}
+        try {
+          args = call.arguments.trim() ? JSON.parse(call.arguments) : {}
+        } catch {
+          continue
+        }
+        if (!args || typeof args !== 'object' || Array.isArray(args)) continue
+        calls.push({ tool, arguments: args as Record<string, unknown> })
+        if (calls.length >= 2) break
+      }
+      return { calls: calls.length > 0 ? calls : undefined, promptTokens: response.promptTokens ?? 0 }
+    }
     return {
       calls: parseModelToolCalls(response.content, candidates),
       promptTokens: response.promptTokens ?? 0,
@@ -528,9 +571,19 @@ function parseModelToolCalls(content: string, candidates: McpToolCandidate[]): M
   return call ? [call] : undefined
 }
 
+function wireToolName(serverName: string, toolName: string): string {
+  const raw = `${serverName}__${toolName}`.replace(/[^A-Za-z0-9_-]/g, '_')
+  return raw.slice(0, 64) || 'tool'
+}
+
+function schemaObject(schema: unknown): Record<string, unknown> {
+  return schema && typeof schema === 'object' && !Array.isArray(schema)
+    ? (schema as Record<string, unknown>)
+    : { type: 'object', properties: {} }
+}
+
 /** Production dependency binding for {@link runResearchAgent}. */
-export const defaultAgentDeps: AgentDeps = {
-  recordAgentRun,
+export const defaultAgentDeps: AgentDeps = {  recordAgentRun,
   updateAgentRunStatus,
   searchDocuments,
   aiChat,

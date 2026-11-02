@@ -743,7 +743,12 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
     setTurns(current => [...current, userTurn, pendingTurn])
     setQuestion('')
     try {
-      const result = await runResearchAgent(defaultAgentDeps, trimmed, { providerId, requestApproval: requestMcpApproval })
+      const activeProvider = providers.find(item => item.id === providerId)
+      const result = await runResearchAgent(defaultAgentDeps, trimmed, {
+        providerId,
+        nativeToolCalling: activeProvider ? activeProvider.type !== 'ollama' : false,
+        requestApproval: requestMcpApproval,
+      })
       const content = result.stopped && !result.answer
         ?t("研究未完成：{value0}",{value0:result.stopped.message})
         : result.stopped

@@ -1,4 +1,4 @@
-use super::{AiProvider, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ProviderError};
+use super::{AiProvider, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ChatToolCall, ProviderError};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -21,9 +21,25 @@ struct OpenAIRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<OpenAITool>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAITool {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: OpenAIFunction,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIFunction {
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,6 +70,24 @@ struct OpenAIChoice {
 struct OpenAIResponseMessage {
     #[serde(default)]
     content: Option<String>,
+    #[serde(default)]
+    tool_calls: Vec<OpenAIToolCall>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIToolCall {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    function: Option<OpenAIToolCallFunction>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIToolCallFunction {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    arguments: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,11 +130,24 @@ impl AiProvider for OpenAICompatibleProvider {
         let client = reqwest::Client::builder().timeout(self.timeout).build()?;
         let messages: Vec<OpenAIMessage> =
             request.messages.into_iter().map(message_to_wire).collect();
+        let tools = request
+            .tools
+            .into_iter()
+            .map(|tool| OpenAITool {
+                kind: "function",
+                function: OpenAIFunction {
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                },
+            })
+            .collect();
         let body = OpenAIRequest {
             model: self.model.clone(),
             messages,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
+            tools,
             stream: false,
             stream_options: None,
         };
@@ -123,15 +170,27 @@ impl AiProvider for OpenAICompatibleProvider {
         let parsed: OpenAIResponse = serde_json::from_str(&text).map_err(|error| {
             ProviderError::InvalidResponse(format!("{error}: {}", sanitize_body(&text)))
         })?;
-        let content = parsed
-            .choices
-            .into_iter()
-            .filter_map(|choice| choice.message.and_then(|message| message.content))
-            .collect::<Vec<_>>()
-            .join("")
-            .trim()
-            .to_string();
-        if content.is_empty() {
+        let mut content = String::new();
+        let mut tool_calls = Vec::new();
+        for choice in parsed.choices {
+            let Some(message) = choice.message else { continue };
+            if let Some(part) = message.content {
+                content.push_str(&part);
+            }
+            for call in message.tool_calls {
+                if let Some(function) = call.function {
+                    if !function.name.is_empty() {
+                        tool_calls.push(ChatToolCall {
+                            id: call.id,
+                            name: function.name,
+                            arguments: function.arguments,
+                        });
+                    }
+                }
+            }
+        }
+        let content = content.trim().to_string();
+        if content.is_empty() && tool_calls.is_empty() {
             return Err(ProviderError::InvalidResponse(
                 "empty assistant content".into(),
             ));
@@ -140,6 +199,7 @@ impl AiProvider for OpenAICompatibleProvider {
             content,
             prompt_tokens: parsed.usage.as_ref().and_then(|u| u.prompt_tokens),
             completion_tokens: parsed.usage.as_ref().and_then(|u| u.completion_tokens),
+            tool_calls,
         })
     }
 
@@ -157,6 +217,7 @@ impl AiProvider for OpenAICompatibleProvider {
             messages,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
+            tools: Vec::new(),
             stream: true,
             stream_options: Some(StreamOptions {
                 include_usage: true,
@@ -369,6 +430,30 @@ mod tests {
         buf.push_str("\n: ping\nnot-data\n");
         let out = parse_sse_chunk(&mut buf, &mut usage);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn parses_tool_calls_from_response() {
+        let body = r#"{
+            "choices": [{
+                "message": {
+                    "content": null,
+                    "tool_calls": [{
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {"name": "search", "arguments": "{\"query\":\"cats\"}"}
+                    }]
+                }
+            }]
+        }"#;
+        let parsed: OpenAIResponse = serde_json::from_str(body).expect("tool response");
+        let message = parsed.choices[0].message.as_ref().expect("message");
+        assert!(message.content.is_none());
+        assert_eq!(message.tool_calls[0].id, "call-1");
+        assert_eq!(
+            message.tool_calls[0].function.as_ref().expect("function").name,
+            "search"
+        );
     }
 
     #[test]

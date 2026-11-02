@@ -92,6 +92,7 @@ impl AiProvider for OllamaProvider {
             content,
             prompt_tokens: None,
             completion_tokens: None,
+            tool_calls: Vec::new(),
         })
     }
 
