@@ -645,6 +645,34 @@ export async function clearClosedTabs(): Promise<void> {
   if (isTauri()) await invoke('local_clear_closed_tabs')
 }
 
+/** A tab archived without being saved to the knowledge base. */
+export interface ArchivedTab {
+  id: string
+  url: string
+  title: string
+  favicon?: string | null
+  archivedAt: number
+  visitedAt?: number | null
+  source: 'manual' | 'auto'
+  workspaceId?: string | null
+}
+
+export async function archiveTab(tab: ArchivedTab): Promise<void> {
+  if (isTauri()) await invoke('local_archive_tab', { tab })
+}
+
+export async function listArchivedTabs(query = '', limit = 200): Promise<ArchivedTab[]> {
+  return isTauri() ? invoke('local_list_archived_tabs', { query, limit }) : []
+}
+
+export async function deleteArchivedTab(id: string): Promise<void> {
+  if (isTauri()) await invoke('local_delete_archived_tab', { id })
+}
+
+export async function clearArchivedTabs(): Promise<void> {
+  if (isTauri()) await invoke('local_clear_archived_tabs')
+}
+
 export async function listSitePermissions(): Promise<SitePermissionRule[]> {
   if (!isTauri()) return []
   const rows = await invoke<{ origin: string; permissionKind: keyof Omit<SitePermissionRule, 'origin'>; decision: 'allow' | 'deny' | 'ask' }[]>('local_list_site_permissions')

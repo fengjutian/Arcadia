@@ -684,6 +684,39 @@ const MIGRATIONS: &[(i64, &str)] = &[
             ('人工智能', 'AI', 0),
             ('数据库', 'SQLite', 0);",
     ),
+    (
+        31,
+        "CREATE TABLE tab_archive (
+            id TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            title TEXT NOT NULL,
+            favicon TEXT,
+            archived_at INTEGER NOT NULL,
+            visited_at INTEGER,
+            source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','auto')),
+            workspace_id TEXT
+        );
+        CREATE INDEX idx_tab_archive_archived_at ON tab_archive(archived_at DESC);
+        CREATE VIRTUAL TABLE tab_archive_fts USING fts5(
+            title,
+            url,
+            content='tab_archive',
+            content_rowid='rowid',
+            tokenize='unicode61'
+        );
+        INSERT INTO tab_archive_fts(rowid, title, url)
+            SELECT rowid, title, url FROM tab_archive;
+        CREATE TRIGGER tab_archive_ai AFTER INSERT ON tab_archive BEGIN
+            INSERT INTO tab_archive_fts(rowid, title, url) VALUES (new.rowid, new.title, new.url);
+        END;
+        CREATE TRIGGER tab_archive_ad AFTER DELETE ON tab_archive BEGIN
+            INSERT INTO tab_archive_fts(tab_archive_fts, rowid, title, url) VALUES('delete', old.rowid, old.title, old.url);
+        END;
+        CREATE TRIGGER tab_archive_au AFTER UPDATE ON tab_archive BEGIN
+            INSERT INTO tab_archive_fts(tab_archive_fts, rowid, title, url) VALUES('delete', old.rowid, old.title, old.url);
+            INSERT INTO tab_archive_fts(rowid, title, url) VALUES (new.rowid, new.title, new.url);
+        END;",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3539,6 +3572,161 @@ pub fn local_delete_closed_tab(app: tauri::AppHandle, id: String) -> Result<(), 
 pub fn local_clear_closed_tabs(app: tauri::AppHandle) -> Result<(), String> {
     connection(&app)?
         .execute("DELETE FROM closed_tabs", [])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+/// A tab the user is done with but has not saved to the knowledge base.
+/// Archiving is deliberately cheaper than saving: no extraction, no chunks,
+/// only title/url/favicon plus provenance, searchable through FTS5.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalArchivedTab {
+    id: String,
+    url: String,
+    title: String,
+    favicon: Option<String>,
+    archived_at: i64,
+    visited_at: Option<i64>,
+    /// `manual` (user archived) or `auto` (idle sweep).
+    source: String,
+    workspace_id: Option<String>,
+}
+
+fn validate_archived_tab(tab: &LocalArchivedTab) -> Result<(), String> {
+    if tab.id.trim().is_empty() || tab.id.len() > 128 {
+        return Err("invalid archive id".into());
+    }
+    if !matches!(tab.source.as_str(), "manual" | "auto") {
+        return Err("archive source must be manual or auto".into());
+    }
+    validate_history_entry(&LocalHistoryEntry {
+        url: tab.url.clone(),
+        title: tab.title.clone(),
+        visited_at: tab.visited_at.unwrap_or(tab.archived_at),
+    })
+}
+
+fn archived_tab_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalArchivedTab> {
+    Ok(LocalArchivedTab {
+        id: row.get(0)?,
+        url: row.get(1)?,
+        title: row.get(2)?,
+        favicon: row.get(3)?,
+        archived_at: row.get(4)?,
+        visited_at: row.get(5)?,
+        source: row.get(6)?,
+        workspace_id: row.get(7)?,
+    })
+}
+
+const ARCHIVED_TAB_COLUMNS: &str =
+    "id,url,title,favicon,archived_at,visited_at,source,workspace_id";
+
+#[tauri::command]
+pub fn local_archive_tab(
+    app: tauri::AppHandle,
+    tab: LocalArchivedTab,
+) -> Result<LocalArchivedTab, String> {
+    validate_archived_tab(&tab)?;
+    let database = connection(&app)?;
+    // Upsert rather than INSERT OR REPLACE: REPLACE skips DELETE triggers, which
+    // would desynchronise the external-content FTS table.
+    database
+        .execute(
+            "INSERT INTO tab_archive(id,url,title,favicon,archived_at,visited_at,source,workspace_id)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
+             ON CONFLICT(id) DO UPDATE SET
+                url=excluded.url,
+                title=excluded.title,
+                favicon=excluded.favicon,
+                archived_at=excluded.archived_at,
+                visited_at=excluded.visited_at,
+                source=excluded.source,
+                workspace_id=excluded.workspace_id",
+            params![
+                tab.id,
+                tab.url,
+                tab.title,
+                tab.favicon,
+                tab.archived_at,
+                tab.visited_at,
+                tab.source,
+                tab.workspace_id
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    database
+        .execute(
+            "DELETE FROM tab_archive WHERE id NOT IN
+             (SELECT id FROM tab_archive ORDER BY archived_at DESC LIMIT 2000)",
+            [],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(tab)
+}
+
+#[tauri::command]
+pub fn local_list_archived_tabs(
+    app: tauri::AppHandle,
+    query: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<LocalArchivedTab>, String> {
+    let database = connection(&app)?;
+    let limit = i64::from(limit.unwrap_or(200).clamp(1, 1000));
+    let needle = query.unwrap_or_default();
+    let needle = needle.trim();
+    if needle.is_empty() {
+        let mut statement = database
+            .prepare(&format!(
+                "SELECT {ARCHIVED_TAB_COLUMNS} FROM tab_archive ORDER BY archived_at DESC LIMIT ?1"
+            ))
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map(params![limit], archived_tab_from_row)
+            .map_err(|error| error.to_string())?;
+        return rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string());
+    }
+
+    let fts_query = build_fts5_query(needle);
+    if fts_query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut statement = database
+        .prepare(&format!(
+            "SELECT {} FROM tab_archive_fts f
+             JOIN tab_archive a ON a.rowid = f.rowid
+             WHERE tab_archive_fts MATCH ?1
+             ORDER BY bm25(tab_archive_fts)
+             LIMIT ?2",
+            ARCHIVED_TAB_COLUMNS
+                .split(',')
+                .map(|column| format!("a.{}", column.trim()))
+                .collect::<Vec<_>>()
+                .join(",")
+        ))
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![fts_query, limit], archived_tab_from_row)
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_delete_archived_tab(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    connection(&app)?
+        .execute("DELETE FROM tab_archive WHERE id=?", params![id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn local_clear_archived_tabs(app: tauri::AppHandle) -> Result<(), String> {
+    connection(&app)?
+        .execute("DELETE FROM tab_archive", [])
         .map_err(|error| error.to_string())?;
     Ok(())
 }
