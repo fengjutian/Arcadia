@@ -712,6 +712,32 @@ export async function clearPageNotes(): Promise<void> {
   if (isTauri()) await invoke('local_clear_page_notes')
 }
 
+/** A "read later" item, stored separately from saved documents and the archive. */
+export interface ReadingQueueEntry {
+  id: string
+  url: string
+  title: string
+  favicon?: string | null
+  addedAt: number
+  source: 'manual' | 'auto'
+}
+
+export async function listReadingQueue(): Promise<ReadingQueueEntry[]> {
+  return isTauri() ? invoke('local_list_reading_queue') : []
+}
+
+export async function addToReadingQueue(entry: ReadingQueueEntry): Promise<void> {
+  if (isTauri()) await invoke('local_add_reading_queue', { entry })
+}
+
+export async function removeFromReadingQueue(id: string): Promise<void> {
+  if (isTauri()) await invoke('local_remove_reading_queue', { id })
+}
+
+export async function clearReadingQueue(): Promise<void> {
+  if (isTauri()) await invoke('local_clear_reading_queue')
+}
+
 /** True inside the Tauri shell; false in the browser-only preview build. */
 export function isDesktopRuntime(): boolean {
   return isTauri()

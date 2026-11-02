@@ -12,13 +12,17 @@ import {
   listArchivedTabs,
   listBrowserHistory,
   listCollections,
+  listReadingQueue,
+  removeFromReadingQueue,
   saveDocument,
   toggleStarred,
   type ArchivedTab,
   type Collection,
+  type ReadingQueueEntry,
 } from '../../api'
 import type { HistoryEntry } from '../../features/history/dedupeHistory'
 import { formatArchivedAt, groupArchivedTabs } from '../../features/archive/archive'
+import { formatQueuedAt, queueHost } from '../../features/reading-queue/readingQueue'
 import { trackDownload, type DownloadEntry } from '../../features/downloads/trackDownload'
 import { useDownloadCenter } from '../../features/downloads/useDownloadCenter'
 import { DownloadCenter } from '../../features/downloads/DownloadCenter'
@@ -60,6 +64,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [archived, setArchived] = useState<ArchivedTab[]>([])
+  const [queue, setQueue] = useState<ReadingQueueEntry[]>([])
   const [downloads, setDownloads] = useState<DownloadEntry[]>([])
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortMode>('recent')
@@ -91,6 +96,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         refreshCollections(),
         listBrowserHistory().then(setHistory),
         listArchivedTabs().then(setArchived),
+        listReadingQueue().then(setQueue),
         downloadCenter.refresh(),
       ])
       messageApi.success(t("知识库已刷新"))
@@ -105,6 +111,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     void reloadDocuments()
     void listBrowserHistory().then(setHistory)
     void listArchivedTabs().then(setArchived)
+    void listReadingQueue().then(setQueue)
     void refreshCollections()
   }, [])
 

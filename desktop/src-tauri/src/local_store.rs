@@ -760,6 +760,19 @@ const MIGRATIONS: &[(i64, &str)] = &[
                 VALUES (new.rowid, new.quote, new.comment, new.title, new.url);
         END;",
     ),
+    (
+        33,
+        "CREATE TABLE reading_queue (
+            id TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            title TEXT NOT NULL,
+            favicon TEXT,
+            added_at INTEGER NOT NULL,
+            source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','auto'))
+        );
+        CREATE UNIQUE INDEX idx_reading_queue_url ON reading_queue(url);
+        CREATE INDEX idx_reading_queue_added_at ON reading_queue(added_at DESC);",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3965,6 +3978,119 @@ pub fn local_clear_page_notes(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// A "read later" item: cheaper than saving, separate from the tab archive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalReadingQueueEntry {
+    id: String,
+    url: String,
+    title: String,
+    favicon: Option<String>,
+    added_at: i64,
+    source: String,
+}
+
+fn validate_reading_queue_entry(entry: &LocalReadingQueueEntry) -> Result<(), String> {
+    if entry.id.trim().is_empty() || entry.id.len() > 128 {
+        return Err("invalid reading queue id".into());
+    }
+    if entry.added_at <= 0 {
+        return Err("invalid reading queue timestamp".into());
+    }
+    if !matches!(entry.source.as_str(), "manual" | "auto") {
+        return Err("reading queue source must be manual or auto".into());
+    }
+    validate_history_entry(&LocalHistoryEntry {
+        url: entry.url.clone(),
+        title: entry.title.clone(),
+        visited_at: entry.added_at,
+    })
+}
+
+fn reading_queue_entry_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<LocalReadingQueueEntry> {
+    Ok(LocalReadingQueueEntry {
+        id: row.get(0)?,
+        url: row.get(1)?,
+        title: row.get(2)?,
+        favicon: row.get(3)?,
+        added_at: row.get(4)?,
+        source: row.get(5)?,
+    })
+}
+
+fn add_reading_queue_entry(
+    database: &Connection,
+    entry: &LocalReadingQueueEntry,
+) -> Result<(), String> {
+    // One row per URL: re-adding moves the item to the top instead of duplicating.
+    database
+        .execute(
+            "INSERT INTO reading_queue(id,url,title,favicon,added_at,source)
+             VALUES(?1,?2,?3,?4,?5,?6)
+             ON CONFLICT(url) DO UPDATE SET
+                title=excluded.title,
+                favicon=excluded.favicon,
+                added_at=excluded.added_at,
+                source=excluded.source",
+            params![
+                entry.id,
+                entry.url,
+                entry.title,
+                entry.favicon,
+                entry.added_at,
+                entry.source
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn query_reading_queue(
+    database: &Connection,
+    limit: i64,
+) -> Result<Vec<LocalReadingQueueEntry>, String> {
+    let mut statement = database
+        .prepare("SELECT id,url,title,favicon,added_at,source FROM reading_queue ORDER BY added_at DESC LIMIT ?1")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![limit.clamp(1, 1000)], reading_queue_entry_from_row)
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_list_reading_queue(app: tauri::AppHandle) -> Result<Vec<LocalReadingQueueEntry>, String> {
+    query_reading_queue(&connection(&app)?, 500)
+}
+
+#[tauri::command]
+pub fn local_add_reading_queue(
+    app: tauri::AppHandle,
+    entry: LocalReadingQueueEntry,
+) -> Result<(), String> {
+    validate_reading_queue_entry(&entry)?;
+    add_reading_queue_entry(&connection(&app)?, &entry)
+}
+
+#[tauri::command]
+pub fn local_remove_reading_queue(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    connection(&app)?
+        .execute("DELETE FROM reading_queue WHERE id=?", params![id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn local_clear_reading_queue(app: tauri::AppHandle) -> Result<(), String> {
+    connection(&app)?
+        .execute("DELETE FROM reading_queue", [])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn local_list_site_permissions(
     app: tauri::AppHandle,
@@ -5962,5 +6088,55 @@ mod tests {
             )
             .unwrap();
         assert_eq!(remaining, 0, "deleting a note must clear its FTS row");
+    }
+
+    #[test]
+    fn reading_queue_upserts_by_url_and_keeps_newest_first() {
+        let mut database = fresh();
+        run_migrations(&mut database).unwrap();
+        let first = LocalReadingQueueEntry {
+            id: "rq-1".into(),
+            url: "https://example.com/one".into(),
+            title: "One".into(),
+            favicon: None,
+            added_at: 1_700_000_000_000,
+            source: "manual".into(),
+        };
+        add_reading_queue_entry(&database, &first).unwrap();
+
+        let mut again = first.clone();
+        again.id = "rq-2".into();
+        again.title = "One (renamed)".into();
+        again.added_at = 1_700_000_100_000;
+        add_reading_queue_entry(&database, &again).unwrap();
+
+        let entries = query_reading_queue(&database, 10).unwrap();
+        assert_eq!(entries.len(), 1, "the same URL must not queue twice");
+        assert_eq!(entries[0].title, "One (renamed)");
+        assert_eq!(entries[0].added_at, 1_700_000_100_000);
+
+        let second = LocalReadingQueueEntry {
+            id: "rq-3".into(),
+            url: "https://example.com/two".into(),
+            title: "Two".into(),
+            favicon: None,
+            added_at: 1_700_000_200_000,
+            source: "manual".into(),
+        };
+        add_reading_queue_entry(&database, &second).unwrap();
+        assert_eq!(
+            query_reading_queue(&database, 10)
+                .unwrap()
+                .into_iter()
+                .map(|entry| entry.id)
+                .collect::<Vec<_>>(),
+            vec!["rq-3".to_string(), "rq-1".to_string()],
+            "newest additions come first and the original row id survives an upsert"
+        );
+
+        database
+            .execute("DELETE FROM reading_queue WHERE id=?1", params!["rq-1"])
+            .unwrap();
+        assert_eq!(query_reading_queue(&database, 10).unwrap().len(), 1);
     }
 }
