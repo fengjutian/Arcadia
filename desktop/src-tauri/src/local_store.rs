@@ -2053,7 +2053,17 @@ fn build_hybrid_fts_query(query: &str, aliases: &[(String, String)]) -> String {
     fn clause(value: &str) -> String {
         hybrid_query_tokens(value)
             .into_iter()
-            .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+            .map(|token| {
+                let escaped = token.replace('"', "\"\"");
+                // Pinyin is indexed as whole-run tokens ("nanjinglvyou") plus
+                // syllables, so an ASCII query needs prefix matching to reach
+                // them. CJK tokens stay exact to avoid noisy character matches.
+                if token.chars().all(|character| character.is_ascii_alphanumeric()) {
+                    format!("\"{escaped}\"*")
+                } else {
+                    format!("\"{escaped}\"")
+                }
+            })
             .collect::<Vec<_>>()
             .join(" AND ")
     }
