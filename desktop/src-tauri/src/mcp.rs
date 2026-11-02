@@ -2916,7 +2916,7 @@ rl.on('line', line => {
             .as_array()
             .map(|items| items.iter().filter_map(|tool| tool.get("name").and_then(Value::as_str)).collect())
             .unwrap_or_default();
-        assert!(tool_names.contains(&"add"), "unexpected tools: {tool_names:?}");
+        assert!(tool_names.contains(&"get-sum"), "unexpected tools: {tool_names:?}");
 
         let resources = session
             .call("resources/list", json!({}), None)
@@ -2938,11 +2938,11 @@ rl.on('line', line => {
         let result = session
             .call(
                 "tools/call",
-                json!({"name": "add", "arguments": {"a": 2, "b": 3}}),
-                Some("add"),
+                json!({"name": "get-sum", "arguments": {"a": 2, "b": 3}}),
+                Some("get-sum"),
             )
             .await
-            .expect("tools/call add failed");
+            .expect("tools/call get-sum failed");
         let text = result["content"]
             .as_array()
             .and_then(|items| items.first())
