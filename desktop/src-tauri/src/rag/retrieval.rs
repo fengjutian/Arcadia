@@ -263,6 +263,19 @@ pub async fn orchestrate_with_embedder(
         timings.rerank_ms = rerank_started.elapsed().as_millis();
     }
 
+    // 7.5 Notes and clips are first-class evidence too: they live in their own
+    // FTS tables, so a knowledge answer can cite a highlight or a captured
+    // fragment without turning it into a document.
+    if query.document_ids.is_none() {
+        let conn = database.lock().await;
+        let extras = extra_source_hits(&conn, &query.query, 4);
+        drop(conn);
+        if !extras.is_empty() {
+            hits.extend(extras);
+            hits.truncate(query.top_k + 4);
+        }
+    }
+
     timings.total_ms = started.elapsed().as_millis();
 
     Ok(RagRetrieveResponse {
@@ -580,6 +593,99 @@ fn default_meta(
     )
 }
 
+/// Build a synthetic RetrievalHit for a non-document source (note / clip).
+fn synthetic_hit(kind: &str, id: &str, title: String, url: String, text: String, label: &str) -> RetrievalHit {
+    let chunk_id = format!("{kind}:{id}");
+    let title = if title.trim().is_empty() { url.clone() } else { title };
+    let end_offset = text.len();
+    let token_count = text.chars().count() / 4;
+    RetrievalHit {
+        chunk: RagChunk {
+            chunk_id: chunk_id.clone(),
+            document_id: chunk_id,
+            chunk_index: 0,
+            title,
+            url,
+            heading_path: vec![label.to_string()],
+            text,
+            text_hash: id.to_string(),
+            token_count,
+            start_offset: 0,
+            end_offset,
+        },
+        score: RetrievalScore {
+            lexical_rank: Some(0),
+            lexical_score: Some(1.0),
+            fused_score: 0.5,
+            ..Default::default()
+        },
+        reasons: vec![format!("{label}命中")],
+    }
+}
+
+/// FTS over `page_notes` and `clips`, capped so notes/clips never crowd out
+/// document chunks in the answer prompt.
+fn extra_source_hits(conn: &Connection, query_text: &str, limit: usize) -> Vec<RetrievalHit> {
+    if limit == 0 {
+        return Vec::new();
+    }
+    let fts_query = crate::local_store::build_fts5_query(query_text);
+    if fts_query.is_empty() {
+        return Vec::new();
+    }
+    let per_source = (limit / 2).max(1) as i64;
+    let mut hits = Vec::new();
+
+    if let Ok(mut statement) = conn.prepare(
+        "SELECT n.id,n.url,n.title,n.quote,n.comment
+         FROM page_notes_fts f JOIN page_notes n ON n.rowid = f.rowid
+         WHERE page_notes_fts MATCH ?1
+         ORDER BY bm25(page_notes_fts)
+         LIMIT ?2",
+    ) {
+        if let Ok(rows) = statement.query_map(rusqlite::params![fts_query, per_source], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        }) {
+            for (id, url, title, quote, comment) in rows.flatten() {
+                let text = if comment.trim().is_empty() { quote } else { format!("{quote}\n\n{comment}") };
+                hits.push(synthetic_hit("note", &id, title, url, text, "笔记"));
+            }
+        }
+    }
+
+    if let Ok(mut statement) = conn.prepare(
+        "SELECT c.id,c.source_url,c.title,c.source_title,c.content
+         FROM clips_fts f JOIN clips c ON c.rowid = f.rowid
+         WHERE clips_fts MATCH ?1
+         ORDER BY bm25(clips_fts)
+         LIMIT ?2",
+    ) {
+        if let Ok(rows) = statement.query_map(rusqlite::params![fts_query, per_source], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        }) {
+            for (id, url, title, source_title, content) in rows.flatten() {
+                let label = if title.trim().is_empty() { source_title } else { title };
+                hits.push(synthetic_hit("clip", &id, label, url, content, "剪藏"));
+            }
+        }
+    }
+
+    hits.truncate(limit);
+    hits
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -646,5 +752,28 @@ mod tests {
             },
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn extra_source_hits_include_notes_and_clips() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::local_store::run_migrations(&mut conn).unwrap();
+        conn.execute(
+            "INSERT INTO page_notes(id,url,title,quote,comment,color,prefix,suffix,document_id,created_at,updated_at)
+             VALUES('note-1','https://example.com/a','Guide','cosine similarity','关键指标','yellow',NULL,NULL,NULL,1,1)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO clips(id,kind,content,title,source_url,source_title,note,collection_id,created_at,updated_at)
+             VALUES('clip-1','selection','cosine distance','Clip','https://example.com/b','Source','',NULL,1,1)",
+            [],
+        ).unwrap();
+
+        let hits = extra_source_hits(&conn, "cosine", 4);
+        assert_eq!(hits.len(), 2);
+        let ids: Vec<&str> = hits.iter().map(|hit| hit.chunk.document_id.as_str()).collect();
+        assert!(ids.contains(&"note:note-1"));
+        assert!(ids.contains(&"clip:clip-1"));
+        assert!(hits.iter().all(|hit| !hit.chunk.text.is_empty()));
     }
 }

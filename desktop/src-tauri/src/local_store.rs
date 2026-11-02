@@ -2448,7 +2448,7 @@ pub fn local_search_suggestions(
 /// Each whitespace-separated term is wrapped in double quotes (so FTS5
 /// treats it as a literal token) and a trailing `*` enables prefix matching.
 /// Returns an empty string when the input has no usable tokens.
-fn build_fts5_query(query: &str) -> String {
+pub(crate) fn build_fts5_query(query: &str) -> String {
     let mut terms: Vec<String> = Vec::new();
     for raw in query.split_whitespace() {
         let cleaned: String = raw
