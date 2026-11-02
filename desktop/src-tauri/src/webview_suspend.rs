@@ -1,6 +1,6 @@
 //! Native WebView suspension with a cross-platform fallback contract.
 
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 fn validate_label(label: &str) -> Result<(), String> {
     if label.starts_with("browser-") && label.len() <= 160 {
@@ -18,13 +18,10 @@ async fn suspend_windows<R: Runtime>(app: &AppHandle<R>, label: &str) -> Result<
     use webview2_com::TrySuspendCompletedHandler;
     use windows::core::Interface;
 
-    let view = app
-        .get_webview(label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
     let (sender, receiver) = tokio::sync::oneshot::channel::<bool>();
     let sender = Arc::new(Mutex::new(Some(sender)));
     let setup_sender = sender.clone();
-    view.with_webview(move |platform| {
+    crate::engine::with_platform_webview(app, label, move |platform| {
         let result = unsafe { platform.controller().CoreWebView2() }
             .and_then(|core| core.cast::<ICoreWebView2_3>());
         let Ok(core3) = result else {
@@ -75,12 +72,9 @@ pub fn browser_resume(app: tauri::AppHandle, label: String) -> Result<bool, Stri
         use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_3;
         use windows::core::Interface;
 
-        let view = app
-            .get_webview(&label)
-            .ok_or_else(|| "browser tab webview not found".to_string())?;
         let result = Arc::new(Mutex::new(false));
         let output = result.clone();
-        view.with_webview(move |platform| {
+        crate::engine::with_platform_webview(&app, &label, move |platform| {
             let resumed = unsafe { platform.controller().CoreWebView2() }
                 .and_then(|core| core.cast::<ICoreWebView2_3>())
                 .and_then(|core| unsafe { core.Resume() })

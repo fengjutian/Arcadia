@@ -132,12 +132,9 @@ mod win {
     use windows::core::{Interface, PWSTR};
 
     pub fn attach<R: tauri::Runtime>(app: &tauri::AppHandle<R>, label: &str) {
-        let Some(view) = app.get_webview(label) else {
-            return;
-        };
         let event_label = label.to_string();
         let event_app = app.clone();
-        let _ = view.with_webview(move |platform| {
+        let _ = crate::engine::with_platform_webview(app, label, move |platform| {
             let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else {
                 return;
             };

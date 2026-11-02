@@ -450,7 +450,7 @@
   &--github { --theme-preview-soft: #ddf4ff; --theme-preview-accent: #0969da; --theme-preview-surface: #fff; }
   &--ocean { --theme-preview-soft: #dbeaf8; --theme-preview-accent: #2563a8; --theme-preview-surface: #f8fbfe; }
   &--cyan { --theme-preview-soft: #d7eff1; --theme-preview-accent: #087f8c; --theme-preview-surface: #f7fcfc; }
-  &--midnight { --theme-preview-soft: #dbe9ef; --theme-preview-accent: #28536b; --theme-preview-surface: #f8fbfc; }
+  &--mist { --theme-preview-soft: #dbe9ef; --theme-preview-accent: #28536b; --theme-preview-surface: #f8fbfc; }
   &--mint { --theme-preview-soft: #dcefe7; --theme-preview-accent: #2f7d68; --theme-preview-surface: #f7fcf9; }
   &--amber { --theme-preview-soft: #f4e8c7; --theme-preview-accent: #9a6a00; --theme-preview-surface: #fdfbf6; }
   &--coral { --theme-preview-soft: #f3ded4; --theme-preview-accent: #b4512f; --theme-preview-surface: #fdf9f7; }
@@ -525,7 +525,7 @@
   .theme-preview__body main div span { border-color: rgba(255,255,255,.30); background: rgba(255,255,255,.24); backdrop-filter: blur(10px); }
 }
 
-.theme-preview--midnight .theme-preview__body main {
+.theme-preview--mist .theme-preview__body main {
   background-image: radial-gradient(ellipse at 50% -8%, rgba(126, 220, 236, .24), transparent 58%);
 }
 

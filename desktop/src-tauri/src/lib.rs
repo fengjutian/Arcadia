@@ -25,7 +25,6 @@ pub mod webview_suspend;
 pub mod web_search;
 
 use rusqlite::params;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -34,7 +33,7 @@ use tauri::image::Image;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, LogicalPosition, Manager};
 
-use crate::engine::{CaptureRequest, PageBounds, PageEngine, PageObserver, PageSpec};
+use crate::engine::{CaptureRequest, PageBounds, PageObserver, PageSpec};
 
 use crate::providers::{AiProvider, ChatMessage, ChatRequest, ChatResponse};
 
@@ -674,6 +673,84 @@ fn password_manager_script(label: &str, private_mode: bool) -> String {
     )
 }
 
+/// Bridges page lifecycle callbacks from the engine back into application
+/// behaviour: events, download bookkeeping and plugin dispatch stay here so the
+/// engine layer holds no product policy.
+struct AppPageObserver {
+    app: tauri::AppHandle,
+    private: bool,
+}
+
+impl PageObserver for AppPageObserver {
+    fn page_loaded(&self, label: &str, url: &str, title: &str) {
+        crate::plugins::installer::dispatch_subscribed(
+            &self.app,
+            "page.loaded",
+            &crate::plugins::installer::event_payload(serde_json::json!({
+                "label": label,
+                "url": url,
+                "title": title,
+            })),
+        );
+    }
+
+    fn new_window(&self, opener_label: &str, url: &str, private: bool) {
+        let _ = self.app.emit_to(
+            "main",
+            "browser://new-tab",
+            NewTabRequest {
+                version: EVENT_PAYLOAD_VERSION,
+                opener_label: opener_label.to_string(),
+                url: url.to_string(),
+                private,
+            },
+        );
+    }
+
+    fn download_requested(
+        &self,
+        label: &str,
+        url: &str,
+        destination: &str,
+        file_name: &str,
+    ) -> bool {
+        // A download requested from a blacklisted host is a network request
+        // too: refuse it before the engine starts the transfer.
+        if let Some(found) = site_blacklist::match_url(url) {
+            emit_blocked_download(
+                &self.app,
+                label,
+                url,
+                file_name,
+                self.private,
+                &found.rule_host,
+            );
+            return false;
+        }
+        let app = self.app.clone();
+        let label = label.to_string();
+        let url = url.to_string();
+        let destination = destination.to_string();
+        let file_name = file_name.to_string();
+        let private = self.private;
+        tauri::async_runtime::spawn(async move {
+            handle_download_started(app, label, url, destination, file_name, private).await;
+        });
+        true
+    }
+
+    fn download_finished(&self, label: &str, url: &str, path: Option<&str>, success: bool) {
+        let app = self.app.clone();
+        let label = label.to_string();
+        let url = url.to_string();
+        let path = path.map(str::to_string);
+        let private = self.private;
+        tauri::async_runtime::spawn(async move {
+            handle_download_finished(app, label, url, path, success, private).await;
+        });
+    }
+}
+
 #[tauri::command]
 async fn browser_create(
     app: tauri::AppHandle,
@@ -735,10 +812,12 @@ async fn browser_set_ad_blocking(
     enabled: bool,
 ) -> Result<(), String> {
     validate_browser_label(&label)?;
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .eval(format!("window.__arcadiaAdBlocker?.setEnabled({enabled})"))
-        .map_err(|error| error.to_string())
+    let engine = engine::page_engine(&app);
+    engine.eval(
+        &label,
+        &format!("window.__arcadiaAdBlocker?.setEnabled({enabled})"),
+    )?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -748,34 +827,23 @@ async fn browser_set_muted(
     muted: bool,
 ) -> Result<(), String> {
     validate_browser_label(&label)?;
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .eval(format!("window.__arcadiaAudio?.setMuted({muted})"))
-        .map_err(|error| error.to_string())
+    let engine = engine::page_engine(&app);
+    engine.eval(&label, &format!("window.__arcadiaAudio?.setMuted({muted})"))?;
+    Ok(())
 }
 
 #[tauri::command]
-fn browser_set_bounds(app: tauri::AppHandle, label: String, bounds: BrowserBounds) -> Result<(), String> {
+fn browser_set_bounds(app: tauri::AppHandle, label: String, bounds: PageBounds) -> Result<(), String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    webview
-        .set_position(tauri::LogicalPosition::new(bounds.x, bounds.y))
-        .map_err(|error| error.to_string())?;
-    webview
-        .set_size(tauri::LogicalSize::new(bounds.width.max(1.0), bounds.height.max(1.0)))
-        .map_err(|error| error.to_string())
+    engine::page_engine(&app).set_bounds(&label, bounds)?;
+    Ok(())
 }
 
 #[tauri::command]
 fn browser_set_visible(app: tauri::AppHandle, label: String, visible: bool) -> Result<(), String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    if visible { webview.show() } else { webview.hide() }
-        .map_err(|error| error.to_string())
+    engine::page_engine(&app).set_visible(&label, visible)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -793,10 +861,7 @@ async fn browser_navigate(
         site_blacklist::block_document(&app, url.as_str(), &found, Some(&label), private);
         return Err(site_blacklist::blocked_error(&found));
     }
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .navigate(url.clone())
-        .map_err(|error| error.to_string())?;
+    engine::page_engine(&app).navigate(&label, &url)?;
     let navs = app.state::<NavStacks>();
     let mut guard = navs
         .stacks
@@ -810,10 +875,8 @@ async fn browser_navigate(
 #[tauri::command]
 async fn browser_reload(app: tauri::AppHandle, label: String) -> Result<(), String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    if let Ok(current) = webview.url() {
+    let engine = engine::page_engine(&app);
+    if let Ok(current) = engine.url(&label) {
         let private = privacy::platform::tab_origin(&label)
             .map(|state| state.private)
             .unwrap_or(false);
@@ -822,16 +885,15 @@ async fn browser_reload(app: tauri::AppHandle, label: String) -> Result<(), Stri
             return Err(site_blacklist::blocked_error(&found));
         }
     }
-    webview.reload().map_err(|error| error.to_string())
+    engine.reload(&label)?;
+    Ok(())
 }
 
 #[tauri::command]
 async fn browser_stop(app: tauri::AppHandle, label: String) -> Result<(), String> {
     validate_browser_label(&label)?;
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .eval("window.stop()")
-        .map_err(|error| error.to_string())
+    engine::page_engine(&app).stop(&label)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -847,79 +909,15 @@ async fn browser_edit_action(
         "select-all" => "(()=>{const e=document.activeElement;if(e&&('select' in e)&&typeof e.select==='function')e.select();else document.execCommand('selectAll')})()",
         _ => return Err("unsupported edit action".into()),
     };
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .eval(script)
-        .map_err(|error| error.to_string())
-}
-
-#[cfg(target_os = "windows")]
-async fn clear_webview_profile_data(view: &tauri::Webview) -> Result<(), String> {
-    use webview2_com::ClearBrowsingDataCompletedHandler;
-    use webview2_com::Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2Profile2, ICoreWebView2_13, COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE,
-        COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES, COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE,
-        COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS,
-    };
-    use windows::core::Interface;
-
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let sender = std::sync::Arc::new(std::sync::Mutex::new(Some(sender)));
-    view.with_webview(move |platform| {
-        let callback_sender = sender.clone();
-        let result: Result<(), String> = (|| {
-            let core = unsafe { platform.controller().CoreWebView2() }
-                .map_err(|error| error.to_string())?;
-            let core13 = core
-                .cast::<ICoreWebView2_13>()
-                .map_err(|error| error.to_string())?;
-            let profile = unsafe { core13.Profile() }.map_err(|error| error.to_string())?;
-            let profile2 = profile
-                .cast::<ICoreWebView2Profile2>()
-                .map_err(|error| error.to_string())?;
-            let kinds = COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES
-                | COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE
-                | COREWEBVIEW2_BROWSING_DATA_KINDS_CACHE_STORAGE
-                | COREWEBVIEW2_BROWSING_DATA_KINDS_SERVICE_WORKERS;
-            let callback = ClearBrowsingDataCompletedHandler::create(Box::new(move |status| {
-                if let Ok(mut slot) = callback_sender.lock() {
-                    if let Some(sender) = slot.take() {
-                        let _ = sender.send(status.map_err(|error| error.to_string()));
-                    }
-                }
-                Ok(())
-            }));
-            unsafe { profile2.ClearBrowsingData(kinds, &callback) }
-                .map_err(|error| error.to_string())?;
-            Ok(())
-        })();
-        if let Err(error) = result {
-            if let Ok(mut slot) = sender.lock() {
-                if let Some(sender) = slot.take() {
-                    let _ = sender.send(Err(error));
-                }
-            }
-        }
-    })
-    .map_err(|error| error.to_string())?;
-    tokio::time::timeout(Duration::from_secs(30), receiver)
-        .await
-        .map_err(|_| "清理 Cookie 与磁盘缓存超时".to_string())?
-        .map_err(|_| "清理 Cookie 与磁盘缓存回调已取消".to_string())?
+    engine::page_engine(&app).eval(&label, script)?;
+    Ok(())
 }
 
 #[tauri::command]
 async fn browser_clear_page_data(app: tauri::AppHandle, label: String) -> Result<(), String> {
     validate_browser_label(&label)?;
-    let view = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    #[cfg(target_os = "windows")]
-    clear_webview_profile_data(&view).await?;
-    // Clear origin-bound DOM databases as well. The native profile call above
-    // removes HTTP-only cookies and disk/cache storage that JavaScript cannot see.
-    view.eval("(()=>{try{localStorage.clear()}catch{}try{sessionStorage.clear()}catch{}try{caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k))))}catch{}try{indexedDB.databases?.().then(dbs=>dbs.forEach(db=>db.name&&indexedDB.deleteDatabase(db.name)))}catch{}})()")
-        .map_err(|error| error.to_string())
+    engine::page_engine(&app).clear_site_data(&label).await?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -930,21 +928,19 @@ async fn browser_find(
     backwards: bool,
 ) -> Result<bool, String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    let engine = engine::page_engine(&app);
     if query.is_empty() {
-        webview
-            .eval("window.getSelection()?.removeAllRanges()")
-            .map_err(|error| error.to_string())?;
+        engine.eval(&label, "window.getSelection()?.removeAllRanges()")?;
         return Ok(false);
     }
     let query = serde_json::to_string(&query).map_err(|error| error.to_string())?;
-    eval_json(
-        webview,
+    engine::eval_json(
+        &*engine,
+        &label,
         &format!("window.find({query},false,{backwards},true,false,true,false)"),
     )
     .await
+    .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -953,101 +949,36 @@ async fn browser_zoom(app: tauri::AppHandle, label: String, scale: f64) -> Resul
     if !(0.5..=3.0).contains(&scale) {
         return Err("zoom scale must be between 0.5 and 3.0".into());
     }
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .eval(format!("document.documentElement.style.zoom={scale}"))
-        .map_err(|error| error.to_string())
+    engine::page_engine(&app).set_zoom(&label, scale)?;
+    Ok(())
 }
 
 #[tauri::command]
 async fn browser_print(app: tauri::AppHandle, label: String) -> Result<(), String> {
     validate_browser_label(&label)?;
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .eval("window.print()")
-        .map_err(|error| error.to_string())
+    engine::page_engine(&app).print(&label)?;
+    Ok(())
 }
 
 #[tauri::command]
 fn browser_open_devtools(app: tauri::AppHandle, label: String) -> Result<(), String> {
     validate_browser_label(&label)?;
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .open_devtools();
+    engine::page_engine(&app).open_devtools(&label)?;
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ScreenshotClip {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-}
-
-#[cfg(target_os = "windows")]
 #[tauri::command]
 async fn browser_capture_screenshot(
     app: tauri::AppHandle,
     label: String,
     full_page: bool,
-    clip: Option<ScreenshotClip>,
+    clip: Option<engine::CaptureClip>,
 ) -> Result<String, String> {
-    use std::sync::mpsc;
-    use webview2_com::{CallDevToolsProtocolMethodCompletedHandler, CoTaskMemPWSTR};
     validate_browser_label(&label)?;
-    let view = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    let (sender, receiver) = mpsc::sync_channel(1);
-    view.with_webview(move |platform| {
-        let core = match unsafe { platform.controller().CoreWebView2() } {
-            Ok(core) => core,
-            Err(error) => { let _ = sender.send(Err(error.to_string())); return; }
-        };
-        let callback_sender = sender.clone();
-        let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |status, result| {
-            let value = status.map(|_| result).map_err(|error| error.to_string());
-            let _ = callback_sender.send(value);
-            Ok(())
-        }));
-        let method = CoTaskMemPWSTR::from("Page.captureScreenshot");
-        let params_value = if let Some(clip) = clip {
-            serde_json::json!({"format":"png","fromSurface":true,"clip":{"x":clip.x.max(0.0),"y":clip.y.max(0.0),"width":clip.width.max(1.0),"height":clip.height.max(1.0),"scale":1}})
-        } else { serde_json::json!({"format":"png","captureBeyondViewport":full_page,"fromSurface":true}) };
-        let params_json = params_value.to_string();
-        let params = CoTaskMemPWSTR::from(params_json.as_str());
-        let started = unsafe { core.CallDevToolsProtocolMethod(*method.as_ref().as_pcwstr(), *params.as_ref().as_pcwstr(), &handler) };
-        if let Err(error) = started {
-            let _ = sender.send(Err(error.to_string()));
-        }
-    }).map_err(|error| error.to_string())?;
-    // Never wait for the DevTools callback on WebView2's UI thread. Keeping
-    // that thread free is required for the callback itself and for all other
-    // browser/window buttons to remain responsive while capture is pending.
-    let raw = tauri::async_runtime::spawn_blocking(move || receiver.recv_timeout(Duration::from_secs(30)))
+    engine::page_engine(&app)
+        .capture(&label, CaptureRequest { full_page, clip })
         .await
-        .map_err(|error| error.to_string())?
-        .map_err(|_| "screenshot timed out".to_string())??;
-    let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
-    value
-        .get("data")
-        .and_then(|item| item.as_str())
-        .map(str::to_string)
-        .ok_or_else(|| "screenshot data missing".into())
-}
-
-#[cfg(not(target_os = "windows"))]
-#[tauri::command]
-fn browser_capture_screenshot(
-    _app: tauri::AppHandle,
-    _label: String,
-    _full_page: bool,
-    _clip: Option<serde_json::Value>,
-) -> Result<String, String> {
-    Err("native screenshot is currently available on Windows/WebView2".into())
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -1072,38 +1003,17 @@ async fn browser_history(app: tauri::AppHandle, label: String, delta: i32) -> Re
             return Err("history navigation unavailable".into());
         }
     }
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .eval(format!("history.go({delta})"))
-        .map_err(|error| error.to_string())
-}
-
-async fn eval_json<T: DeserializeOwned + Send + 'static>(
-    webview: tauri::Webview,
-    script: &str,
-) -> Result<T, String> {
-    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    webview
-        .eval_with_callback(script, move |result| {
-            let _ = sender.send(result);
-        })
-        .map_err(|error| error.to_string())?;
-    let result =
-        tauri::async_runtime::spawn_blocking(move || receiver.recv_timeout(Duration::from_secs(5)))
-            .await
-            .map_err(|error| error.to_string())?
-            .map_err(|_| "page script timed out".to_string())?;
-    serde_json::from_str(&result).map_err(|error| format!("invalid page response: {error}"))
+    engine::page_engine(&app).eval(&label, &format!("history.go({delta})"))?;
+    Ok(())
 }
 
 #[tauri::command]
 async fn browser_state(app: tauri::AppHandle, label: String) -> Result<BrowserState, String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    let mut state: BrowserState = eval_json(
-        webview,
+    let engine = engine::page_engine(&app);
+    let mut state: BrowserState = engine::eval_json(
+        &*engine,
+        &label,
         "({url:location.href,title:document.title,favicon:(document.querySelector('link[rel~=icon]')?.href??null),loading:document.readyState!=='complete',scrollX:window.scrollX,scrollY:window.scrollY,scrollDepth:Math.min(1,(window.scrollY+window.innerHeight)/Math.max(document.documentElement.scrollHeight,window.innerHeight))})",
     )
     .await?;
@@ -1130,10 +1040,11 @@ fn browser_restore_scroll(
     if !x.is_finite() || !y.is_finite() {
         return Err("invalid scroll position".into());
     }
-    app.get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?
-        .eval(format!("window.scrollTo({}, {})", x.max(0.0), y.max(0.0)))
-        .map_err(|error| error.to_string())
+    engine::page_engine(&app).eval(
+        &label,
+        &format!("window.scrollTo({}, {})", x.max(0.0), y.max(0.0)),
+    )?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1145,9 +1056,7 @@ fn browser_toolbar_menu_in_page(
     zoom_percent: u16,
 ) -> Result<(), String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    let engine = engine::page_engine(&app);
     let token = uuid::Uuid::new_v4().to_string();
     app.state::<ToolbarMenuTokens>()
         .0
@@ -1196,7 +1105,8 @@ fn browser_toolbar_menu_in_page(
         }})()"#
         )
     };
-    webview.eval(script).map_err(|error| error.to_string())
+    engine.eval(&label, &script)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1214,9 +1124,9 @@ fn browser_toolbar_menu(
     let id = |action: &str| format!("browser-toolbar|{label}|{action}");
     // The native menu is built from Rust state, so it can label the entry
     // correctly whether the current host is already blacklisted.
-    let blocked = app
-        .get_webview(&label)
-        .and_then(|view| view.url().ok())
+    let blocked = engine::page_engine(&app)
+        .url(&label)
+        .ok()
         .and_then(|url| site_blacklist::match_url(url.as_str()));
     let page_tools = SubmenuBuilder::new(&app, "页面工具")
         .text(id("translate-page"), "翻译当前网页")
@@ -1278,18 +1188,17 @@ fn browser_toolbar_menu(
     // to its parent Window. Reserve the menu's right-hand column while the
     // synchronous native popup is open, then restore the page immediately
     // after dismissal. This keeps the page visible without covering the menu.
-    let page = app.get_webview(&label);
-    let original_page_size = page.as_ref().and_then(|view| view.size().ok());
-    if let (Some(view), Some(original)) = (page.as_ref(), original_page_size) {
+    let engine = engine::page_engine(&app);
+    let original_page_size = engine.size(&label).ok();
+    if let Some((width, height)) = original_page_size {
         let reserved = (272.0 * scale).round() as u32;
-        let narrowed = tauri::PhysicalSize::new(original.width.saturating_sub(reserved).max(1), original.height);
-        let _ = view.set_size(narrowed);
+        let _ = engine.set_physical_size(&label, width.saturating_sub(reserved).max(1), height);
     }
     let popup_result = window
         .popup_menu_at(&menu, LogicalPosition::new(x, 104.0))
         .map_err(|error| error.to_string());
-    if let (Some(view), Some(original)) = (page.as_ref(), original_page_size) {
-        let _ = view.set_size(original);
+    if let Some((width, height)) = original_page_size {
+        let _ = engine.set_physical_size(&label, width, height);
     }
     popup_result
 }
@@ -1308,13 +1217,10 @@ fn browser_toolbar_panel(
     }
     let data: serde_json::Value = serde_json::from_str(&payload)
         .map_err(|error| format!("invalid toolbar panel payload: {error}"))?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    let engine = engine::page_engine(&app);
     if !open {
-        return webview
-            .eval("window.__arcadiaToolbarMenu?.close(false)")
-            .map_err(|error| error.to_string());
+        engine.eval(&label, "window.__arcadiaToolbarMenu?.close(false)")?;
+        return Ok(());
     }
     let kind_js = serde_json::to_string(&kind).map_err(|error| error.to_string())?;
     let data_js = serde_json::to_string(&data).map_err(|error| error.to_string())?;
@@ -1357,7 +1263,8 @@ fn browser_toolbar_panel(
       setTimeout(()=>{{document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',keydown,true)}},0);window.__arcadiaToolbarMenu={{close}};
     }})()"#
     );
-    webview.eval(script).map_err(|error| error.to_string())
+    engine.eval(&label, &script)?;
+    Ok(())
 }
 
 /// Shows or updates one notification inside the page document.
@@ -1381,9 +1288,7 @@ async fn browser_page_toast(
     theme: String,
 ) -> Result<bool, String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
+    let engine = engine::page_engine(&app);
     let script = browser::page_toast_script(&browser::PageToast {
         id: &id,
         kind: &kind,
@@ -1391,29 +1296,26 @@ async fn browser_page_toast(
         duration_ms,
         theme: &theme,
     })?;
-    eval_json::<bool>(webview, &script).await
+    engine::eval_json(&*engine, &label, &script)
+        .await
+        .map_err(Into::into)
 }
 
 /// Removes one in-page notification; a no-op after a navigation.
 #[tauri::command]
 fn browser_page_toast_close(app: tauri::AppHandle, label: String, id: String) -> Result<(), String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    webview
-        .eval(browser::page_toast_close_script(&id)?)
-        .map_err(|error| error.to_string())
+    engine::page_engine(&app).eval(&label, &browser::page_toast_close_script(&id)?)?;
+    Ok(())
 }
 
 #[tauri::command]
 async fn browser_snapshot(app: tauri::AppHandle, label: String) -> Result<PageSnapshot, String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    let snapshot: PageSnapshot = eval_json(
-        webview,
+    let engine = engine::page_engine(&app);
+    let snapshot: PageSnapshot = engine::eval_json(
+        &*engine,
+        &label,
         "({url:location.href,html:document.documentElement.outerHTML})",
     )
     .await?;
@@ -1429,11 +1331,10 @@ async fn browser_resource_candidates(
     label: String,
 ) -> Result<Vec<BrowserResourceCandidate>, String> {
     validate_browser_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    eval_json(
-        webview,
+    let engine = engine::page_engine(&app);
+    engine::eval_json(
+        &*engine,
+        &label,
         r#"(() => {
           const rows=[];
           const add=(url,initiatorType,transferSize,decodedBodySize,source)=>{
@@ -1450,6 +1351,7 @@ async fn browser_resource_candidates(
         })()"#,
     )
     .await
+    .map_err(Into::into)
 }
 
 fn source_origin_from_url(url: &str) -> Option<String> {
@@ -2058,6 +1960,12 @@ pub fn run() {
         .manage(PermissionWaiters::default())
         .manage(session_lock::SessionBootState::default())
         .setup(|app| {
+            // Install the tab-hosting engine before the first command can run.
+            // A CEF build would swap this constructor (and nothing else in the
+            // command layer would change).
+            app.manage(engine::PageEngineState::new(Arc::new(
+                engine::WryPageEngine::new(app.handle().clone()),
+            )));
             // Set the runtime window icon explicitly as well as the bundled executable
             // icon. This keeps `tauri dev` and packaged Windows builds consistent.
             let icon = Image::from_bytes(include_bytes!("../icons/128x128.png"))?;
@@ -2331,6 +2239,7 @@ pub fn run() {
             local_store::local_clear_reading_snapshots,
             local_store::local_purge_reading_snapshots,
             local_store::local_add_history,
+            local_store::local_delete_history,
             local_store::local_clear_history,
             local_store::local_get_browser_workspace,
             local_store::local_save_browser_workspace,
@@ -2452,9 +2361,8 @@ async fn browser_permission_request(
     if !matches!(kind.as_str(), "camera" | "microphone" | "location" | "notifications" | "clipboard" | "media") {
         return Err("unsupported permission kind".into());
     }
-    let current_origin = webview
-        .url()
-        .map_err(|error| error.to_string())?
+    let current_origin = engine::page_engine(&app)
+        .url(webview.label())?
         .origin()
         .ascii_serialization();
     if current_origin != origin {
@@ -2510,10 +2418,7 @@ fn validate_password_origin(
     origin: &str,
 ) -> Result<(), String> {
     validate_browser_label(label)?;
-    let view = app
-        .get_webview(label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    let current = view.url().map_err(|error| error.to_string())?;
+    let current = engine::page_engine(app).url(label)?;
     if current.scheme() != "https" || current.origin().ascii_serialization() != origin {
         return Err("credential origin does not match the requesting page".into());
     }
@@ -2527,21 +2432,22 @@ fn browser_password_fill(
     credential_id: String,
 ) -> Result<(), String> {
     validate_browser_label(&label)?;
-    let view = app.get_webview(&label).ok_or_else(|| "browser tab webview not found".to_string())?;
-    let current = view.url().map_err(|error| error.to_string())?;
+    let engine = engine::page_engine(&app);
+    let current = engine.url(&label)?;
     let origin = current.origin().ascii_serialization();
     validate_password_origin(&app, &label, &origin)?;
     let item = local_store::password_for_origin_by_id(&app, &origin, &credential_id)?;
     let username = serde_json::to_string(&item.username).map_err(|error| error.to_string())?;
     let password = serde_json::to_string(&item.password).map_err(|error| error.to_string())?;
-    view.eval(&format!(r#"(() => {{
+    engine.eval(&label, &format!(r#"(() => {{
       const passwordInput=document.activeElement instanceof HTMLInputElement&&document.activeElement.type==='password'?document.activeElement:Array.from(document.querySelectorAll('input[type=password]')).find(input=>!input.value);
       if(!passwordInput)return;
       const inputs=Array.from((passwordInput.form||document).querySelectorAll('input'));
       const usernameInput=inputs.find(input=>input!==passwordInput&&(input.autocomplete==='username'||input.type==='email'||/user|login|email/i.test(input.name||'')));
       const set=(input,value)=>{{if(!input)return;const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;setter?.call(input,value);input.dispatchEvent(new Event('input',{{bubbles:true}}));input.dispatchEvent(new Event('change',{{bubbles:true}}));}};
       set(usernameInput,{username});set(passwordInput,{password});
-    }})()"#)).map_err(|error| error.to_string())
+    }})()"#))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2585,16 +2491,14 @@ async fn browser_close_tab(app: tauri::AppHandle, label: String) -> Result<(), S
     let private_profile = privacy::platform::tab_origin(&label)
         .filter(|tab| tab.private)
         .map(|_| std::env::temp_dir().join("arcadia-private-webviews").join(&label));
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser tab webview not found".to_string())?;
-    let url = eval_json::<String>(webview.clone(), "location.href")
+    let engine = engine::page_engine(&app);
+    let url = engine::eval_json::<String>(&*engine, &label, "location.href")
         .await
         .unwrap_or_default();
-    let title = eval_json::<String>(webview.clone(), "document.title")
+    let title = engine::eval_json::<String>(&*engine, &label, "document.title")
         .await
         .unwrap_or_default();
-    webview.close().map_err(|error| error.to_string())?;
+    engine.close(&label)?;
     if let Some(path) = private_profile {
         tauri::async_runtime::spawn(async move {
             // WebView2 releases profile files shortly after its controller is

@@ -202,3 +202,5 @@ body[data-theme='dark'] .workspaces-editor__desc{color:#9aa69e}
 .site-search-manager__label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .site-search-manager__builtin{font-size:11px}
 .site-search-manager__form{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid #edf0ee}
+/* Sleeping tab indicator */
+.browser-tab-sleep{flex:none;margin-right:2px;color:#8a948d}

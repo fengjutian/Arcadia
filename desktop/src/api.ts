@@ -611,6 +611,16 @@ export async function purgeReadingSnapshots(retentionDays:number, maxBytes:numbe
   return isTauri() ? invoke('local_purge_reading_snapshots', { retentionDays, maxBytes }) : { count:0, bytes:0 }
 }
 
+export async function deleteBrowserHistory(url: string): Promise<number> {
+  if (!isTauri()) {
+    const entries = await listBrowserHistory()
+    const remaining = entries.filter(entry => entry.url !== url)
+    localStorage.setItem('browser.history', JSON.stringify(remaining))
+    return entries.length - remaining.length
+  }
+  return invoke<number>('local_delete_history', { url })
+}
+
 export async function clearBrowserHistory(since?: number): Promise<number> {
   if (!isTauri()) {
     const entries = await listBrowserHistory()

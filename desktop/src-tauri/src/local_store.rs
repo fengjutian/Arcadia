@@ -3386,6 +3386,17 @@ pub fn local_add_history(app: tauri::AppHandle, entry: LocalHistoryEntry) -> Res
 }
 
 #[tauri::command]
+pub fn local_delete_history(app: tauri::AppHandle, url: String) -> Result<i64, String> {
+    if url.trim().is_empty() || url.len() > 8192 {
+        return Err("invalid history url".into());
+    }
+    let deleted = connection(&app)?
+        .execute("DELETE FROM browser_history WHERE url = ?", params![url])
+        .map_err(|error| error.to_string())?;
+    Ok(deleted as i64)
+}
+
+#[tauri::command]
 pub fn local_clear_history(app: tauri::AppHandle, since: Option<i64>) -> Result<i64, String> {
     let database = connection(&app)?;
     let deleted = match since {

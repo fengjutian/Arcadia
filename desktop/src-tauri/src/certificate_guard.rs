@@ -96,12 +96,9 @@ mod windows_guard {
     }
 
     pub fn attach<R: Runtime>(app: &AppHandle<R>, label: &str) {
-        let Some(view) = app.get_webview(label) else {
-            return;
-        };
         let event_app = app.clone();
         let event_label = label.to_string();
-        let _ = view.with_webview(move |platform| {
+        let _ = crate::engine::with_platform_webview(app, label, move |platform| {
             let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else {
                 return;
             };
@@ -161,12 +158,9 @@ mod windows_guard {
             .map_err(|_| "certificate request registry poisoned")?
             .remove(&request_id)
             .ok_or_else(|| "certificate request is no longer pending".to_string())?;
-        let view = app
-            .get_webview(&label)
-            .ok_or_else(|| "certificate webview no longer exists".to_string())?;
         let (sender, receiver) = tokio::sync::oneshot::channel();
         let response_id = request_id.clone();
-        view.with_webview(move |_| {
+        crate::engine::with_platform_webview(&app, &label, move |_| {
             let result = PENDING
                 .with(|map| map.borrow_mut().remove(&response_id))
                 .ok_or_else(|| "certificate request is no longer pending".to_string())
@@ -192,8 +186,8 @@ mod windows_guard {
             let delayed_app = app.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_secs(3));
-                if let Some(view) = delayed_app.get_webview(&label) {
-                    let _ = view.with_webview(|platform| {
+                if crate::engine::page_engine(&delayed_app).exists(&label) {
+                    let _ = crate::engine::with_platform_webview(&delayed_app, &label, |platform| {
                         let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else {
                             return;
                         };

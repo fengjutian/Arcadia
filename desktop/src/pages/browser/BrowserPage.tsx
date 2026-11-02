@@ -1,7 +1,7 @@
 import { translate } from '../../i18n'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AutoComplete, Badge, Button, Dropdown, Input, message, Modal, Popover, Space, Tabs, Tag, Tooltip, Typography, UI_MODAL_OVERLAY_EVENT, type InputRef, type MenuProps } from '../../components/ui'
-import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, AudioMutedOutlined, BookOutlined, CheckCircleOutlined, CloseCircleOutlined, CloseOutlined, CopyOutlined, DownloadOutlined, FullscreenOutlined, LoadingOutlined, MoreOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SoundOutlined, StarFilled, StarOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined, WarningOutlined } from '../../components/ui/icons'
+import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, AudioMutedOutlined, BookOutlined, CheckCircleOutlined, CloseCircleOutlined, CloseOutlined, CopyOutlined, DownloadOutlined, FullscreenOutlined, LoadingOutlined, MoonOutlined, MoreOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SoundOutlined, StarFilled, StarOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined, WarningOutlined } from '../../components/ui/icons'
 import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
@@ -51,9 +51,7 @@ import { usePermissionPrompt } from '../../features/browser/usePermissionPrompt'
 import { PermissionPromptBar } from '../../features/browser/PermissionPromptBar'
 import { CertificateErrorBar } from '../../features/browser/CertificateErrorBar'
 import { useCertificatePrompt } from '../../features/browser/useCertificatePrompt'
-import { TabSearchPalette } from '../../features/browser/TabSearchPalette'
 import { CommandPalette } from '../../features/command/CommandPalette'
-import { HistorySearchPalette } from '../../features/history/HistorySearchPalette'
 import { BookmarkSearchPalette } from '../../features/bookmarks/BookmarkSearchPalette'
 import { useBookmarks } from '../../features/bookmarks/useBookmarks'
 import { BulkSummaryPalette } from '../../features/ai/BulkSummaryPalette'
@@ -133,9 +131,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [aiTranslationSource, setAiTranslationSource] = useState('')
   const [findOpen, setFindOpen] = useState(false)
   const [pendingShellOpen, setPendingShellOpen] = useState<string | null>(null)
-  const [tabSearchOpen, setTabSearchOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
-  const [historySearchOpen, setHistorySearchOpen] = useState(false)
   const [bookmarkPaletteOpen, setBookmarkPaletteOpen] = useState(false)
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
@@ -1067,12 +1063,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         case 'openCommandBar':
           setCommandOpen(true)
           return
-        case 'openTabSearch':
-          setTabSearchOpen(true)
-          return
-        case 'openHistorySearch':
-          setHistorySearchOpen(true)
-          return
         case 'openBookmarks':
           setBookmarkPaletteOpen(true)
           return
@@ -1303,6 +1293,25 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     }
   }
 
+  /** Explicit "sleep this tab now": keep the record, release the WebView. */
+  async function suspendTabNow(tab: BrowserTab) {
+    if (!hasNativeTab(tab.id) || isNativeTabSuspended(tab.id)) return
+    try {
+      const state = await readNativeState(tab.id).catch(() => null)
+      if (state) {
+        setTabs(current => current.map(item => item.id === tab.id
+          ? { ...item, scrollX: Math.round(state.scrollX), scrollY: Math.round(state.scrollY) }
+          : item))
+      }
+      const retained = await suspendNativeTab(tab.id).catch(() => false)
+      if (!retained) await closeNativeTab(tab.id)
+      setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: true, loading: false } : item))
+      messageApi.info(translate("标签页已休眠，点击可恢复"), 2)
+    } catch (error) {
+      messageApi.error(translate("休眠失败：{value0}", { value0: String(error) }))
+    }
+  }
+
   function setZoom(tabId: string, scale: number) {
     const next = Math.min(3, Math.max(0.5, Math.round(scale * 10) / 10))
     setZoomLevels(           (current                      )=>({...current,[tabId]:next}))
@@ -1346,8 +1355,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     diagnosticLog('browser.menu.action', 'info', { action, tabId: active.id, url: redactUrl(active.url) })
     switch (action) {
       case 'find': setFindOpen(true); break
-      case 'tab-search': setTabSearchOpen(true); break
-      case 'history-search': setHistorySearchOpen(true); break
+      case 'tab-search': setCommandOpen(true); break
+      case 'history-search': setCommandOpen(true); break
       case 'bookmark-add': void addCurrentAsBookmark(); break
       case 'bookmarks': setBookmarkPaletteOpen(true); break
       case 'bulk-summary': setBulkSummaryOpen(true); break
@@ -1972,6 +1981,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       { key: 'reload', label:translate("重新加载"),disabled:!hasNativeTab(tab.id),onClick:()=>void reloadNativeTab(tab.id)},
       { key: 'duplicate', label:translate("复制标签页"),disabled:!tab.url,onClick:()=>duplicateTab(tab)},
       { key: 'pin', label: tab.pinned ?translate("取消固定"):translate("固定标签页"),onClick:()=>togglePinned(tab.id)},
+      { key: 'sleep', label: tab.suspended ? translate("唤醒标签页") : translate("立即休眠"), disabled: tab.pinned || tab.id === activeTabId, onClick: () => { if (tab.suspended) void resumeTab(tab); else void suspendTabNow(tab) } },
       { key: 'archive', label:translate("归档标签页"),disabled:!tab.url||tab.private,onClick:()=>{void archiveTabToStore(tab)}},
       { key: 'queue', label:translate("稍后读"),disabled:!tab.url||tab.private,onClick:()=>{void queueTabForLater(tab)}},
       { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
@@ -2280,7 +2290,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
                 onDrop={onTabDrop(index)}
                 onDragEnd={onTabDragEnd}
                 className={`browser-tab-title${isDragging ? ' is-dragging' : ''}${isDropTarget ? ' is-drop-target' : ''}${tab.private ? ' browser-tab-title--private' : ''}`}
-              >{tab.crashed ? <WarningOutlined aria-label={translate("标签页崩溃")} className="browser-tab-crash"/>:tab.loading?<span className="browser-tab-loading" role="status" aria-label={translate("正在加载")}/>:tab.private?<LockOutlined/>:<TabFavicon key={tab.favicon??tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted?<Tooltip title={translate("已静音")} mouseEnterDelay={0.6}><AudioMutedOutlined aria-label={translate("已静音")} className="browser-tab-audio"/></Tooltip>:tab.audible?<Tooltip title={translate("正在播放音频")} mouseEnterDelay={0.6}><SoundOutlined aria-label={translate("正在播放音频")} className="browser-tab-audio"/></Tooltip>:null}<span>{tab.title}</span></span>
+              >{tab.crashed ? <WarningOutlined aria-label={translate("标签页崩溃")} className="browser-tab-crash"/>:tab.loading?<span className="browser-tab-loading" role="status" aria-label={translate("正在加载")}/>:tab.suspended?<Tooltip title={translate("已休眠，点击可恢复")} mouseEnterDelay={0.4}><MoonOutlined aria-label={translate("已休眠")} className="browser-tab-sleep"/></Tooltip>:tab.private?<LockOutlined/>:<TabFavicon key={tab.favicon??tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted?<Tooltip title={translate("已静音")} mouseEnterDelay={0.6}><AudioMutedOutlined aria-label={translate("已静音")} className="browser-tab-audio"/></Tooltip>:tab.audible?<Tooltip title={translate("正在播放音频")} mouseEnterDelay={0.6}><SoundOutlined aria-label={translate("正在播放音频")} className="browser-tab-audio"/></Tooltip>:null}<span>{tab.title}</span></span>
               </Tooltip>
             </Dropdown>,
             style: group.groupId ?( { '--tab-group-color': groupColor } as CSSProperties) : undefined,
@@ -2318,22 +2328,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       onToggleNotes={() => setNotesOpen(value => !value)}
       onBulkSummary={() => setBulkSummaryOpen(true)}
       onSaveWorkspace={() => void saveAsWorkspace()}
-    />
-    <TabSearchPalette
-      open={tabSearchOpen}
-      tabs={tabs}
-      activeId={activeTabId}
-      onClose={() => setTabSearchOpen(false)}
-      onPick={id => activateTab(id)}
-      onCloseTab={id => closeTab(id)}
-    />
-    <HistorySearchPalette
-      open={historySearchOpen}
-      history={history}
-      onClose={() => setHistorySearchOpen(false)}
-      onOpen={entry => void navigate(entry.url)}
-      onRemove={entry => setHistory(current => removeHistoryEntry(current, entry.url).remaining)}
-      onClear={() => setHistory([])}
     />
     <BookmarkSearchPalette
       open={bookmarkPaletteOpen}

@@ -75,7 +75,7 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1`–`6.3`、`6.6`、`6.14` 已部分落地，其余未开始。按性价比排序：`6.1`–`6.3` 不依赖布局收口，可在当前工作流结束后立即启动；`6.4` 起依赖布局收口。
+> 状态以各条目勾选为准：`6.1`–`6.3`、`6.6`、`6.13`、`6.14` 已部分落地，其余未开始。按性价比排序：`6.1`–`6.3` 不依赖布局收口，可在当前工作流结束后立即启动；`6.4` 起依赖布局收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
@@ -83,7 +83,8 @@
 - [~] 借鉴：Arc 的 `⌘T` 命令栏把导航、切标签与动作执行合并在一个输入框，动作本身可被搜索（[Command Bar Actions](https://start.arc.net/command-bar-actions)）。
 - 现状：`TabSearchPalette`、`BookmarkSearchPalette`、`HistorySearchPalette`、`BulkSummaryPalette` 是四个独立 Modal；地址栏只负责导航。
 - 已落地（2026-11-02）：`features/command/` 提供 `CommandPalette` 与 `commandModel`（前缀解析、评分、分组），`Ctrl/⌘ + K` 打开；覆盖标签页、历史、收藏、归档、知识库与 10 个浏览器动作；`Tab` 循环范围，`@` / `~` / `/` / `?` / `>` 前缀直选；`!gh` 一类站内搜索（8 个内置快捷词，结果在新标签打开）；自定义 `!` 词表通过「管理快捷搜索词」维护，存 `local_session` 并随备份导出；已知域名 + `Tab` 进入站内搜索模式（再按 `Tab` 或 `Esc` 退出）。测试 16 + 16 例。
-- 待补：旧四个 palette 下线；之后改标 `[x]`。
+- 已落地（2026-11-02，旧入口下线）：删除 `TabSearchPalette` 与 `HistorySearchPalette` 及其快捷键（`Ctrl+Shift+A` / `Ctrl+H` 不再绑定）；历史删除/清空迁到知识库「近期浏览」，新增 `local_delete_history` 命令；浏览器菜单里的两个入口改为打开命令栏。
+- 待补：`BookmarkSearchPalette` 仍承担改名/删除收藏，需先把这些管理动作迁到知识库再下线；之后改标 `[x]`。
 - 做法：新增单一命令栏，前缀分域：`@` 标签、`/` 知识库、`?` 问 AI、`>` 动作；复用 `tabSearchIndex`、`historySearchIndex`、`bookmarkSearchIndex`；动作表映射现有高频 Tauri command。
 - 增补（借 Chrome / Firefox）：`Tab` 就地切换搜索域；域名 + Tab 触发站内搜索，模板复用 `searchEngine.ts`；允许用户自定义 `!` 快捷词。
 - 验收：`Ctrl/Cmd + K` 打开；四类结果同屏分组且键盘可达；动作有成功/失败反馈；旧 palette 入口保留一个版本周期后移除；新增纯函数与交互测试。
@@ -172,8 +173,10 @@
 
 ### 6.13 睡眠标签 UI 与站点例外
 
-- [ ] 借鉴：Chrome Memory Saver / Edge Sleeping Tabs——机制的价值在可见性与可控性，不在回收本身。
+- [~] 借鉴：Chrome Memory Saver / Edge Sleeping Tabs——机制的价值在可见性与可控性，不在回收本身。
 - 现状：`webview_suspend.rs` 已在 Windows 真实调用 `ICoreWebView2_3::TrySuspend`，`lruPolicy.ts` 已保护固定/发声/下载中的标签；但界面没有睡眠态、没有原因说明、没有站点例外。
+- 已落地（2026-11-02）：睡眠标签在标签条显示月亮徽标 + 悬停提示；标签右键新增「立即休眠 / 唤醒标签页」（当前标签与固定标签不可休眠）；手动休眠会先记录滚动位置再挂起，非 Windows 走「销毁 WebView + 点击重建」的既有降级路径。
+- 待补：站点级「永不自动休眠」与原因说明；唤醒后滚动位置的恢复提示。
 - 做法：标签睡眠徽标与 hover 原因；右键「立即休眠 / 唤醒」；站点级「永不自动休眠」；唤醒后的状态恢复提示。
 - 验收：睡眠态可被用户识别；唤醒不丢导航历史；例外规则持久化并即时生效；非 Windows 平台明确降级为不可用而非静默失败。
 

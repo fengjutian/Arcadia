@@ -1,4 +1,4 @@
-export const THEME_PREFERENCES = ['green', 'beige', 'light', 'dark', 'system', 'github', 'ocean', 'cyan', 'midnight', 'mint', 'amber', 'coral', 'rose', 'violet'] as const
+export const THEME_PREFERENCES = ['green', 'beige', 'light', 'dark', 'system', 'github', 'ocean', 'cyan', 'mist', 'mint', 'amber', 'coral', 'rose', 'violet'] as const
 export type ThemePreference = typeof THEME_PREFERENCES[number]
 
 const THEME_STORAGE_KEY = 'arcadia-theme'

@@ -302,19 +302,19 @@ mod win {
             cosmetic_filtering: true,
             notes: Vec::new(),
         }));
-        let Some(view) = app.get_webview(label) else {
+        if !crate::engine::page_engine(app).exists(label) {
             cap.lock()
                 .unwrap()
                 .notes
                 .push("no webview found for label".into());
             return cap.lock().unwrap().clone();
-        };
+        }
         let label_owned = label.to_string();
         let set_for_closure = set.clone();
         let label_for_closure = label_owned.clone();
         let cap_for_closure = cap.clone();
         let events_for_closure = events.clone();
-        let attach_result = view.with_webview(move |platform| {
+        let attach_result = crate::engine::with_platform_webview(app, label, move |platform| {
             let core = match unsafe { platform.controller().CoreWebView2() } {
                 Ok(c) => c,
                 Err(_) => {
@@ -428,10 +428,10 @@ mod win {
             },
             Err(_) => return false,
         };
-        let Some(view) = app.get_webview(label) else {
+        if !crate::engine::page_engine(app).exists(label) {
             return false;
-        };
-        let result = view.with_webview(move |platform| {
+        }
+        let result = crate::engine::with_platform_webview(app, label, move |platform| {
             if let Ok(core) = unsafe { platform.controller().CoreWebView2() } {
                 if let Ok(core2) = core.cast::<ICoreWebView2_2>() {
                     let _ = unsafe { core2.remove_WebResourceRequested(token) };

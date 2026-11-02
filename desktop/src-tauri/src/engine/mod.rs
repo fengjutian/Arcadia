@@ -239,6 +239,19 @@ pub fn page_engine<R: Runtime>(app: &AppHandle<R>) -> Arc<dyn PageEngine> {
     app.state::<PageEngineState>().0.clone()
 }
 
+/// Convenience bridge for platform modules that must install native handlers.
+///
+/// Wraps [`PageEngine::with_platform_webview`] so call sites keep the
+/// `app.get_webview(label)`-free shape they had with `with_webview`, without
+/// each module boxing its own closure.
+#[cfg(target_os = "windows")]
+pub fn with_platform_webview<R: Runtime, F>(app: &AppHandle<R>, label: &str, f: F) -> Result<()>
+where
+    F: FnOnce(tauri::webview::PlatformWebview) + Send + 'static,
+{
+    page_engine(app).with_platform_webview(label, Box::new(f))
+}
+
 /// Evaluate `script` and deserialize its JSON result.
 ///
 /// Kept as a free function (not a trait method) because trait objects cannot

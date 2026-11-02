@@ -11,10 +11,8 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use tauri::webview::{
-    DownloadEvent, NewWindowResponse, PageLoadEvent, Webview, WebviewBuilder, WebviewUrl,
-};
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalSize};
+use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent, Webview, WebviewBuilder};
+use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalSize, WebviewUrl};
 use url::Url;
 
 use super::{CaptureRequest, EngineError, PageBounds, PageEngine, PageSpec, Result};

@@ -1,7 +1,7 @@
 //! Emits native WebView2 process failures to the React tab lifecycle.
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 
 pub const PROCESS_FAILED_EVENT: &str = "browser://process-failed";
 
@@ -44,10 +44,9 @@ mod windows_guard {
     }
 
     pub fn attach<R: Runtime>(app: &AppHandle<R>, label: &str) {
-        let Some(view) = app.get_webview(label) else { return };
         let event_app = app.clone();
         let event_label = label.to_string();
-        let _ = view.with_webview(move |platform| {
+        let _ = crate::engine::with_platform_webview(app, label, move |platform| {
             let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else { return };
             let handler = ProcessFailedEventHandler::create(Box::new(move |_sender, args| {
                 let Some(args) = args else { return Ok(()) };

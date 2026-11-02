@@ -1,13 +1,15 @@
 import { t } from '../../i18n'
-import { Button, Input, message, Modal, Segmented, Select, Skeleton, Switch, Tabs, Tag, Typography, Upload } from '../../components/ui'
+import { Button, Input, message, Modal, Popconfirm, Segmented, Select, Skeleton, Switch, Tabs, Tag, Typography, Upload } from '../../components/ui'
 import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DocumentCard } from '../../features/documents/DocumentCard'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
 import { loadDocuments } from '../../features/documents/documentService'
 import {
+  clearBrowserHistory,
   createCollection,
   deleteArchivedTab,
+  deleteBrowserHistory,
   deleteCollection,
   listArchivedTabs,
   listBrowserHistory,
@@ -20,7 +22,9 @@ import {
   type Collection,
   type ReadingQueueEntry,
 } from '../../api'
+import { listBookmarks, removeBookmark, updateBookmark, type BookmarkRecord } from '../../services/bookmarks'
 import type { HistoryEntry } from '../../features/history/dedupeHistory'
+import { HISTORY_CHANGE_EVENT } from '../../features/history/dedupeHistory'
 import { formatArchivedAt, groupArchivedTabs } from '../../features/archive/archive'
 import {
   AUTO_ARCHIVE_HOUR_OPTIONS,
@@ -69,6 +73,9 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [unavailable, setUnavailable] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>([])
+  const [editingBookmark, setEditingBookmark] = useState<BookmarkRecord | null>(null)
+  const [bookmarkDraft, setBookmarkDraft] = useState({ title: '', folder: '', note: '' })
   const [archived, setArchived] = useState<ArchivedTab[]>([])
   const [queue, setQueue] = useState<ReadingQueueEntry[]>([])
   const [autoArchive, setAutoArchive] = useState<AutoArchiveSettings>(readAutoArchiveSettings)
@@ -217,6 +224,28 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   function openHistoryEntry(entry: HistoryEntry) {
     window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url: entry.url } }))
     onOpenBrowser?.()
+  }
+
+  async function removeHistoryEntry(entry: HistoryEntry) {
+    try {
+      await deleteBrowserHistory(entry.url)
+      const next = history.filter(item => item.url !== entry.url)
+      setHistory(next)
+      window.dispatchEvent(new CustomEvent(HISTORY_CHANGE_EVENT, { detail: next }))
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : t("删除浏览记录失败"))
+    }
+  }
+
+  async function clearAllHistory() {
+    try {
+      const removed = await clearBrowserHistory()
+      setHistory([])
+      window.dispatchEvent(new CustomEvent(HISTORY_CHANGE_EVENT, { detail: [] }))
+      messageApi.success(t("已清空 {value0} 条浏览记录", { value0: removed }))
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : t("清空浏览记录失败"))
+    }
   }
 
   function openArchived(entry: ArchivedTab) {
@@ -368,7 +397,17 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         <h2>{t("近期浏览")}</h2>
         <p>{t("最近访问过的网页，点击即可在浏览器中重新打开。")}</p>
       </div>
-      <span className="library-result-count">{recentHistory.length} {t("条")}</span>
+      <div className="library-section-head__tools">
+        <span className="library-result-count">{recentHistory.length} {t("条")}</span>
+        {history.length > 0 && <Popconfirm
+          title={t("清空浏览记录？")}
+          description={t("会同时删除本地数据库中的历史记录，且无法撤销。")}
+          okText={t("清空")}
+          cancelText={t("取消")}
+          okButtonProps={{ danger: true }}
+          onConfirm={() => void clearAllHistory()}
+        ><Button danger size="small">{t("清空")}</Button></Popconfirm>}
+      </div>
     </div>
     {recentHistory.length === 0
       ? <div className="library-empty-state library-empty-state--compact">
@@ -377,14 +416,17 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
           <p>{t("浏览过的页面会按时间倒序出现在这里。")}</p>
         </div>
       : <div className="library-activity-list">
-          {recentHistory.map(item => <button key={item.url + item.visitedAt} type="button" className="library-activity" onClick={() => openHistoryEntry(item)}>
-            <span className="library-activity__icon"><GlobalOutlined/></span>
-            <span className="library-activity__body">
-              <strong title={item.title || item.url}>{item.title || item.url}</strong>
-              <small><span>{hostOf(item.url) || item.url}</span><span>{formatWhen(item.visitedAt)}</span></small>
-            </span>
-            <RightOutlined className="library-activity__arrow"/>
-          </button>)}
+          {recentHistory.map(item => <div className="library-archive-row" key={item.url + item.visitedAt}>
+            <button type="button" className="library-activity" onClick={() => openHistoryEntry(item)}>
+              <span className="library-activity__icon"><GlobalOutlined/></span>
+              <span className="library-activity__body">
+                <strong title={item.title || item.url}>{item.title || item.url}</strong>
+                <small><span>{hostOf(item.url) || item.url}</span><span>{formatWhen(item.visitedAt)}</span></small>
+              </span>
+              <RightOutlined className="library-activity__arrow"/>
+            </button>
+            <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("删除这条浏览记录")} onClick={() => void removeHistoryEntry(item)}/>
+          </div>)}
         </div>}
   </div>
 

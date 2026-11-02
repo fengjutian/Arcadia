@@ -1,7 +1,7 @@
 //! Native WebView2 camera, microphone and geolocation permission handling.
 
 use crate::{PermissionRequestPayload, SitePermissionRule};
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 
 #[cfg(target_os = "windows")]
 mod windows_guard {
@@ -51,12 +51,9 @@ mod windows_guard {
         rules: Vec<SitePermissionRule>,
         private_mode: bool,
     ) {
-        let Some(view) = app.get_webview(label) else {
-            return;
-        };
         let event_app = app.clone();
         let event_label = label.to_string();
-        let _ = view.with_webview(move |platform| {
+        let _ = crate::engine::with_platform_webview(app, label, move |platform| {
             let Ok(core) = (unsafe { platform.controller().CoreWebView2() }) else {
                 return;
             };
@@ -145,12 +142,12 @@ mod windows_guard {
             .map_err(|_| "permission registry poisoned")?
             .remove(request_id);
         let Some(label) = label else { return Ok(None) };
-        let view = app
-            .get_webview(&label)
-            .ok_or_else(|| "permission webview no longer exists".to_string())?;
+        if !crate::engine::page_engine(app).exists(&label) {
+            return Err("permission webview no longer exists".to_string());
+        }
         let response_id = request_id.to_string();
         let (sender, receiver) = tokio::sync::oneshot::channel();
-        view.with_webview(move |_| {
+        crate::engine::with_platform_webview(app, &label, move |_| {
             let result = PENDING
                 .with(|map| map.borrow_mut().remove(&response_id))
                 .ok_or_else(|| "permission request expired".to_string())

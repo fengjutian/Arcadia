@@ -41,12 +41,15 @@ describe('interpretShortcut', () => {
 
   it('matches the search palette cluster', () => {
     expect(interpretShortcut(evt('k', { ctrl: true }))).toBe('openCommandBar')
-    expect(interpretShortcut(evt('A', { ctrl: true, shift: true }))).toBe('openTabSearch')
-    expect(interpretShortcut(evt('h', { ctrl: true }))).toBe('openHistorySearch')
     expect(interpretShortcut(evt('O', { ctrl: true, shift: true }))).toBe('openBookmarks')
     expect(interpretShortcut(evt('d', { ctrl: true }))).toBe('addBookmark')
     expect(interpretShortcut(evt('S', { ctrl: true, shift: true }))).toBe('openBulkSummary')
     expect(interpretShortcut(evt('N', { ctrl: true, shift: true }))).toBe('toggleNotesPanel')
+  })
+
+  it('no longer binds the retired tab/history palettes', () => {
+    expect(interpretShortcut(evt('A', { ctrl: true, shift: true }))).toBeNull()
+    expect(interpretShortcut(evt('h', { ctrl: true }))).toBeNull()
   })
 
   it('matches Alt+Arrow navigation', () => {

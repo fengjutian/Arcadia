@@ -102,7 +102,7 @@ const THEME_OPTIONS: Array<{
   { value: 'github', label: 'GitHub', description:t("熟悉的蓝色开发者风格"),swatch:['#ddf4ff','#0969da']},
   { value: 'ocean', label:t("海洋蓝"),description:t("沉稳清晰的蓝色界面"),swatch:['#dbeaf8','#2563a8']},
   { value: 'cyan', label:t("青蓝"),description:t("清透现代的青色界面"),swatch:['#d7eff1','#087f8c']},
-  { value: 'midnight', label:t("夜蓝"),description:t("沉静深邃的午夜蓝界面"),swatch:['#dbe9ef','#28536b']},
+  { value: 'mist', label:t("雾蓝"),description:t("安静克制的雾蓝界面"),swatch:['#dbe9ef','#28536b']},
   { value: 'mint', label:t("薄荷"),description:t("轻盈舒缓的薄荷绿色"),swatch:['#dcefe7','#2f7d68']},
   { value: 'amber', label:t("琥珀"),description:t("温暖醒目的金色界面"),swatch:['#f4e8c7','#9a6a00']},
   { value: 'coral', label:t("珊瑚"),description:t("柔和而有活力的橙红色"),swatch:['#f3ded4','#b4512f']},
