@@ -102,6 +102,8 @@ export const search: Messages = {
   '数据图表': 'Data chart',
   '搜索保存在本地 SQLite 中的真实网页内容。': 'Search real web page content stored in local SQLite.',
   '搜索标题、正文或标签': 'Search titles, content, or tags',
+  '搜索结果分页': 'Search results pagination',
+  '第 {value0}–{value1} 条，共 {value2} 条': 'Showing {value0}–{value1} of {value2}',
   '条内容 ·': 'items ·',
   '同时显示已归档的内容': 'Also show archived content',
   '未发现明显的结构或引用问题': 'No obvious structure or citation issues found',

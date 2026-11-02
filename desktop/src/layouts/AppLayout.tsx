@@ -1,12 +1,14 @@
 import { t } from '../i18n'
-import { useLayoutEffect, useState, type PointerEvent, type ReactNode } from 'react'
-import { Avatar, Badge, Layout, Space, Tooltip, Typography } from '../components/ui'
+import { useEffect, useLayoutEffect, useState, type PointerEvent, type ReactNode } from 'react'
+import { Avatar, Badge, Dropdown, Layout, Space, Tooltip, Typography } from '../components/ui'
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui/icons'
-import { BookOpen, Boxes, Globe2, Minus, Search, Settings, Sparkles, Square, X } from 'lucide-react'
+import { BookOpen, Boxes, Globe2, Layers, Minus, Search, Settings, Sparkles, Square, X } from 'lucide-react'
 import type { View } from '../types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TopBarPortalProvider } from '../app/TopBarPortal'
 import { diagnosticLog } from '../shared/diagnostics'
+import { listWorkspaces, type WorkspaceSummary } from '../services/workspaces'
+import { SPACE_CHANGED_EVENT, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, type CurrentSpace } from '../features/browser/spaces'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label:t("浏览器")},{key:'library',icon:<BookOpen/>,label:t("知识库")},{key:'search',icon:<Search/>,label:t("搜索")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const
 
@@ -16,7 +18,28 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   // Set by the top bar's slot element; chrome owned by a route (the browser tab
   // strip) portals into it so the whole title row spans the window width.
   const [topBarSlot, setTopBarSlot] = useState<HTMLDivElement | null>(null)
+  const [spaces, setSpaces] = useState<WorkspaceSummary[]>([])
+  const [currentSpace, setCurrentSpace] = useState<CurrentSpace | null>(() => readCurrentSpace())
   const collapsed = true
+
+  async function refreshSpaces() {
+    try {
+      setSpaces(await listWorkspaces())
+    } catch {
+      setSpaces([])
+    }
+  }
+
+  useEffect(() => {
+    void refreshSpaces()
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string; name?: string }>).detail
+      if (detail?.id && detail?.name) setCurrentSpace({ id: detail.id, name: detail.name })
+      void refreshSpaces()
+    }
+    window.addEventListener(SPACE_CHANGED_EVENT, onChanged)
+    return () => window.removeEventListener(SPACE_CHANGED_EVENT, onChanged)
+  }, [])
 
   // Toasts are portalled to `body`, so they can no longer read the active
   // route from their DOM position: the browser route owns an extra chrome row
@@ -27,10 +50,22 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
     return () => { delete document.body.dataset.view }
   }, [view])
 
-  function navButton(item: { key: View; icon: ReactNode; label: string }) {
-    const button = <button type="button" title={collapsed ? item.label : undefined} className={`rail-button${view === item.key ? ' is-active' : ''}`} aria-label={item.label} aria-current={view === item.key ? 'page' : undefined} onClick={() => onViewChange(item.key)}><span className="nav-glyph">{item.icon}</span><span className="rail-button__label">{item.label}</span></button>
+  function navButton(item: { key: View; icon: ReactNode; label: string }) {    const button = <button type="button" title={collapsed ? item.label : undefined} className={`rail-button${view === item.key ? ' is-active' : ''}`} aria-label={item.label} aria-current={view === item.key ? 'page' : undefined} onClick={() => onViewChange(item.key)}><span className="nav-glyph">{item.icon}</span><span className="rail-button__label">{item.label}</span></button>
     return collapsed ? <Tooltip key={item.key} title={item.label} placement="right" mouseEnterDelay={0.15}>{button}</Tooltip> : <span key={item.key}>{button}</span>
   }
+
+  const spaceItems = spaces.length
+    ? spaces.map(space => ({ key: space.id, label: `${space.name} · ${space.tabCount}`, onClick: () => dispatchSpaceRestore(space.id) }))
+    : [{ key: 'empty', label: t("还没有已保存的 Space"), disabled: true }]
+  const spaceMenu = {
+    items: [
+      ...spaceItems,
+      { type: 'divider' as const },
+      { key: 'save', label: t("保存当前为 Space"), onClick: () => dispatchSpaceSave() },
+      { key: 'manage', label: t("管理 Space"), onClick: () => onViewChange('settings') },
+    ],
+  }
+  const spaceLabel = currentSpace ? t("Space：{value0}", { value0: currentSpace.name }) : t("切换 Space")
 
   return <TopBarPortalProvider target={topBarSlot}>
     <Layout className="app-layout">
@@ -51,7 +86,7 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
         <div className="app-topbar__slot" ref={setTopBarSlot}/>
       </header>
       <Layout className="app-body">
-        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
+        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}><Dropdown menu={spaceMenu} trigger={['click']} placement="bottomLeft" onOpenChange={open => { if (open) void refreshSpaces() }}><button type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel}><Layers size={18} strokeWidth={1.6}/></button></Dropdown></Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
         <Layout.Content className="app-content">{children}</Layout.Content>
       </Layout>
     </Layout>

@@ -1639,6 +1639,59 @@ body[data-theme='dark'][data-theme-kind='image'] {
   }
 }
 
+.new-tab__context {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.new-tab__context-empty {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed #dbe4de;
+  border-radius: 12px;
+  background: #f6f9f6;
+  color: #758078;
+  font-size: 13px;
+  text-align: center;
+}
+
+.new-tab__context-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid #e2e9e4;
+  border-radius: 12px;
+  background: #fbfcfb;
+  color: #2c3a32;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(30, 64, 45, .08);
+    outline: none;
+  }
+
+  svg { flex: none; color: var(--accent-hover, #2f6b46); }
+
+  span { display: flex; flex-direction: column; min-width: 0; }
+  b { font-size: 12px; font-weight: 650; }
+  small { overflow: hidden; color: #758078; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+body[data-theme='dark'] {
+  .new-tab__context-empty { border-color: #2b3a31; background: #18211c; color: #93a298; }
+  .new-tab__context-card { border-color: #2b3a31; background: #1a241e; color: #d8e1dc; &:hover { background: #202c25; } small { color: #93a298; } }
+}
+
 .new-tab__hero {
   text-align: center;
 
@@ -3037,6 +3090,45 @@ body[data-theme='dark'] .assistant-page {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
+}
+
+// Space switcher pinned above the primary navigation: one icon in the rail,
+// with the current Space name in the tooltip and menu.
+.space-switch {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 6px;
+}
+
+.space-switch__button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accent-border, #d7e0d9);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  color: #56685c;
+  cursor: pointer;
+  transition: color .16s ease, border-color .16s ease, background-color .16s ease;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--accent-hover, #2f6b46);
+    border-color: var(--accent, #3c8a5c);
+    outline: none;
+  }
+
+  &.is-active {
+    color: var(--accent-hover, #2f6b46);
+    border-color: var(--accent, #3c8a5c);
+    background: color-mix(in srgb, var(--accent-soft, #e6f1e9) 70%, #fff);
+  }
+}
+
+body[data-theme='dark'] .space-switch__button {
+  background: #1a241e;
+  color: #b8c9bd;
 }
 
 .rail-nav--utility {

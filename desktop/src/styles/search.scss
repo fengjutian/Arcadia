@@ -785,6 +785,109 @@
 
 .search-console + .search-section { margin-top: 16px; }
 
+// Results are split into the two collections the user can act on: everything
+// stored locally, and pages that were only read. Tabs keep the long reading
+// history from pushing the saved grid off-screen, while each group keeps its
+// own page of cards.
+.search-console + .search-results {
+  margin-top: 18px;
+  scroll-margin-top: 12px;
+}
+
+.search-result-tabs {
+  > .ui-tabs__nav {
+    align-items: flex-end;
+    gap: 22px;
+    border-bottom: 1px solid var(--search-line);
+  }
+
+  .ant-tabs-tab {
+    position: relative;
+    margin: 0;
+    padding: 2px 1px 11px;
+  }
+
+  .ant-tabs-tab-btn {
+    color: #7d766c;
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  .ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--search-strong); }
+
+  .ant-tabs-tab-active::after {
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--accent);
+    content: '';
+  }
+}
+
+.search-result-tabs__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+
+  b {
+    display: inline-grid;
+    place-items: center;
+    min-width: 21px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+}
+
+.search-result-pane__hint {
+  margin: 12px 1px 14px;
+  color: #7d766c;
+  font-size: 12px;
+}
+
+.search-result-pane__empty {
+  margin: 20px 1px;
+  color: #8b8479;
+  font-size: 13px;
+}
+
+.search-result-pane .search-section { margin-top: 22px; }
+
+.search-pagination {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--search-line);
+
+  &__range {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__pages {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  &__size {
+    width: 116px;
+    justify-self: end;
+  }
+}
+
 .search-section {
   & + & {
     margin-top: 24px;
@@ -1319,6 +1422,16 @@ body[data-theme='dark'] .search-page {
   .search-section__count { background: #24372c; color: #8fcea8; }
   .search-section--reading .search-section__count { background: #2a2f2c; color: #c2cbc5; }
 
+  .search-result-tabs {
+    .ant-tabs-tab-btn { color: #89958d; }
+    .ant-tabs-tab-active .ant-tabs-tab-btn { color: #edf3ef; }
+  }
+
+  .search-result-tabs__label b { background: #24372c; color: #8fcea8; }
+
+  .search-result-pane__hint,
+  .search-result-pane__empty { color: #89958d; }
+
   .site-badge {
     &--1 { background: #233245; color: #9dbcdf; }
     &--2 { background: #332b1e; color: #d0ab73; }
@@ -1421,6 +1534,13 @@ body[data-theme='github'] .search-page {
   .search-sort { align-self: flex-end; }
   .result-grid,
   .result-grid--saved { grid-template-columns: minmax(0, 1fr); }
+
+  .search-pagination {
+    grid-template-columns: 1fr;
+
+    &__pages { justify-content: flex-start; }
+    &__size { justify-self: start; }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

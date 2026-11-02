@@ -1,6 +1,6 @@
 import { t } from '../../i18n'
 import { Alert, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, List, message, Popconfirm, Segmented, Select, Space, Spin, Statistic, Switch, Tabs, Tag, Typography } from '../../components/ui'
-import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, MoonOutlined, PictureOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '../../components/ui/icons'
+import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, MonitorOutlined, MoonOutlined, PictureOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '../../components/ui/icons'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getVersion } from '@tauri-apps/api/app'
 import appLogo from '../../assets/app-logo-humanist.png'
@@ -194,7 +194,7 @@ function GeneralSettings() {
     <section className="appearance-setting">
       <div className="appearance-setting__copy"><span>◐</span><div><strong>{t("整体外观")}</strong><small>{t("应用于标签页、页面、对话框和其他菜单。")}</small></div></div>
       <Segmented value={appearance} onChange={changeAppearance} options={[
-        { label:t("\u25B0 系统"),value:'system'},
+        { label: <Space><MonitorOutlined/>{t("系统")}</Space>,value:'system'},
         { label: <Space><SunOutlined/>{t("浅色")}</Space>,value:'light'},
         { label: <Space><MoonOutlined/>{t("深色")}</Space>,value:'dark'},
       ]}/>

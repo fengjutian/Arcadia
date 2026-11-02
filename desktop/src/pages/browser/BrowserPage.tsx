@@ -37,6 +37,7 @@ import { useDownloadQueue } from '../../features/downloads/useDownloadQueue'
 import { saveWorkspace, snapshotTabsToPayload, getWorkspace, type WorkspaceRecord } from '../../services/workspaces'
 import { restoreTabsFromWorkspace } from '../../features/browser/restoreWorkspace'
 import { WORKSPACE_RESTORE_EVENT } from '../../features/browser/workspaces'
+import { SPACE_CHANGED_EVENT, SPACE_RESTORE_EVENT, SPACE_SAVE_EVENT, autoSpaceName, writeCurrentSpace } from '../../features/browser/spaces'
 import { useTabRuntime } from '../../features/browser/useTabRuntime'
 import { buildAddressSuggestions } from '../../features/browser/addressSuggestions'
 import { DownloadSummary } from '../../features/downloads/DownloadCenter'
@@ -1117,8 +1118,43 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       }
       await applyWorkspaceRestore(workspace)
     }
+    async function restoreSpace(id: string) {
+      const workspace = await getWorkspace(id)
+      if (!workspace) {
+        messageApi.error(translate("工作区不存在或已删除"))
+        return
+      }
+      const current = tabsRef.current.filter(tab => !tab.private && tab.url)
+      if (current.length > 0) {
+        try {
+          await saveWorkspace({
+            name: autoSpaceName(new Date()),
+            description: translate("切换 Space 前自动保存"),
+            payload: snapshotTabsToPayload(current),
+          })
+        } catch (error) {
+          messageApi.warning(translate("自动保存当前标签失败：{value0}", { value0: String(error) }))
+        }
+      }
+      await applyWorkspaceRestore(workspace)
+      writeCurrentSpace({ id: workspace.id, name: workspace.name })
+      window.dispatchEvent(new CustomEvent(SPACE_CHANGED_EVENT, { detail: { id: workspace.id, name: workspace.name } }))
+    }
+    function onRestoreSpace(event: Event) {
+      const detail = (event as CustomEvent<{ id: string }>).detail
+      if (detail?.id) void restoreSpace(detail.id)
+    }
+    function onSaveSpace() {
+      openSaveWorkspaceDialog()
+    }
     window.addEventListener(WORKSPACE_RESTORE_EVENT, onRestoreWorkspace)
-    return () => window.removeEventListener(WORKSPACE_RESTORE_EVENT, onRestoreWorkspace)
+    window.addEventListener(SPACE_RESTORE_EVENT, onRestoreSpace)
+    window.addEventListener(SPACE_SAVE_EVENT, onSaveSpace)
+    return () => {
+      window.removeEventListener(WORKSPACE_RESTORE_EVENT, onRestoreWorkspace)
+      window.removeEventListener(SPACE_RESTORE_EVENT, onRestoreSpace)
+      window.removeEventListener(SPACE_SAVE_EVENT, onSaveSpace)
+    }
   }, [])
 
   function onShortcutsChange(event: Event) {
@@ -1719,6 +1755,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         payload: snapshotTabsToPayload(tabs),
       })
       messageApi.success(translate("已保存工作区「{value0}」({value1} 个标签)",{value0:summary.name,value1:summary.tabCount}))
+      writeCurrentSpace({ id: summary.id, name: summary.name })
+      window.dispatchEvent(new CustomEvent(SPACE_CHANGED_EVENT, { detail: { id: summary.id, name: summary.name } }))
       setSaveWorkspaceOpen(false)
     } catch (error) {
       messageApi.error(translate("保存失败：{value0}",{value0:String(error)}))
@@ -2490,7 +2528,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             ? <div className="web-surface__loading"><LoadingOutlined spin/></div>
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:translate("当前环境暂时无法打开此网页。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
-              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison} onOpenLibrary={onOpenLibrary}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{

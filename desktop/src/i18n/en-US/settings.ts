@@ -7,7 +7,6 @@ export const settings: Messages = {
   '{value0} 条/页': '{value0} per page',
   '{value0}：{value1} 次': '{value0}: {value1} times',
   '{value0}主题预览': '{value0} theme preview',
-  '▰ 系统': '▰ System',
   '安静自然的森林晨雾': 'Quiet forest morning mist',
   '安装 Arcadia 插件': 'Install Arcadia Plugin',
   '安装不会自动启用插件。请逐项授权后再启用；修改权限会立即停用插件。': 'Installing a plugin does not enable it. Grant permissions one by one before enabling; changing permissions disables the plugin immediately.',

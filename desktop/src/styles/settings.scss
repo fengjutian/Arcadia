@@ -153,12 +153,14 @@
   --theme-preview-surface: #fbfcfb;
   --theme-preview-text: #253029;
 
+  // The card body must not be a scroll container of its own. The settings pane
+  // already owns the scrollbar; a nested `overflow-y: auto` box with
+  // `overscroll-behavior: contain` that currently has no overflow swallows
+  // wheel input, so the whole page looked frozen while the pointer was over the
+  // theme card. `.ui-card` already clips horizontally, so no overflow is needed
+  // here at all.
   > .ui-card__body {
     gap: 18px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
-    overscroll-behavior: contain;
   }
 }
 

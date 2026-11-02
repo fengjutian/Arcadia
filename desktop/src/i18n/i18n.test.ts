@@ -36,6 +36,7 @@ const CHINESE_DATA_FILES = new Set([
   'features/history/visitStats.ts',
   'features/archive/archiveSettings.ts',
   'features/browser/sleepSettings.ts',
+  'features/browser/spaces.ts',
   'features/clips/clips.ts',
   'features/command/siteSearch.ts',
 ])

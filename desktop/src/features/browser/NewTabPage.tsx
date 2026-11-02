@@ -2,10 +2,14 @@ import { t } from '../../i18n'
 import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { Button, Input, Select, Switch, Typography } from '../../components/ui'
 import { SearchOutlined } from '../../components/ui/icons'
-import { ArrowLeftRight, ArrowUpRight, Calculator, CloudSun, Gauge, Grid3X3, Languages, MapPin, QrCode, Sparkles as RobotOutlined, Timer, Wrench } from 'lucide-react'
+import { ArrowLeftRight, ArrowUpRight, BookOpen, Calculator, Clock3, CloudSun, FolderOpen, Gauge, Grid3X3, History, Languages, MapPin, QrCode, Sparkles as RobotOutlined, Timer, Wrench } from 'lucide-react'
 import { readSearchEngineConfig, SEARCH_ENGINE_PRESETS } from './searchEngine'
 import { classifyNavigationInput, renderSearchTemplate } from './navigation'
 import { QUICK_SITES } from './browserUtils'
+import { listBrowserHistory, listDocuments, listReadingQueue } from '../../api'
+import { buildVisitStats, filterVisitsByRange } from '../history/visitStats'
+import { SPACE_CHANGED_EVENT, dispatchSpaceSave, readCurrentSpace } from './spaces'
+import { buildNewTabContext, type NewTabContext } from '../newtab/newTabContext'
 
 type WeatherState = { temperature: number; weatherCode: number; place: string }
 
@@ -70,11 +74,12 @@ function weatherSymbol(code: number) {
   return '⛈️'
 }
 
-export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
+export function NewTab({ address, setAddress, navigate, onCompareSearch, onOpenLibrary }: {
   address: string
   setAddress: (value: string) => void
   navigate: (input: string) => Promise<void>
   onCompareSearch: (query: string, engineIds: string[], includeKnowledge: boolean, includeAi: boolean) => void
+  onOpenLibrary?: () => void
 }) {
   const configuredEngine = readSearchEngineConfig().presetId
   const initialEngine = SEARCH_ENGINE_PRESETS.some(engine => engine.id === configuredEngine) ? configuredEngine : 'google'
@@ -85,7 +90,34 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
   const [weather, setWeather] = useState<WeatherState | null>(null)
   const [weatherFailed, setWeatherFailed] = useState(false)
   const toolsRef = useRef<HTMLDivElement>(null)
+  const [context, setContext] = useState<NewTabContext>({ cards: [], isEmpty: true })
   const presets = SEARCH_ENGINE_PRESETS.map(        (item                                 )=>({label:item.label,value:item.id}))
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      const [queue, documents, history] = await Promise.all([
+        listReadingQueue().catch(() => []),
+        listDocuments().catch(() => []),
+        listBrowserHistory().catch(() => []),
+      ])
+      if (!active) return
+      const today = buildVisitStats(filterVisitsByRange(history, 'today'))
+      setContext(buildNewTabContext({
+        spaceName: readCurrentSpace()?.name ?? null,
+        queuedCount: queue.length,
+        documents: documents.filter(document => document.status === 'READY').map(document => ({ id: document.id, title: document.title })),
+        todayVisits: today.totalVisits,
+        todaySites: today.uniqueSites,
+      }))
+    }
+    void load()
+    window.addEventListener(SPACE_CHANGED_EVENT, load)
+    return () => {
+      active = false
+      window.removeEventListener(SPACE_CHANGED_EVENT, load)
+    }
+  }, [])
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
@@ -147,6 +179,16 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
       </div>
     </div>
     <main className="new-tab__workspace">
+      <section className="new-tab__context" aria-label={t("研究现场")}>
+        {context.isEmpty
+          ? <p className="new-tab__context-empty">{t("从一次搜索开始：保存的页面、待读与笔记会出现在这里。")}</p>
+          : context.cards.map(card => {
+            if (card.key === 'space') return <button key="space" type="button" className="new-tab__context-card" title={t("保存当前为 Space")} onClick={() => dispatchSpaceSave()}><FolderOpen size={16}/><span><b>{t("当前 Space")}</b><small>{card.name}</small></span></button>
+            if (card.key === 'queue') return <button key="queue" type="button" className="new-tab__context-card" onClick={() => onOpenLibrary?.()}><Clock3 size={16}/><span><b>{t("待整理")}</b><small>{t("{value0} 个页面等待阅读", { value0: card.count })}</small></span></button>
+            if (card.key === 'today') return <button key="today" type="button" className="new-tab__context-card" onClick={() => onOpenLibrary?.()}><History size={16}/><span><b>{t("今日阅读")}</b><small>{t("{value0} 次访问 · {value1} 个站点", { value0: card.visits, value1: card.sites })}</small></span></button>
+            return <button key="recent" type="button" className="new-tab__context-card" onClick={() => onOpenLibrary?.()}><BookOpen size={16}/><span><b>{t("最近保存")}</b><small>{card.documents.map(document => document.title).join(' · ')}</small></span></button>
+          })}
+      </section>
       <div className="new-tab__hero"><Typography.Title>{t("今天想探索什么？")}</Typography.Title><Typography.Paragraph>{t("一次输入，同时搜索互联网、AI 与本地知识库。")}</Typography.Paragraph></div>
       <div className="new-tab-search">
         <form onSubmit={event => { event.preventDefault(); submit() }}><Input size="large" autoFocus prefix={<SearchOutlined/>} value={address} onChange={event => setAddress(event.target.value)} placeholder={t("输入搜索内容或网址")} suffix={<Button type="primary" htmlType="submit" disabled={engines.length === 0 && !searchKnowledge && !searchAi}>{t("搜索")}</Button>}/></form>

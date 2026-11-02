@@ -1,5 +1,5 @@
 import { formatNumber, getLocale, t } from '../../i18n'
-import { AutoComplete, Button, Input, message, Modal, Popconfirm, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
+import { AutoComplete, Button, Input, message, Modal, Popconfirm, Select, Spin, Tabs, Tag, Typography, type InputRef } from '../../components/ui'
 import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, InboxOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
@@ -13,8 +13,13 @@ import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { renderHighlightedSnippet } from '../../features/search/renderSnippet'
 import { X } from 'lucide-react'
 import { dedupeSearchResults, matchesAdvancedSearch, parseAdvancedSearch } from '../../features/search/advancedSearch'
+import { pageWindow } from '../../features/search/pagination'
 
 type SortKey = 'recent' | 'oldest' | 'starred' | 'relevance'
+type ResultTab = 'saved' | 'reading'
+
+const PAGE_SIZE_OPTIONS = [12, 24, 48]
+const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0]
 
 const SORT_OPTIONS: Array<{ label: string; value: SortKey }> = [
   { label:t("最新"),value:'recent'},
@@ -43,11 +48,16 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const [includeArchived, setIncludeArchived] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
   const [sort, setSort] = useState<SortKey>(initialQuery.trim() ? 'relevance' : 'recent')
+  const [activeTab, setActiveTab] = useState<ResultTab>('saved')
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [savedPage, setSavedPage] = useState(1)
+  const [readingPage, setReadingPage] = useState(1)
   const [durationMs, setDurationMs] = useState<number | null>(null)
   const [recentQueries, setRecentQueries] = useState<string[]>([])
   const [reloadToken, setReloadToken] = useState(0)
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
   const searchRef = useRef<InputRef>(null)
+  const resultsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     void getSession('search.recent').then(raw => {
@@ -181,6 +191,31 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
   const total = filtered.length + unsavedReading.length + notes.length + archived.length + clips.length
   const showEmpty = !loading && total === 0
 
+  // The two result groups are shown as tabs. Every auxiliary result type belongs
+  // to one of them: notes and clips are stored locally like saved documents,
+  // while archived tabs are browsing traces that were never written to the
+  // knowledge base.
+  const savedTotal = filtered.length + notes.length + clips.length
+  const readingTotal = unsavedReading.length + archived.length
+
+  const savedWindow = pageWindow(filtered.length, savedPage, pageSize)
+  const readingWindow = pageWindow(unsavedReading.length, readingPage, pageSize)
+  const visibleSaved = filtered.slice((savedWindow.page - 1) * pageSize, savedWindow.page * pageSize)
+  const visibleReading = unsavedReading.slice((readingWindow.page - 1) * pageSize, readingWindow.page * pageSize)
+
+  // A new query or filter resets both groups to their first page.
+  useEffect(() => {
+    setSavedPage(1)
+    setReadingPage(1)
+  }, [advancedQuery.text, sort, starredOnly, includeArchived, tagFilter, readOnly, pageSize])
+
+  // Land on the group that actually has results instead of an empty tab. This
+  // only reacts to the data, so switching to an empty group by hand still works.
+  useEffect(() => {
+    if (savedTotal === 0 && readingTotal > 0) setActiveTab('reading')
+    else if (readingTotal === 0 && savedTotal > 0) setActiveTab('saved')
+  }, [savedTotal, readingTotal])
+
   const sortOptions = useMemo(() => hasQuery ? [{ label:t("相关度"),value:'relevance'as const},...SORT_OPTIONS]:SORT_OPTIONS,[hasQuery])
 
   const resetFilters = useCallback(() => {
@@ -189,6 +224,14 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
     setReadOnly(false)
     setIncludeArchived(false)
   }, [])
+
+  // Paging swaps the grid under the pointer, so bring the result header back
+  // into view instead of leaving the user at the bottom of the previous page.
+  const revealResults = useCallback(() => {
+    resultsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [])
+  const changeSavedPage = useCallback((page: number) => { setSavedPage(page); revealResults() }, [revealResults])
+  const changeReadingPage = useCallback((page: number) => { setReadingPage(page); revealResults() }, [revealResults])
 
   const openDocument = useCallback((item: DocumentSearchHit) => {
     if (debouncedQuery.trim()) rememberQuery(debouncedQuery)
@@ -317,109 +360,141 @@ export function SearchPage({ initialQuery = '', onOpenUrl }: { initialQuery?: st
             </> : undefined}
           />)}
 
-      {!showEmpty &&(
-        <>
-          {filtered.length > 0 && <section className="search-section">
-            <SectionHeading title={t("已保存")} count={filtered.length} hint={t("已写入本地知识库")}/>
-            <div className="result-grid result-grid--saved">
-              {filtered.map(item => {
-                const activity = readingByUrl.get(item.url)
-                const titleSnippet = item.titleSnippet && terms.length > 0 ? renderHighlightedSnippet(item.titleSnippet) : null
-                const snippetSnippet = item.markdownSnippet || item.summarySnippet
-                const snippetNode = snippetSnippet ? renderHighlightedSnippet(snippetSnippet) : null
-                return <ResultCard
-                  key={item.id}
-                  title={titleSnippet ?? <Highlight text={item.title || item.url} terms={terms}/>}
-                  titleText={item.title || item.url}
-                  url={item.url}
-                  snippet={snippetNode ?? <Highlight text={extractSummary(item.summary, item.markdown)} terms={terms}/>}
-                  tags={item.tags}
-                  activeTags={tagFilter}
-                  starred={item.starred}
-                  activity={activity}
-                  savedAt={item.createdAt}
-                  wordCount={item.wordCount}
-                  matchReason={item.matchReason}
-                  onOpen={() => openDocument(item)}
-                  onDelete={() => removeDocument(item)}
+      {total > 0 && <div className="search-results" ref={resultsRef}><Tabs
+        className="search-result-tabs"
+        activeKey={activeTab}
+        onChange={key => setActiveTab(key as ResultTab)}
+        items={[
+          {
+            key: 'saved',
+            label: <span className="search-result-tabs__label">{t("已保存")}<b>{filtered.length}</b></span>,
+            children: <div className="search-result-pane">
+              <p className="search-result-pane__hint">{t("已写入本地知识库")}</p>
+              {filtered.length === 0 && notes.length === 0 && clips.length === 0 && <p className="search-result-pane__empty">{t("没有找到匹配的内容")}</p>}
+              {filtered.length > 0 && <>
+                <div className="result-grid result-grid--saved">
+                  {visibleSaved.map(item => {
+                    const activity = readingByUrl.get(item.url)
+                    const titleSnippet = item.titleSnippet && terms.length > 0 ? renderHighlightedSnippet(item.titleSnippet) : null
+                    const snippetSnippet = item.markdownSnippet || item.summarySnippet
+                    const snippetNode = snippetSnippet ? renderHighlightedSnippet(snippetSnippet) : null
+                    return <ResultCard
+                      key={item.id}
+                      title={titleSnippet ?? <Highlight text={item.title || item.url} terms={terms}/>}
+                      titleText={item.title || item.url}
+                      url={item.url}
+                      snippet={snippetNode ?? <Highlight text={extractSummary(item.summary, item.markdown)} terms={terms}/>}
+                      tags={item.tags}
+                      activeTags={tagFilter}
+                      starred={item.starred}
+                      activity={activity}
+                      savedAt={item.createdAt}
+                      wordCount={item.wordCount}
+                      matchReason={item.matchReason}
+                      onOpen={() => openDocument(item)}
+                      onDelete={() => removeDocument(item)}
+                    />
+                  })}
+                </div>
+                <SearchPagination
+                  total={filtered.length}
+                  page={savedWindow.page}
+                  pageCount={savedWindow.pageCount}
+                  pageSize={pageSize}
+                  onPageChange={changeSavedPage}
+                  onPageSizeChange={setPageSize}
                 />
-              })}
-            </div>
-          </section>}
+              </>}
 
-          {notes.length > 0 && <section className="search-section search-section--notes">
-            <SectionHeading title={t("笔记")} count={notes.length} hint={t("网页高亮与摘录，来自划词笔记")}/>
-            <div className="result-grid">
-              {notes.map(note => <ResultCard
-                key={note.id}
-                title={<Highlight text={note.title || note.url} terms={terms}/>}
-                titleText={note.title || note.url}
-                url={note.url}
-                snippet={<span className="search-note-snippet">
-                  <span className="search-note-snippet__quote"><Highlight text={note.quote} terms={terms}/></span>
-                  {note.comment && <span className="search-note-snippet__comment">{note.comment}</span>}
-                </span>}
-                actionLabel={t("打开原文：{value0}",{value0:note.title||note.url})}
-                onOpen={() => openNote(note)}
-              />)}
-            </div>
-          </section>}
+              {notes.length > 0 && <section className="search-section search-section--notes">
+                <SectionHeading title={t("笔记")} count={notes.length} hint={t("网页高亮与摘录，来自划词笔记")}/>
+                <div className="result-grid">
+                  {notes.map(note => <ResultCard
+                    key={note.id}
+                    title={<Highlight text={note.title || note.url} terms={terms}/>}
+                    titleText={note.title || note.url}
+                    url={note.url}
+                    snippet={<span className="search-note-snippet">
+                      <span className="search-note-snippet__quote"><Highlight text={note.quote} terms={terms}/></span>
+                      {note.comment && <span className="search-note-snippet__comment">{note.comment}</span>}
+                    </span>}
+                    actionLabel={t("打开原文：{value0}",{value0:note.title||note.url})}
+                    onOpen={() => openNote(note)}
+                  />)}
+                </div>
+              </section>}
 
-          {archived.length > 0 && <section className="search-section search-section--archive">
-            <SectionHeading title={t("浏览痕迹")} count={archived.length} hint={t("从标签栏归档的页面，尚未保存进知识库")}/>
-            <div className="result-grid">
-              {archived.map(item => <ResultCard
-                key={item.id}
-                title={<Highlight text={item.title || item.url} terms={terms}/>}
-                titleText={item.title || item.url}
-                url={item.url}
-                snippet={<span className="search-note-snippet__comment">{t("归档于 {value0}",{value0:formatArchivedAt(item.archivedAt)})}</span>}
-                actionLabel={t("打开归档页：{value0}",{value0:item.title||item.url})}
-                onOpen={() => openArchived(item)}
-              />)}
-            </div>
-          </section>}
-
-          {clips.length > 0 && <section className="search-section search-section--clips">
-            <SectionHeading title={t("剪藏")} count={clips.length} hint={t("从网页截下来的片段，保留出处")}/>
-            <div className="result-grid">
-              {clips.map(clip => <ResultCard
-                key={clip.id}
-                title={<Highlight text={clip.title || clipPreview(clip, 60)} terms={terms}/>}
-                titleText={clip.title || clipPreview(clip, 60)}
-                url={clip.sourceUrl}
-                snippet={<span className="search-note-snippet">
-                  <span className="search-note-snippet__quote"><Highlight text={clipPreview(clip)} terms={terms}/></span>
-                  <span className="search-note-snippet__comment">{CLIP_KIND_LABEL[clip.kind]}</span>
-                </span>}
-                actionLabel={t("预览剪藏：{value0}",{value0:clip.title||clipPreview(clip,60)})}
-                onOpen={() => openClip(clip)}
-              />)}
-            </div>
-          </section>}
-
-          {unsavedReading.length > 0 && <section className="search-section search-section--reading">
-            <SectionHeading title={t("读过但未保存")} count={unsavedReading.length} hint={t("保留了阅读轨迹，尚未写入知识库")}/>
-            <div className="result-grid">
-              {unsavedReading.map(item => {
-                const summary = extractSummary(item.excerpt, item.markdown, 240)
-                return <ResultCard
-                  key={item.url}
-                  title={<Highlight text={item.title || item.url} terms={terms}/>}
-                  titleText={item.title || item.url}
-                  url={item.url}
-                  snippet={summary ? <Highlight text={summary} terms={terms}/> : <span className="result-card__url">{item.url}</span>}
-                  snippetIsUrl={!summary}
-                  activity={item}
-                  availability={item.markdown ? 'snapshot' : 'visit'}
-                  onOpen={() => openReading(item)}
-                  actionLabel={item.markdown ?t("查看阅读快照：{value0}",{value0:item.title||item.url}):t("重新打开：{value0}",{value0:item.title||item.url})}
+              {clips.length > 0 && <section className="search-section search-section--clips">
+                <SectionHeading title={t("剪藏")} count={clips.length} hint={t("从网页截下来的片段，保留出处")}/>
+                <div className="result-grid">
+                  {clips.map(clip => <ResultCard
+                    key={clip.id}
+                    title={<Highlight text={clip.title || clipPreview(clip, 60)} terms={terms}/>}
+                    titleText={clip.title || clipPreview(clip, 60)}
+                    url={clip.sourceUrl}
+                    snippet={<span className="search-note-snippet">
+                      <span className="search-note-snippet__quote"><Highlight text={clipPreview(clip)} terms={terms}/></span>
+                      <span className="search-note-snippet__comment">{CLIP_KIND_LABEL[clip.kind]}</span>
+                    </span>}
+                    actionLabel={t("预览剪藏：{value0}",{value0:clip.title||clipPreview(clip,60)})}
+                    onOpen={() => openClip(clip)}
+                  />)}
+                </div>
+              </section>}
+            </div>,
+          },
+          {
+            key: 'reading',
+            label: <span className="search-result-tabs__label">{t("读过但未保存")}<b>{unsavedReading.length}</b></span>,
+            children: <div className="search-result-pane">
+              <p className="search-result-pane__hint">{t("保留了阅读轨迹，尚未写入知识库")}</p>
+              {unsavedReading.length === 0 && archived.length === 0 && <p className="search-result-pane__empty">{t("没有找到匹配的内容")}</p>}
+              {unsavedReading.length > 0 && <>
+                <div className="result-grid">
+                  {visibleReading.map(item => {
+                    const summary = extractSummary(item.excerpt, item.markdown, 240)
+                    return <ResultCard
+                      key={item.url}
+                      title={<Highlight text={item.title || item.url} terms={terms}/>}
+                      titleText={item.title || item.url}
+                      url={item.url}
+                      snippet={summary ? <Highlight text={summary} terms={terms}/> : <span className="result-card__url">{item.url}</span>}
+                      snippetIsUrl={!summary}
+                      activity={item}
+                      availability={item.markdown ? 'snapshot' : 'visit'}
+                      onOpen={() => openReading(item)}
+                      actionLabel={item.markdown ?t("查看阅读快照：{value0}",{value0:item.title||item.url}):t("重新打开：{value0}",{value0:item.title||item.url})}
+                    />
+                  })}
+                </div>
+                <SearchPagination
+                  total={unsavedReading.length}
+                  page={readingWindow.page}
+                  pageCount={readingWindow.pageCount}
+                  pageSize={pageSize}
+                  onPageChange={changeReadingPage}
+                  onPageSizeChange={setPageSize}
                 />
-              })}
-            </div>
-          </section>}
-        </>)
-       }
+              </>}
+
+              {archived.length > 0 && <section className="search-section search-section--archive">
+                <SectionHeading title={t("浏览痕迹")} count={archived.length} hint={t("从标签栏归档的页面，尚未保存进知识库")}/>
+                <div className="result-grid">
+                  {archived.map(item => <ResultCard
+                    key={item.id}
+                    title={<Highlight text={item.title || item.url} terms={terms}/>}
+                    titleText={item.title || item.url}
+                    url={item.url}
+                    snippet={<span className="search-note-snippet__comment">{t("归档于 {value0}",{value0:formatArchivedAt(item.archivedAt)})}</span>}
+                    actionLabel={t("打开归档页：{value0}",{value0:item.title||item.url})}
+                    onOpen={() => openArchived(item)}
+                  />)}
+                </div>
+              </section>}
+            </div>,
+          },
+        ]}
+      /></div>}
     </div>
 
     <Modal
@@ -459,6 +534,34 @@ function SectionHeading({ title, count, hint }: { title: string; count: number; 
   return <div className="search-section__head">
     <h2>{title}<span className="search-section__count">{count}</span></h2>
     <p>{hint}</p>
+  </div>
+}
+
+function SearchPagination({ total, page, pageCount, pageSize, onPageChange, onPageSizeChange }: {
+  total: number
+  page: number
+  pageCount: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (size: number) => void
+}) {
+  if (total === 0) return null
+  const { start, end, pages } = pageWindow(total, page, pageSize)
+
+  return <div className="search-pagination" aria-label={t("搜索结果分页")}>
+    <Typography.Text type="secondary" className="search-pagination__range">{t("第 {value0}–{value1} 条，共 {value2} 条",{value0:start,value1:end,value2:total})}</Typography.Text>
+    <div className="search-pagination__pages">
+      <Button size="small" disabled={page === 1} onClick={() => onPageChange(page - 1)}>{t("上一页")}</Button>
+      {pages.map(value => <Button key={value} size="small" type={value === page ? 'primary' : 'default'} onClick={() => onPageChange(value)}>{value}</Button>)}
+      <Button size="small" disabled={page === pageCount} onClick={() => onPageChange(page + 1)}>{t("下一页")}</Button>
+    </div>
+    <Select<number>
+      className="search-pagination__size"
+      ariaLabel={t("每页条数")}
+      value={pageSize}
+      options={PAGE_SIZE_OPTIONS.map(value => ({ label: t("{value0} 条/页",{value0:value}), value }))}
+      onChange={onPageSizeChange}
+    />
   </div>
 }
 
