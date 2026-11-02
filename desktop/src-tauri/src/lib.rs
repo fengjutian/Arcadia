@@ -864,6 +864,14 @@ fn browser_set_bounds(
     Ok(())
 }
 
+/// Give keyboard focus to one split pane's WebView.
+#[tauri::command]
+fn browser_focus(app: tauri::AppHandle, label: String) -> Result<(), String> {
+    validate_browser_label(&label)?;
+    engine::page_engine(&app).focus(&label)?;
+    Ok(())
+}
+
 #[tauri::command]
 fn browser_set_visible(app: tauri::AppHandle, label: String, visible: bool) -> Result<(), String> {
     validate_browser_label(&label)?;
@@ -2142,6 +2150,7 @@ pub fn run() {
             browser_set_muted,
             browser_inject_css,
             browser_set_bounds,
+            browser_focus,
             browser_set_visible,
             browser_navigate,
             browser_reload,
