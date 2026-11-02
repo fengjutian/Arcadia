@@ -2313,6 +2313,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       onBookmarkPage={() => void addCurrentAsBookmark()}
       onArchiveTab={() => void archiveTabToStore(active)}
       onQueueTab={() => void queueTabForLater(active)}
+      onOpenUrlInNewTab={url => openNewTab(url)}
       onToggleAi={toggleAiAssistant}
       onToggleNotes={() => setNotesOpen(value => !value)}
       onBulkSummary={() => setBulkSummaryOpen(true)}

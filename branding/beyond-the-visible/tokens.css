@@ -1,0 +1,75 @@
+/* ============================================================
+   ARCADIA — Beyond the Visible
+   Design tokens v1.0
+   ============================================================ */
+
+:root {
+  /* ---------- color ---------- */
+  --arcadia-void: #080a07;
+  --arcadia-panel: #12160f;
+  --arcadia-signal: #c6ff3d;
+  --arcadia-bone: #f2f3ea;
+  --arcadia-ash: #8f978b;
+  --arcadia-line: #2b3127;
+  --arcadia-muted: #b5bcb0;
+
+  /* light surfaces */
+  --arcadia-paper: #e9ebe0;
+  --arcadia-ink: #0b0d09;
+  --arcadia-line-light: #c9cec1;
+
+  /* ---------- type ---------- */
+  --arcadia-font-display: "Noto Serif SC", "Noto Serif", Georgia, serif;
+  --arcadia-font-ui: "Noto Sans SC", "Noto Sans", "Segoe UI", sans-serif;
+  --arcadia-font-evidence: "Cascadia Mono", "Consolas", "Liberation Mono", monospace;
+
+  --arcadia-track-display: -0.035em;
+  --arcadia-track-label: 0.18em;
+
+  /* ---------- shape ---------- */
+  --arcadia-gap: 72deg;          /* aperture opening */
+  --arcadia-ring: 34;            /* mark ring width, in 512 units */
+  --arcadia-horizon: 61.8%;      /* golden-section horizon */
+
+  /* ---------- motion ---------- */
+  --arcadia-ease-focus: cubic-bezier(.22, 1, .36, 1);
+  --arcadia-duration-focus: 720ms;
+  --arcadia-duration-wipe: 560ms;
+  --arcadia-blur-from: 12px;
+
+  /* ---------- spacing ---------- */
+  --arcadia-space-1: 8px;
+  --arcadia-space-2: 16px;
+  --arcadia-space-3: 24px;
+  --arcadia-space-4: 32px;
+  --arcadia-space-5: 48px;
+  --arcadia-space-6: 64px;
+  --arcadia-space-7: 80px;
+}
+
+/* Signature focus-pull. Apply to content entering after a navigation. */
+@keyframes arcadia-focus-pull {
+  from {
+    opacity: 0;
+    filter: blur(var(--arcadia-blur-from));
+    transform: scale(1.05);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+.arcadia-focus-pull {
+  animation: arcadia-focus-pull var(--arcadia-duration-focus) var(--arcadia-ease-focus) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arcadia-focus-pull {
+    animation: none;
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}

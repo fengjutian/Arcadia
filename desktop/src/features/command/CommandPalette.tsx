@@ -13,8 +13,10 @@ import {
 import type { BrowserTab } from '../../types'
 import type { HistoryEntry } from '../history/dedupeHistory'
 import type { BookmarkRecord } from '../../services/bookmarks'
-import { listArchivedTabs, searchDocuments } from '../../api'
+import { getSession, listArchivedTabs, searchDocuments, setSession } from '../../api'
 import { formatArchivedAt } from '../archive/archive'
+import { mergeSiteSearchShortcuts, parseCustomShortcuts, resolveSiteSearch, type SiteSearchShortcut } from './siteSearch'
+import { SiteSearchManager } from './SiteSearchManager'
 import {
   groupCommandItems,
   nextCommandMode,
@@ -61,6 +63,7 @@ export interface CommandPaletteProps {
   onBookmarkPage: () => void
   onArchiveTab: () => void
   onQueueTab: () => void
+  onOpenUrlInNewTab: (url: string) => void
   onToggleAi: () => void
   onToggleNotes: () => void
   onBulkSummary: () => void
@@ -88,6 +91,7 @@ export function CommandPalette({
   onBookmarkPage,
   onArchiveTab,
   onQueueTab,
+  onOpenUrlInNewTab,
   onToggleAi,
   onToggleNotes,
   onBulkSummary,
@@ -97,12 +101,20 @@ export function CommandPalette({
   const [mode, setMode] = useState<CommandMode>('all')
   const [highlight, setHighlight] = useState(0)
   const [documents, setDocuments] = useState<CommandItem[]>([])
+  const [customShortcuts, setCustomShortcuts] = useState<SiteSearchShortcut[]>([])
+  const [managerOpen, setManagerOpen] = useState(false)
   const [archived, setArchived] = useState<CommandItem[]>([])
   const inputRef = useRef<InputRef | null>(null)
 
   const parsed = useMemo(() => parseCommandQuery(query), [query])
   const effectiveMode: CommandMode = mode === 'all' ? parsed.mode : mode
   const effectiveQuery = mode === 'all' ? parsed.query : query.trim()
+
+  useEffect(() => {
+    void getSession('command.siteSearch')
+      .then(raw => setCustomShortcuts(parseCustomShortcuts(raw)))
+      .catch(() => { /* built-ins still work */ })
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -154,6 +166,7 @@ export function CommandPalette({
     { id: 'action:notes', kind: 'action', title:t("网页笔记面板"),shortcut:'Ctrl + Shift + N',keywords:'notes',run:onToggleNotes},
     { id: 'action:bulk-summary', kind: 'action', title:t("多链接 AI 摘要"),shortcut:'Ctrl + Shift + S',keywords:'bulk summary',run:onBulkSummary},
     { id: 'action:workspace', kind: 'action', title:t("保存当前标签为工作区"),shortcut:'Ctrl + Shift + W',keywords:'workspace',run:onSaveWorkspace},
+    { id: 'action:site-search', kind: 'action', title:t("管理快捷搜索词"),keywords:'bangs shortcut !',run:()=>setManagerOpen(true)},
   ], [activeId, onNewTab, onCloseTab, onSavePage, onBookmarkPage, onArchiveTab, onQueueTab, onToggleAi, onToggleNotes, onBulkSummary, onSaveWorkspace])
 
   useEffect(() => {
@@ -217,9 +230,22 @@ export function CommandPalette({
     : null
 
   const items = [...tabItems, ...historyItems, ...bookmarkItems, ...archived, ...actionItems, ...documents]
+  const siteSearch = resolveSiteSearch(effectiveQuery, mergeSiteSearchShortcuts(customShortcuts))
+  const siteSearchItem: CommandItem | null = siteSearch
+    ? {
+        id: 'site-search',
+        kind: 'action',
+        title: `用 ${siteSearch.shortcut.label} 搜索：${siteSearch.query}`,
+        subtitle: t("! 快捷搜索"),
+        run: () => onOpenUrlInNewTab(siteSearch.url),
+      }
+    : null
   const sections: CommandSection[] = askItem
     ? [{ kind: 'action', label: 'AI', items: [askItem] }]
-    : groupCommandItems(items, effectiveMode, effectiveQuery)
+    : [
+        ...(siteSearchItem ? [{ kind: 'action' as const, label: t("快捷搜索"), items: [siteSearchItem] }] : []),
+        ...groupCommandItems(items, effectiveMode, effectiveQuery),
+      ]
   const rows = sections.flatMap(section => section.items)
   const activeIndex = Math.min(highlight, Math.max(rows.length - 1, 0))
   const current = rows[activeIndex]
@@ -267,7 +293,7 @@ export function CommandPalette({
         ref={inputRef}
         value={query}
         onChange={event => { setQuery(event.target.value); setHighlight(0) }}
-        placeholder={t("搜索标签、历史、收藏、归档、知识库，或输入 @ ~ / ? > 切换范围")}
+        placeholder={t("搜索标签、历史、收藏、归档、知识库，或输入 @ ~ / ? > ! 前缀")}
         size="large"
         prefix={<SearchOutlined />}
         suffix={<span className="command-palette__mode">{MODE_LABEL[effectiveMode]} {t("\xB7 Tab 切换")}</span>}
@@ -297,9 +323,19 @@ export function CommandPalette({
               })}
             </section>)}
       </div>
-      <Typography.Text type="secondary" className="tab-search-palette__hint">{t("\u2191\u2193 选择 \xB7 Enter 执行 \xB7 Tab 切换范围 \xB7 Esc 关闭")} 
+      <Typography.Text type="secondary" className="tab-search-palette__hint">{t("\u2191\u2193 选择 \xB7 Enter 执行 \xB7 Tab 切换范围 \xB7 !gh 站内搜索 \xB7 Esc 关闭")} 
 
       </Typography.Text>
     </div>
   </Modal>
+  <SiteSearchManager
+    open={managerOpen}
+    custom={customShortcuts}
+    onSave={next => {
+      setCustomShortcuts(next)
+      void setSession('command.siteSearch', JSON.stringify(next)).catch(() => { /* keep in-memory */ })
+    }}
+    onClose={() => setManagerOpen(false)}
+  />
+  </>
 }
