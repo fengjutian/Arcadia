@@ -84,6 +84,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [archived, setArchived] = useState<ArchivedTab[]>([])
   const [queue, setQueue] = useState<ReadingQueueEntry[]>([])
   const [clips, setClips] = useState<Clip[]>([])
+  const [clipFilter, setClipFilter] = useState('')
   const [autoArchive, setAutoArchive] = useState<AutoArchiveSettings>(readAutoArchiveSettings)
   const [downloads, setDownloads] = useState<DownloadEntry[]>([])
   const [query, setQuery] = useState('')
@@ -352,10 +353,6 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   function exportClip(clip: Clip) {
     const name = (clip.title || clipPreview(clip, 40)).replace(/[\\/:*?"<>|]/g, '_')
     downloadMarkdown(`${name}.md`, clipToMarkdown(clip))
-  }
-
-  function exportAllClips() {
-    downloadMarkdown('clips.md', clipsToMarkdown(clips))
   }
 
   async function saveBookmarkEdit() {    if (!editingBookmark) return
@@ -628,6 +625,17 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         </div>}
   </div>
 
+  const clipCollectionOf = (clip: Clip): string => (
+    clip.collectionId && collections.some(collection => collection.id === clip.collectionId)
+      ? clip.collectionId
+      : ''
+  )
+  const visibleClips = clipFilter === ''
+    ? clips
+    : clipFilter === '__none__'
+      ? clips.filter(clip => !clipCollectionOf(clip))
+      : clips.filter(clip => clipCollectionOf(clip) === clipFilter)
+
   const clipContent = <div className="library-module">
     <div className="library-section-head">
       <div>
@@ -635,8 +643,20 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         <p>{t("从网页里截下来的文字、链接和图片，保留来源，可直接跳回原文。")}</p>
       </div>
       <div className="library-section-head__tools">
-        <span className="library-result-count">{clips.length} {t("条")}</span>
-        {clips.length > 0 && <Button size="small" icon={<DownloadOutlined/>} onClick={exportAllClips}>{t("导出全部")}</Button>}
+        <Select<string>
+          size="small"
+          className="library-clip-filter"
+          ariaLabel={t("按集合筛选剪藏")}
+          value={clipFilter}
+          options={[
+            { label: t("全部集合"), value: '' },
+            { label: t("未分类"), value: '__none__' },
+            ...collections.map(collection => ({ label: collection.name, value: collection.id })),
+          ]}
+          onChange={value => setClipFilter(String(value))}
+        />
+        <span className="library-result-count">{visibleClips.length} {t("条")}</span>
+        {visibleClips.length > 0 && <Button size="small" icon={<DownloadOutlined/>} onClick={() => downloadMarkdown('clips.md', clipsToMarkdown(visibleClips))}>{t("导出列表")}</Button>}
       </div>
     </div>
     {clips.length === 0
@@ -645,28 +665,35 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
           <h3>{t("还没有剪藏")}</h3>
           <p>{t("在网页里选中文字、右键链接或图片，选择「剪藏」即可收进这里。")}</p>
         </div>
-      : <div className="library-activity-list">
-          {clips.map(clip => <div className="library-archive-row" key={clip.id}>
-            <button type="button" className="library-activity" onClick={() => openClip(clip)}>
-              <span className="library-activity__icon"><FileTextOutlined/></span>
-              <span className="library-activity__body">
-                <strong title={clip.title || clip.content}>{clip.title || clipPreview(clip)}</strong>
-                <small><span>{CLIP_KIND_LABEL[clip.kind]}</span><span>{clipSourceHost(clip)}</span><span>{formatQueuedAt(clip.createdAt)}</span></small>
-              </span>
-              <RightOutlined className="library-activity__arrow"/>
-            </button>
-            <Select<string>
-              size="small"
-              className="library-clip-collection"
-              ariaLabel={t("归入集合")}
-              value={clip.collectionId ?? ''}
-              options={[{ label: t("未分类"), value: '' }, ...collections.map(collection => ({ label: collection.name, value: collection.id }))]}
-              onChange={value => void assignClipCollection(clip, String(value))}
-            />
-            <Button type="text" size="small" icon={<DownloadOutlined/>} aria-label={t("导出为 Markdown")} onClick={() => exportClip(clip)}/>
-            <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("删除剪藏")} onClick={() => void removeClip(clip)}/>
-          </div>)}
-        </div>}
+      : visibleClips.length === 0
+        ? <div className="library-no-results">
+            <FileTextOutlined/>
+            <h3>{t("这个集合下还没有剪藏")}</h3>
+            <p>{t("换一个集合，或把已有剪藏归入这里。")}</p>
+            <Button type="text" onClick={() => setClipFilter('')}>{t("查看全部")}</Button>
+          </div>
+        : <div className="library-activity-list">
+            {visibleClips.map(clip => <div className="library-archive-row" key={clip.id}>
+              <button type="button" className="library-activity" onClick={() => openClip(clip)}>
+                <span className="library-activity__icon"><FileTextOutlined/></span>
+                <span className="library-activity__body">
+                  <strong title={clip.title || clip.content}>{clip.title || clipPreview(clip)}</strong>
+                  <small><span>{CLIP_KIND_LABEL[clip.kind]}</span><span>{clipSourceHost(clip)}</span><span>{formatQueuedAt(clip.createdAt)}</span></small>
+                </span>
+                <RightOutlined className="library-activity__arrow"/>
+              </button>
+              <Select<string>
+                size="small"
+                className="library-clip-collection"
+                ariaLabel={t("归入集合")}
+                value={clipCollectionOf(clip)}
+                options={[{ label: t("未分类"), value: '' }, ...collections.map(collection => ({ label: collection.name, value: collection.id }))]}
+                onChange={value => void assignClipCollection(clip, String(value))}
+              />
+              <Button type="text" size="small" icon={<DownloadOutlined/>} aria-label={t("导出为 Markdown")} onClick={() => exportClip(clip)}/>
+              <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("删除剪藏")} onClick={() => void removeClip(clip)}/>
+            </div>)}
+          </div>}
   </div>
 
   const downloadContent = <div className="library-module">
