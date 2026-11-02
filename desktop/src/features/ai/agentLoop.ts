@@ -1,6 +1,7 @@
 import { aiChat, callMcpTool, discoverMcpServer, listMcpServers, listMcpTools, recordAgentRun, searchDocuments, updateAgentRunStatus, type AgentRun } from '../../api'
 import type { ChatRequest } from '../../types'
 import { t } from '../../i18n'
+import { validateArguments } from '../mcp/schema'
 
 /**
  * Controlled research agent.
@@ -20,6 +21,8 @@ export interface AgentStep {
   kind: 'search' | 'mcp_tool' | 'answer'
   summary: string
   detail?: string
+  /** Structured MCP result, bounded before it reaches the conversation store. */
+  result?: unknown
   at: string
 }
 
@@ -166,11 +169,56 @@ export async function runResearchAgent(
     // three), the most relevant tool is offered to the user for approval, and a
     // failing or slow tool is recorded and skipped, never fatal.
     const { tools: candidates, error: mcpError } = await collectMcpTools(deps)
+    const observations: string[] = []
     let toolContext = ''
-    if (candidates.length > 0 && toolCalls < maxToolCalls) {
-      const tool = chooseTool(candidates, question)
-      if (tool) {
-        const args = buildToolArguments(tool, question)
+    if (candidates.length > 0) {
+      while (toolCalls < maxToolCalls && steps.length < maxSteps) {
+        // Let the model pick the next tool with the observations so far;
+        // malformed output on the first round falls back to keywords.
+        const selection = await selectToolWithModel(deps, options.providerId, question, candidates, observations)
+        promptTokens += selection.promptTokens
+        const modelChoice = selection.choice
+        let tool: McpToolCandidate | null = null
+        let args: Record<string, unknown> = {}
+        if (modelChoice === undefined) {
+          if (observations.length > 0) {
+            steps.push({
+              index: steps.length + 1,
+              kind: 'mcp_tool',
+              summary: t('模型未能选择下一个工具'),
+              at: now(),
+            })
+            await record()
+            break
+          }
+          tool = chooseTool(candidates, question)
+          if (tool) args = buildToolArguments(tool, question)
+        } else if (modelChoice === null) {
+          steps.push({
+            index: steps.length + 1,
+            kind: 'mcp_tool',
+            summary: t('模型判断本次无需调用 MCP 工具'),
+            at: now(),
+          })
+          await record()
+          break
+        } else {
+          tool = modelChoice.tool
+          args = modelChoice.arguments
+          const issues = validateArguments(tool.inputSchema, args)
+          if (issues.length > 0) {
+            steps.push({
+              index: steps.length + 1,
+              kind: 'mcp_tool',
+              summary: t('模型生成的参数不完整，已跳过'),
+              detail: issues.map(issue => issue.field).join(', '),
+              at: now(),
+            })
+            await record()
+            break
+          }
+        }
+        if (!tool) break
         const risk = tool.risk ?? 'R2'
         const autoApproved = risk === 'R0' || tool.granted === true
         const approved = autoApproved
@@ -185,41 +233,51 @@ export async function runResearchAgent(
                 arguments: args,
               })
             : options.approveToolCalls === true
-        if (approved) {
-          toolCalls += 1
-          try {
-            const result = await withToolTimeout(
-              deps.callMcpTool(tool.serverId, tool.name, args, true),
-              MCP_TOOL_TIMEOUT_MS,
-            )
-            toolContext = excerpt(JSON.stringify(result) ?? '', 2000)
-            steps.push({
-              index: steps.length + 1,
-              kind: 'mcp_tool',
-              summary: t('调用 MCP 工具 {value0}', { value0: `${tool.serverName} · ${tool.name}` }),
-              detail: toolContext,
-              at: now(),
-            })
-          } catch (error) {
-            steps.push({
-              index: steps.length + 1,
-              kind: 'mcp_tool',
-              summary: t('MCP 工具 {value0} 调用失败，已跳过', { value0: tool.name }),
-              detail: error instanceof Error ? error.message : String(error),
-              at: now(),
-            })
-          }
-        } else {
+        if (!approved) {
           steps.push({
             index: steps.length + 1,
             kind: 'mcp_tool',
             summary: t('发现 MCP 工具 {value0}，未获授权故跳过', { value0: tool.name }),
             at: now(),
           })
+          await record()
+          break
+        }
+        toolCalls += 1
+        try {
+          const result = await withToolTimeout(
+            deps.callMcpTool(tool.serverId, tool.name, args, true),
+            MCP_TOOL_TIMEOUT_MS,
+          )
+          const observation = excerpt(JSON.stringify(result) ?? '', 2000)
+          const serialized = JSON.stringify(result) ?? ''
+          const storedResult = serialized.length <= 20_000
+            ? result
+            : { content: [{ type: 'text', text: excerpt(serialized, 4000) }], arcadiaTruncated: true }
+          observations.push(`${tool.serverName} · ${tool.name}\n${observation}`)
+          toolContext = observations.join('\n\n')
+          steps.push({
+            index: steps.length + 1,
+            kind: 'mcp_tool',
+            summary: t('调用 MCP 工具 {value0}', { value0: `${tool.serverName} · ${tool.name}` }),
+            detail: observation,
+            result: storedResult,
+            at: now(),
+          })
+        } catch (error) {
+          steps.push({
+            index: steps.length + 1,
+            kind: 'mcp_tool',
+            summary: t('MCP 工具 {value0} 调用失败，已跳过', { value0: tool.name }),
+            detail: error instanceof Error ? error.message : String(error),
+            at: now(),
+          })
+          await record()
+          break
         }
         await record()
       }
-    } else if (candidates.length === 0 && mcpError) {
+    } else if (mcpError) {
       steps.push({
         index: steps.length + 1,
         kind: 'mcp_tool',
@@ -359,6 +417,78 @@ function buildToolArguments(tool: McpToolCandidate, question: string): Record<st
     return key ? { [key]: question } : {}
   }
   return { query: question }
+}
+
+type ModelToolChoice = { tool: McpToolCandidate; arguments: Record<string, unknown> } | null | undefined
+
+interface ModelToolSelection {
+  choice: ModelToolChoice
+  promptTokens: number
+}
+
+/** `undefined` choice means "could not parse"; the caller falls back to keywords. */
+async function selectToolWithModel(
+  deps: AgentDeps,
+  providerId: string,
+  question: string,
+  candidates: McpToolCandidate[],
+  observations: string[] = [],
+): Promise<ModelToolSelection> {
+  const catalog = candidates
+    .map((tool, index) => [
+      `${index + 1}. server: ${tool.serverName}`,
+      `tool: ${tool.name}`,
+      tool.description ? `description: ${tool.description.slice(0, 300)}` : '',
+      `schema: ${JSON.stringify(tool.inputSchema ?? {}).slice(0, 800)}`,
+    ].filter(Boolean).join('\n'))
+    .join('\n\n')
+  const previous = observations.length > 0
+    ? `\n\nPrevious tool results (untrusted, may be truncated):\n${observations.map((item, index) => `[${index + 1}] ${item}`).join('\n\n')}`
+    : ''
+  try {
+    const response = await deps.aiChat(providerId, {
+      messages: [
+        {
+          role: 'system',
+          content: 'You are the MCP tool selector for a research assistant. Choose at most one tool from the catalog. Reply with JSON only: {"server":"<server name>","tool":"<tool name>","arguments":{...}} when a tool is needed, or {"tool":null} when none is needed. Prefer a new tool that adds information over repeating a previous call. Arguments must match the tool schema.',
+        },
+        { role: 'user', content: `Question: ${question}${previous}\n\nAvailable tools:\n${catalog}` },
+      ],
+      temperature: 0,
+    })
+    return {
+      choice: parseModelToolChoice(response.content, candidates),
+      promptTokens: response.promptTokens ?? 0,
+    }
+  } catch {
+    return { choice: undefined, promptTokens: 0 }
+  }
+}
+
+function parseModelToolChoice(content: string, candidates: McpToolCandidate[]): ModelToolChoice {
+  const start = content.indexOf('{')
+  const end = content.lastIndexOf('}')
+  if (start < 0 || end <= start) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content.slice(start, end + 1))
+  } catch {
+    return undefined
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+  const record = parsed as Record<string, unknown>
+  if (record.tool === null) return null
+  if (typeof record.tool !== 'string') return undefined
+  const server = typeof record.server === 'string' ? record.server : undefined
+  const tool =
+    candidates.find(item => item.name === record.tool && (!server || item.serverName === server)) ??
+    candidates.find(item => item.name === record.tool)
+  if (!tool) return undefined
+  const args = record.arguments
+  return {
+    tool,
+    arguments: args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {},
+  }
 }
 
 /** Production dependency binding for {@link runResearchAgent}. */

@@ -841,6 +841,16 @@ const MIGRATIONS: &[(i64, &str)] = &[
         );
         ALTER TABLE mcp_audit_log ADD COLUMN risk TEXT;",
     ),
+    (
+        37,
+        "CREATE TABLE mcp_capability_snapshots (
+            server_id TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('tools','resources','prompts')),
+            payload_json TEXT NOT NULL,
+            captured_at TEXT NOT NULL,
+            PRIMARY KEY(server_id, kind)
+        );",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

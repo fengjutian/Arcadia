@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentRun } from '../../api'
+import type { ChatRequest } from '../../types'
 import { runResearchAgent, type AgentDeps, type AgentOptions, type McpApprovalRequest } from './agentLoop'
 
 /** Shape of the argument passed to `updateAgentRunStatus`, for assertions. */
@@ -206,6 +207,102 @@ describe('runResearchAgent', () => {
 
     expect(approve).not.toHaveBeenCalled()
     expect(callTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets the model choose the tool and arguments', async () => {
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({ hits: 2 }))
+    const approve = vi.fn(async (_request: McpApprovalRequest) => true)
+    const aiChat = vi.fn(async (_provider: string, request: ChatRequest) => {
+      const system = typeof request.messages[0]?.content === 'string' ? request.messages[0].content : ''
+      return system.includes('MCP tool selector')
+        ? { content: '```json\n{"server":"srv","tool":"search_web","arguments":{"query":"cats"}}\n```', promptTokens: 5 }
+        : { content: 'final answer', promptTokens: 5 }
+    })
+    const d = deps({
+      aiChat,
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() {
+        return { tools: [{ name: 'search_web', inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string' } } } }] }
+      },
+      callMcpTool: callTool,
+    })
+    await runResearchAgent(d, 'cats', { ...options, requestApproval: approve })
+
+    expect(callTool).toHaveBeenCalledWith('s1', 'search_web', { query: 'cats' }, true)
+  })
+
+  it('runs a bounded multi-round tool loop', async () => {
+    const callTool = vi.fn(async (_id: string, name: string, _args: Record<string, unknown>, _ok: boolean) => ({ tool: name }))
+    let plannerCalls = 0
+    const aiChat = vi.fn(async (_provider: string, request: ChatRequest) => {
+      const system = typeof request.messages[0]?.content === 'string' ? request.messages[0].content : ''
+      if (!system.includes('MCP tool selector')) return { content: 'final answer', promptTokens: 5 }
+      plannerCalls += 1
+      const content = plannerCalls === 1
+        ? '{"server":"srv","tool":"first_tool","arguments":{}}'
+        : plannerCalls === 2
+          ? '{"server":"srv","tool":"second_tool","arguments":{}}'
+          : '{"tool":null}'
+      return { content, promptTokens: 5 }
+    })
+    const d = deps({
+      aiChat,
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'first_tool' }, { name: 'second_tool' }] } },
+      callMcpTool: callTool,
+    })
+    const result = await runResearchAgent(d, 'q', { ...options, requestApproval: async () => true })
+
+    expect(plannerCalls).toBe(3)
+    expect(callTool.mock.calls.map(call => call[1])).toEqual(['first_tool', 'second_tool'])
+    expect(result.steps.filter(step => step.kind === 'mcp_tool' && step.summary.startsWith('调用 MCP 工具'))).toHaveLength(2)
+  })
+
+  it('keeps a bounded structured result on the tool step', async () => {
+    const payload = { content: [{ type: 'text', text: 'hello' }], isError: false }
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => payload)
+    let plannerCalls = 0
+    const aiChat = vi.fn(async (_provider: string, request: ChatRequest) => {
+      const system = typeof request.messages[0]?.content === 'string' ? request.messages[0].content : ''
+      if (!system.includes('MCP tool selector')) return { content: 'final answer', promptTokens: 5 }
+      plannerCalls += 1
+      return {
+        content: plannerCalls === 1
+          ? '{"server":"srv","tool":"search_web","arguments":{}}'
+          : '{"tool":null}',
+        promptTokens: 5,
+      }
+    })
+    const d = deps({
+      aiChat,
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'search_web' }] } },
+      callMcpTool: callTool,
+    })
+    const result = await runResearchAgent(d, 'q', { ...options, requestApproval: async () => true })
+
+    const step = result.steps.find(item => item.kind === 'mcp_tool' && item.result !== undefined)
+    expect(step?.result).toEqual(payload)
+  })
+
+  it('honours an explicit "no tool" decision from the model', async () => {
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({}))
+    const aiChat = vi.fn(async (_provider: string, request: ChatRequest) => {
+      const system = typeof request.messages[0]?.content === 'string' ? request.messages[0].content : ''
+      return system.includes('MCP tool selector')
+        ? { content: '{"tool":null}', promptTokens: 5 }
+        : { content: 'final answer', promptTokens: 5 }
+    })
+    const d = deps({
+      aiChat,
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'search_web' }] } },
+      callMcpTool: callTool,
+    })
+    const result = await runResearchAgent(d, 'q', { ...options, requestApproval: async () => true })
+
+    expect(callTool).not.toHaveBeenCalled()
+    expect(result.steps.some(step => step.summary.includes('无需调用'))).toBe(true)
   })
 
   it('isolates a failing MCP server instead of aborting the run', async () => {

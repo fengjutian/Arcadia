@@ -349,5 +349,128 @@ Agent/用户提出调用
   - 工具结果以“不可信外部资料”的身份进入最终回答上下文，并限制长度。
 - 测试：前端新增 tools 信封解析、审批通过、审批拒绝用例；全量 737 项通过。
 
-仍未完成：Rust 侧 `ToolRegistry` 的动态注册（当前运行时注册表仍是启动时构建，Agent supervisor 的工具执行路径也未接入）；SSE 原生传输；R0–R3 风险分级。
+仍未完成：Rust 侧 `ToolRegistry` 的动态注册（当前运行时注册表仍是启动时构建，Agent supervisor 的工具执行路径也未接入）；SSE 原生传输。
+
+### 12.3 第四批：R0–R3 风险分级与授权记忆（2026-11-02）
+
+- 风险分级：`tools/list` 返回时按工具名与 MCP annotations（`readOnlyHint` / `destructiveHint`）计算 R0–R3；**描述文本不参与判定**，未知工具保守归为 R2，破坏性动词（delete/remove/exec/pay…）直接 R3。
+- 能力注解：每个工具结果注入 `arcadiaRisk` 与 `arcadiaGranted`；schema 变化会通过 8 字节 SHA-256 摘要让旧授权失效。
+- 后端强制：`mcp_call_tool` 不再盲信前端布尔值——R0 自动放行，R1/R2 需本次审批或有效授权，R3 永远逐次审批且忽略历史授权。
+- 授权记忆：R1 首次批准并成功后写入 `mcp_tool_grants`（迁移 36），工作台显示“已记住授权”并可撤销；R2 不记忆，R3 禁止记忆。
+- 审计：`mcp_audit_log` 增加 `risk` 列，审计抽屉展示风险等级。
+- 助手审批卡片展示风险标签，R3 额外提示“每次调用都需要确认”。
+- 测试：新增风险分类、schema 摘要、授权作用域用例；前端新增 R0 自动放行、R1 授权复用用例。全量 Rust 286 项、前端 739 项通过。
+
+### 12.4 第五批：原生 SSE 传输（2026-11-02）
+
+- `sse` 不再复用 Streamable HTTP 的 POST 语义，改为真正的 Legacy HTTP+SSE：
+  - 后台 GET `text/event-stream`，解析 `endpoint` 事件拿到消息端点。
+  - JSON-RPC 请求 POST 到该端点（202/2xx），响应作为 `message` 事件回到同一流，按 id 路由到等待中的请求。
+  - 通知（`notifications/initialized`）走同一端点，不等待响应。
+  - 端点必须与流同源，并复用私有地址/元数据地址校验。
+  - 断流后会话标记为不可用，由会话管理器在下一次请求时重建；断开/退出时 abort 流任务并清理挂起请求。
+- 测试：新增 SSE 分帧、跨源端点拒绝、真实 TCP mock 的完整握手（endpoint → initialize → initialized → tools/list）用例。Rust 全量 289 项通过。
+
+### 12.5 第六批：工具参数表单与校验（2026-11-02）
+
+- 工作台不再让用户面对裸 JSON：按工具 `inputSchema.properties` 生成表单。
+- 支持 `string` / `number` / `integer` / `boolean` / `enum` / `array` / `object`；数组与对象使用带即时校验的 JSON 子编辑器。
+- 必填标记、字段描述、`default` 预填；调用前按 schema 校验必填、类型和枚举，错误信息定位到具体字段。
+- 保留“表单 / JSON”切换，复杂 schema 或高级用户仍可直接编辑原始 JSON。
+- 新增 `features/mcp/schema.ts` 纯函数与 `ToolArgumentsEditor` 组件；参数状态由字符串改为结构化对象。
+- 测试：新增 schema 字段提取、默认值、必填/类型/枚举校验用例；前端 104 文件 / 743 用例通过。
+
+### 12.6 第七批：配置导入 / 导出（2026-11-02）
+
+- 工作台新增“导出 / 导入”：
+  - 导出为 `arcadia-mcp-config.json`，包含 Server 名称、传输方式、命令/URL、参数、启停状态与 **密钥键名**；不包含任何密钥值。
+  - 导入先调用预览：按名称给出“新建 / 更新 / 无变化”和变更字段，用户确认后才写库。
+  - 更新同名 Server 时只改连接配置，SQLite 与系统密钥环中的密钥保持原样；新建 Server 的密钥需导入后补填，导入结果会列出缺失的键名。
+  - 后端校验版本、重复名称、传输方式、stdio 命令、HTTP/SSE URL，并复用私网/元数据地址策略。
+- 导出提供复制到剪贴板与文件下载两种方式。
+- 测试：新增“导入预览/应用且保留密钥”“非法配置拒绝”用例；Rust 291 项通过。
+
+### 12.7 第八批：兼容性诊断与空闲自愈（2026-11-02）
+
+- 工作台新增“诊断”：按 `initialize → tools/list → resources/list → prompts/list` 逐阶段执行，输出每阶段成功/失败、耗时、返回数量（工具/资源/Prompt）与服务端名称/协议版本；初始化失败也会生成报告而不是直接报错。
+- 后台巡检升级：除了 ping，发现会话已死亡（stdio 子进程退出、SSE 断流）时会在后台重建会话并推送状态，无需等用户下一次点击；重建失败继续按 60 秒节奏上报错误。
+- 诊断与风险/授权/审计解耦，不会触发工具调用，也不会写入审计。
+- 测试：新增真实 HTTP mock 的诊断用例（4 个阶段、数量与耗时）；Rust 292 项通过。
+
+### 12.8 第九批：工具结果结构化渲染（2026-11-02）
+
+- 工作台“调用结果”不再直接倾倒 JSON，按 MCP `content` 块渲染：
+  - `text`：等宽文本、超长折叠（超过 6000 字符可展开）。
+  - `image` / `audio`：仅接受白名单 MIME（svg 被拒绝）并以 data URI 内联展示。
+  - `resource`：展示 URI、MIME 与正文。
+  - `structuredContent`：独立格式化区域。
+  - `isError`：红色错误提示。
+- 保留“渲染结果 / 原始 JSON”一键切换，未知块类型回落为格式化 JSON。
+- 测试：新增结果解析用例（文本、图片 MIME 白名单、资源、错误、纯文本回退）；前端 106 文件 / 752 用例通过。
+
+### 12.9 第十批：断流快速重连与退避（2026-11-02）
+
+- 巡检拆成两条节奏：
+  - **5 秒 liveness 扫描**：只检查 `is_alive()`，发现 stdio 子进程退出或 SSE 断流就立即重建会话（重新 spawn / 重连 + initialize），不再等 60 秒巡检。
+  - **60 秒 ping**：只探测健康会话，避免对空闲 Server 高频发请求。
+- 重建失败按 5s → 10s → 20s → 40s … 指数退避，单 Server 上限 300 秒；成功或断开/删除时清零。
+- 状态事件仍在重建成功/失败时推送，UI 不需要轮询。
+- 测试：新增退避序列用例（含上限）；Rust 293 项通过。
+
+### 12.10 第十一批：Windows `npx` 兼容修复与真实 Server 冒烟（2026-11-02）
+
+- 修复 Windows 下 stdio 无法启动 `npx` 的问题：`CreateProcess` 不认识 `npx.cmd`，现在按 `PATH` + `PATHEXT` 解析裸命令，`.cmd`/`.bat` 统一通过 `cmd.exe /C` 启动；`.exe` 保持直接 spawn。
+- 新增 Windows 单元测试：`npx` 必须解析到 `.cmd`/`.bat` shim。
+- 新增手工真实 Server 冒烟（`#[ignore]`，需网络）：
+  `cargo test --lib smoke_real_filesystem_server -- --ignored --nocapture`
+  实际拉起 `npx -y @modelcontextprotocol/server-filesystem`，完成 `initialize`、`tools/list`、`tools/call(list_directory)`，返回内容正常。
+- 测试：Rust 294 项通过 + 1 项忽略（真实冒烟）；真实冒烟本机通过。
+
+### 12.12 第十二批：真实 Streamable HTTP 冒烟（2026-11-02）
+
+- 新增 `smoke_real_deepwiki_http_server`（`#[ignore]`，需网络）：对公开的 `https://mcp.deepwiki.com/mcp` 执行 `initialize`、`tools/list`、`tools/call(read_wiki_structure)`。
+- 本机实测 2.33 秒通过，验证了 Streamable HTTP 的 SSE-formatted 响应解析、协议头、工具调用与真实服务端兼容性。
+- 公开的 legacy SSE 端点已基本下线（DeepWiki `/sse` 直接返回 deprecated 错误），原生 SSE 传输继续由本地 TCP mock 覆盖。
+- 当前真实兼容矩阵：本地 stdio filesystem、远程 Streamable HTTP DeepWiki；Rust 全量 294 通过 + 2 项忽略冒烟。
+
+### 12.13 第十三批：助手侧研究过程展示（2026-11-02）
+
+- 研究 Agent 的步骤不再只存在于“运行历史”抽屉：回答下方新增可折叠的“研究过程（N 步）”，列出检索、MCP 工具调用、生成回答三个阶段。
+- MCP 步骤使用橙色标签区分，详情（工具返回摘要）以等宽小字折叠展示；拒绝/失败/超时也会作为步骤出现。
+- 步骤随对话持久化：`StoredConversationTurn` 增加 `steps`，解析时限制 20 步、摘要 300 字、详情 4000 字，避免历史膨胀。
+- 测试：新增研究步骤持久化用例；前端全量 107 文件 / 756 用例通过。
+
+### 12.14 第十四批：能力快照与变更对比（2026-11-02）
+
+- 迁移 37 新增 `mcp_capability_snapshots(server_id, kind, payload_json, captured_at)`，按 Server 分别保存 tools / resources / prompts 的名称与内容摘要。
+- `mcp_list_tools/resources/prompts` 返回时计算当前快照，与上次比较后注入 `arcadiaCapabilityDiff`（added / removed / changed / firstSeen），并更新快照。
+- 工作台连接后若检测到非首次的能力变化，显示可关闭的黄色提示：按工具/资源/提示词分别给出新增、移除、变更数量。
+- 摘要基于完整条目 JSON（含描述、schema、URI），因此描述或输入 schema 改动也会被识别。
+- 测试：新增能力 diff 与快照条目摘要用例；Rust 全量 296 通过 + 2 项忽略冒烟。
+
+### 12.15 第十五批：研究 Agent 的模型工具选择（2026-11-02）
+
+- 研究 Agent 不再只靠关键词猜工具：把最多 16 个候选工具（Server、名称、描述、schema 摘要）编成目录，让模型返回 JSON：
+  `{"server":"...","tool":"...","arguments":{...}}` 或 `{"tool":null}`。
+- 模型明确返回 `null` 时尊重判断、不调用工具；输出无法解析时回退到原来的关键词启发式，保证可用性。
+- 模型生成的参数先按 `inputSchema` 校验（必填/类型/枚举），不完整则记录步骤并跳过，不再盲目调用。
+- 规划调用的 token 计入运行预算；审批、风险分级、执行与结果回填链路保持不变。
+- 测试：新增“模型选择工具与参数”“模型明确不调用”用例；前端全量 107 文件 / 758 用例通过。
+
+### 12.16 第十六批：多轮工具循环（2026-11-02）
+
+- 研究 Agent 从“选一次工具”升级为有上限的多轮循环：
+  - 每轮把已有工具结果（截断后）作为 observation 交给模型，模型可选择下一个工具或返回 `{"tool":null}`；
+  - 受 `maxToolCalls`（默认 3）与 `maxSteps` 双重约束，不会无限调用；
+  - 用户拒绝审批、工具调用失败、模型参数不完整都会终止循环，避免重复骚扰或死循环；
+  - 只有第一轮解析失败才回退关键词启发式，后续轮次失败直接停止。
+- 所有 observation 汇总后以“不可信外部资料”加入最终回答上下文。
+- 测试：新增两轮工具循环用例；前端全量 107 文件 / 759 用例通过。
+
+### 12.17 第十七批：研究过程里的结构化工具结果（2026-11-02）
+
+- `AgentStep` 增加 `result`，研究步骤不再只有 JSON 摘要：工具调用成功后，回答下方的“研究过程”直接渲染 MCP `content` 块（文本、图片、资源、结构化结果）。
+- 复用 `ToolResultView` 的 `compact` 模式：不显示“渲染结果 / 原始 JSON”工具栏，图片限高、文本限高，适合嵌在步骤列表里。
+- 体积控制：序列化超过 20KB 的结果替换为截断文本块；对话持久化时同样丢弃超过 20KB 的 `result`，避免历史记录被 base64 图片撑爆。
+- 测试：新增结构化结果保留/超限丢弃用例；前端全量 107 文件 / 761 用例通过。
 

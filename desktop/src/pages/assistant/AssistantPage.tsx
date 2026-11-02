@@ -59,10 +59,11 @@ import type { AIProvider, Document, View } from '../../types'
 import { compactChatHistory, restoreConversation } from '../../features/ai/conversation'
 import { hasUsableAnswerCitations, reciprocalRankFusion, stripModelReasoning, stripSourceBlocks, validateAnswerCitations } from '../../features/ai/rag'
 import { applyReranker, rrfReranker } from '../../features/ai/reranker'
-import { defaultAgentDeps, runResearchAgent, type McpApprovalRequest } from '../../features/ai/agentLoop'
+import { defaultAgentDeps, runResearchAgent, type AgentStep, type McpApprovalRequest } from '../../features/ai/agentLoop'
 import { listAgentRuns, type AgentRun } from '../../api'
 import { AgentRunHistory } from '../../features/ai/AgentRunHistory'
 import { KnowledgeAttachmentAdapter } from '../../features/ai/knowledgeAttachmentAdapter'
+import { ToolResultView } from '../../features/mcp/ToolResultView'
 import { filterConversations, makeConversationTitle, normalizeConversationTitle } from '../../features/ai/conversationHistory'
 
 const CONVERSATION_KEY = 'ai.conversation.v1'
@@ -100,6 +101,8 @@ interface AssistantTurn {
   backgroundTaskId?: string
   /** Document created when this answer is explicitly saved to the knowledge base. */
   savedDocumentId?: string
+  /** Bounded research-agent trail, including MCP tool calls. */
+  steps?: AgentStep[]
 }
 
 type Turn = UserTurn | AssistantTurn
@@ -180,6 +183,28 @@ function AssistantMarkdownLink({ href, children, node: _node, onClick, ...props 
 
 const MARKDOWN_COMPONENTS = { a: AssistantMarkdownLink }
 
+function researchStepKindLabel(kind: AgentStep['kind']): string {
+  switch (kind) {
+    case 'search': return t("检索")
+    case 'mcp_tool': return t("MCP 工具")
+    case 'answer': return t("回答")
+    default: return kind
+  }
+}
+
+function ResearchSteps({ steps }: { steps: AgentStep[] }) {
+  return <details className="assistant-steps">
+    <summary>{t("研究过程（{value0} 步）",{value0:String(steps.length)})}</summary>
+    <ol>{steps.map(step => <li key={step.index}>
+      <span className={`assistant-steps__kind is-${step.kind}`}>{researchStepKindLabel(step.kind)}</span>
+      <span>{step.summary}</span>
+      {step.result !== undefined
+        ? <ToolResultView value={step.result} compact/>
+        : step.detail ? <pre className="assistant-steps__detail">{step.detail}</pre> : null}
+    </li>)}</ol>
+  </details>
+}
+
 export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = false, embedded = false, sessionNamespace = 'default' }: { onNavigate?: (view: View) => void; initialQuestion?: string; autoSubmit?: boolean; embedded?: boolean; sessionNamespace?: string }) {
   const conversationKey = sessionNamespace === 'default' ? CONVERSATION_KEY : `${CONVERSATION_KEY}:${sessionNamespace}`
   const conversationHistoryKey = sessionNamespace === 'default' ? CONVERSATION_HISTORY_KEY : `${CONVERSATION_HISTORY_KEY}:${sessionNamespace}`
@@ -241,6 +266,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
             error:turn.error,
             generalKnowledge:turn.generalKnowledge === true,
             backgroundTaskId:turn.backgroundTaskId,
+            steps:turn.steps,
           }))
     }).catch(() => setTurns([])).finally(() => setConversationHydrated(true))
     void getSession(conversationHistoryKey)
@@ -269,6 +295,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
           generalKnowledge:turn.generalKnowledge,
           pending:turn.pending,
           backgroundTaskId:turn.backgroundTaskId,
+          steps:turn.steps,
         })
     const serialized = JSON.stringify(stored)
     conversationSaveRef.current = conversationSaveRef.current
@@ -722,7 +749,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         : result.stopped
           ?t("{value0}\n\n（已中止：{value1}）",{value0:result.answer,value1:result.stopped.message})
           : result.answer
-      patchTurn(pendingTurn.id, { content, pending:false })
+      patchTurn(pendingTurn.id, { content, pending:false, steps: result.steps })
       await listAgentRuns(20).then(setAgentRuns).catch(() => undefined)
     } catch (caught) {
       const text = caught instanceof Error ? caught.message :t("研究失败")
@@ -1009,6 +1036,8 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                     </div>)
                    }
                 </div>
+
+                {!turn.pending && turn.steps && turn.steps.length > 0 && <ResearchSteps steps={turn.steps}/>}
 
                 {!turn.pending && !turn.error && (cited.length + extraCitations.length) > 0 &&(
                   <div className="assistant-citations">

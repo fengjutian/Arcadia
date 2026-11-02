@@ -14,11 +14,11 @@
 
 use futures_util::StreamExt;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, CONTENT_TYPE};
-use rusqlite::params;
-use serde::Serialize;
+use rusqlite::{params, OptionalExtension};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -380,6 +380,138 @@ fn schema_digest(tool: &Value) -> String {
     digest.iter().take(8).map(|byte| format!("{byte:02x}")).collect()
 }
 
+fn value_digest(value: &Value) -> String {
+    let raw = serde_json::to_string(value).unwrap_or_default();
+    let digest = Sha256::digest(raw.as_bytes());
+    digest.iter().take(8).map(|byte| format!("{byte:02x}")).collect()
+}
+
+// ---------------------------------------------------------------------------
+// capability snapshots
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct CapabilityEntry {
+    name: String,
+    digest: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CapabilityDiff {
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub changed: Vec<String>,
+    pub first_seen: bool,
+}
+
+fn diff_capabilities(previous: &[CapabilityEntry], current: &[CapabilityEntry]) -> CapabilityDiff {
+    use std::collections::BTreeMap;
+    let previous: BTreeMap<&str, &str> = previous
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry.digest.as_str()))
+        .collect();
+    let current_map: BTreeMap<&str, &str> = current
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry.digest.as_str()))
+        .collect();
+    let mut added = Vec::new();
+    let mut changed = Vec::new();
+    for (name, digest) in &current_map {
+        match previous.get(name) {
+            None => added.push((*name).to_string()),
+            Some(previous_digest) if previous_digest != digest => changed.push((*name).to_string()),
+            _ => {}
+        }
+    }
+    let mut removed: Vec<String> = previous
+        .keys()
+        .filter(|name| !current_map.contains_key(*name))
+        .map(|name| (*name).to_string())
+        .collect();
+    added.sort();
+    changed.sort();
+    removed.sort();
+    CapabilityDiff {
+        added,
+        removed,
+        changed,
+        first_seen: previous.is_empty(),
+    }
+}
+
+fn capability_entries(value: &Value, key: &str) -> Vec<CapabilityEntry> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .enumerate()
+                .map(|(index, item)| CapabilityEntry {
+                    name: item
+                        .get("uri")
+                        .and_then(Value::as_str)
+                        .or_else(|| item.get("name").and_then(Value::as_str))
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("#{index}")),
+                    digest: value_digest(item),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn read_capability_snapshot(
+    app: &tauri::AppHandle,
+    server_id: &str,
+    kind: &str,
+) -> Vec<CapabilityEntry> {
+    let Ok(database) = crate::local_store::connection(app) else {
+        return Vec::new();
+    };
+    let payload: Option<String> = database
+        .query_row(
+            "SELECT payload_json FROM mcp_capability_snapshots WHERE server_id=?1 AND kind=?2",
+            params![server_id, kind],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten();
+    payload
+        .and_then(|raw| serde_json::from_str::<Vec<CapabilityEntry>>(&raw).ok())
+        .unwrap_or_default()
+}
+
+fn record_capability(
+    app: &tauri::AppHandle,
+    server_id: &str,
+    kind: &str,
+    current: &[CapabilityEntry],
+) -> CapabilityDiff {
+    let previous = read_capability_snapshot(app, server_id, kind);
+    let diff = diff_capabilities(&previous, current);
+    if let Ok(database) = crate::local_store::connection(app) {
+        let payload = serde_json::to_string(current).unwrap_or_else(|_| "[]".into());
+        let _ = database.execute(
+            "INSERT INTO mcp_capability_snapshots(server_id,kind,payload_json,captured_at) VALUES(?1,?2,?3,?4)
+             ON CONFLICT(server_id,kind) DO UPDATE SET payload_json=excluded.payload_json, captured_at=excluded.captured_at",
+            params![server_id, kind, payload, chrono::Utc::now().to_rfc3339()],
+        );
+    }
+    diff
+}
+
+fn attach_capability_diff(value: &mut Value, diff: &CapabilityDiff) {
+    if let Some(object) = value.as_object_mut() {
+        if let Ok(payload) = serde_json::to_value(diff) {
+            object.insert("arcadiaCapabilityDiff".into(), payload);
+        }
+    }
+}
+
 #[derive(Clone)]
 struct CachedTool {
     name: String,
@@ -436,6 +568,36 @@ struct StdioTransport {
     stderr_tail: Mutex<VecDeque<String>>,
 }
 
+/// Windows cannot execute `.cmd`/`.bat` shims through `CreateProcess`, so a
+/// bare `npx` (which resolves to `npx.cmd`) needs to go through `cmd.exe`.
+#[cfg(windows)]
+fn windows_shell_target(executable: &str) -> Option<String> {
+    let lower = executable.to_ascii_lowercase();
+    if lower.ends_with(".cmd") || lower.ends_with(".bat") {
+        return Some(executable.to_string());
+    }
+    if lower.ends_with(".exe")
+        || executable.contains('\\')
+        || executable.contains('/')
+    {
+        return None;
+    }
+    let path = std::env::var_os("PATH")?;
+    let extensions = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+    for directory in std::env::split_paths(&path) {
+        for extension in extensions.split(';') {
+            if !(extension.eq_ignore_ascii_case(".CMD") || extension.eq_ignore_ascii_case(".BAT")) {
+                continue;
+            }
+            let candidate = directory.join(format!("{executable}{extension}"));
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    None
+}
+
 impl StdioTransport {
     fn spawn(config: &ServerConfig) -> Result<Arc<Self>, String> {
         let executable = config
@@ -443,7 +605,14 @@ impl StdioTransport {
             .as_deref()
             .filter(|value| !value.trim().is_empty())
             .ok_or("MCP stdio command is missing")?;
-        let mut child = Command::new(executable)
+        #[allow(unused_mut)]
+        let mut process = Command::new(executable);
+        #[cfg(windows)]
+        if let Some(target) = windows_shell_target(executable) {
+            process = Command::new("cmd.exe");
+            process.arg("/C").arg(target);
+        }
+        let mut child = process
             .args(&config.args)
             .envs(&config.env)
             .stdin(Stdio::piped())
@@ -760,6 +929,277 @@ impl HttpTransport {
     }
 }
 
+// ---------------------------------------------------------------------------
+// SSE transport (legacy HTTP+SSE: GET stream, POST messages to the announced
+// endpoint, responses arrive as `message` events)
+// ---------------------------------------------------------------------------
+
+struct SseTransport {
+    client: reqwest::Client,
+    stream_url: String,
+    headers: HeaderMap,
+    endpoint: Mutex<Option<String>>,
+    pending: Mutex<HashMap<String, tokio::sync::oneshot::Sender<Result<Value, String>>>>,
+    closed: AtomicBool,
+    error: Mutex<Option<String>>,
+    task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+}
+
+impl SseTransport {
+    fn connect(config: &ServerConfig, parsed: url::Url) -> Result<Arc<Self>, String> {
+        ensure_public_resolution(&parsed)?;
+        let allow_loopback = is_loopback_url(&parsed);
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::custom(move |attempt| {
+                if attempt.previous().len() >= 5 {
+                    return attempt.error("too many MCP redirects");
+                }
+                let next = attempt.url();
+                if is_loopback_url(next) && !allow_loopback {
+                    return attempt.error("MCP redirect to a local address is blocked");
+                }
+                match validate_url_for_config(next.as_str()) {
+                    Ok(_) => attempt.follow(),
+                    Err(_) => attempt.error("MCP redirect points at a blocked URL"),
+                }
+            }))
+            .build()
+            .map_err(|error| format!("cannot create MCP SSE client: {error}"))?;
+        let transport = Arc::new(Self {
+            client,
+            stream_url: parsed.to_string(),
+            headers: config.headers.clone(),
+            endpoint: Mutex::new(None),
+            pending: Mutex::new(HashMap::new()),
+            closed: AtomicBool::new(false),
+            error: Mutex::new(None),
+            task: Mutex::new(None),
+        });
+        let weak = Arc::downgrade(&transport);
+        let handle = tokio::spawn(async move {
+            if let Some(transport) = weak.upgrade() {
+                transport.read_stream().await;
+            }
+        });
+        *lock(&transport.task) = Some(handle);
+        Ok(transport)
+    }
+
+    fn closed_error(&self) -> String {
+        lock(&self.error)
+            .clone()
+            .unwrap_or_else(|| "MCP SSE stream closed".to_string())
+    }
+
+    async fn read_stream(&self) {
+        if let Err(error) = self.stream_loop().await {
+            *lock(&self.error) = Some(error);
+        }
+        self.closed.store(true, Ordering::SeqCst);
+        let senders: Vec<_> = lock(&self.pending)
+            .drain()
+            .map(|(_, sender)| sender)
+            .collect();
+        let error = self.closed_error();
+        for sender in senders {
+            let _ = sender.send(Err(error.clone()));
+        }
+    }
+
+    async fn stream_loop(&self) -> Result<(), String> {
+        let response = self
+            .client
+            .get(&self.stream_url)
+            .headers(self.headers.clone())
+            .header(ACCEPT, "text/event-stream")
+            .send()
+            .await
+            .map_err(|error| format!("MCP SSE connection failed: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!("MCP SSE HTTP {}", response.status().as_u16()));
+        }
+        let mut stream = response.bytes_stream();
+        let mut buffer = String::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|error| format!("MCP SSE stream error: {error}"))?;
+            let text = String::from_utf8_lossy(&chunk).replace("\r\n", "\n");
+            buffer.push_str(&text);
+            for (event, data) in drain_sse_events(&mut buffer) {
+                self.handle_event(&event, &data)?;
+            }
+        }
+        Err("MCP SSE stream ended".into())
+    }
+
+    fn handle_event(&self, event: &str, data: &str) -> Result<(), String> {
+        match event {
+            "endpoint" => {
+                let endpoint = resolve_sse_endpoint(&self.stream_url, data)?;
+                *lock(&self.endpoint) = Some(endpoint);
+            }
+            "message" => {
+                if let Ok(value) = serde_json::from_str::<Value>(data) {
+                    route_jsonrpc_message(&self.pending, value);
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    async fn wait_endpoint(&self) -> Result<String, String> {
+        for _ in 0..200 {
+            if let Some(endpoint) = lock(&self.endpoint).clone() {
+                return Ok(endpoint);
+            }
+            if self.closed.load(Ordering::SeqCst) {
+                return Err(self.closed_error());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        Err("MCP SSE endpoint was not announced".into())
+    }
+
+    async fn post(&self, body: &Value) -> Result<(), String> {
+        let endpoint = self.wait_endpoint().await?;
+        let response = self
+            .client
+            .post(endpoint)
+            .headers(self.headers.clone())
+            .header(CONTENT_TYPE, "application/json")
+            .timeout(REQUEST_TIMEOUT)
+            .json(body)
+            .send()
+            .await
+            .map_err(|error| format!("MCP SSE POST failed: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!("MCP SSE POST HTTP {}", response.status().as_u16()));
+        }
+        Ok(())
+    }
+
+    async fn request(&self, method: &str, params: Value) -> Result<Value, String> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(self.closed_error());
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        lock(&self.pending).insert(id.clone(), sender);
+        let body = json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params,
+        });
+        if let Err(error) = self.post(&body).await {
+            lock(&self.pending).remove(&id);
+            return Err(error);
+        }
+        match tokio::time::timeout(REQUEST_TIMEOUT, receiver).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err(self.closed_error()),
+            Err(_) => {
+                lock(&self.pending).remove(&id);
+                Err(format!("MCP SSE request timed out ({method})"))
+            }
+        }
+    }
+
+    async fn notify(&self, method: &str, params: Value) -> Result<(), String> {
+        self.post(&json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }))
+        .await
+    }
+
+    fn kill(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        if let Some(handle) = lock(&self.task).take() {
+            handle.abort();
+        }
+        let senders: Vec<_> = lock(&self.pending)
+            .drain()
+            .map(|(_, sender)| sender)
+            .collect();
+        for sender in senders {
+            let _ = sender.send(Err("MCP SSE session closed".into()));
+        }
+    }
+}
+
+impl Drop for SseTransport {
+    fn drop(&mut self) {
+        self.closed.store(true, Ordering::SeqCst);
+        if let Some(handle) = self.task.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take() {
+            handle.abort();
+        }
+    }
+}
+
+/// Extracts complete SSE frames from a growing buffer. `\r\n` is normalised by
+/// the stream loop before calling this.
+fn drain_sse_events(buffer: &mut String) -> Vec<(String, String)> {
+    let mut events = Vec::new();
+    while let Some(index) = buffer.find("\n\n") {
+        let frame: String = buffer.drain(..index + 2).collect();
+        let mut event = "message".to_string();
+        let mut data = Vec::new();
+        for line in frame.lines() {
+            if let Some(value) = line.strip_prefix("event:") {
+                event = value.trim().to_string();
+            } else if let Some(value) = line.strip_prefix("data:") {
+                data.push(value.trim_start().to_string());
+            }
+        }
+        if !data.is_empty() {
+            events.push((event, data.join("\n")));
+        }
+    }
+    events
+}
+
+fn resolve_sse_endpoint(base: &str, raw: &str) -> Result<String, String> {
+    let base = url::Url::parse(base).map_err(|error| format!("invalid MCP SSE URL: {error}"))?;
+    let endpoint = base
+        .join(raw.trim())
+        .map_err(|error| format!("invalid MCP SSE endpoint: {error}"))?;
+    validate_url_for_config(endpoint.as_str())?;
+    let same_origin = endpoint.scheme() == base.scheme()
+        && endpoint.host_str() == base.host_str()
+        && endpoint.port_or_known_default() == base.port_or_known_default();
+    if !same_origin {
+        return Err("MCP SSE endpoint must stay on the same origin".into());
+    }
+    Ok(endpoint.to_string())
+}
+
+fn route_jsonrpc_message(
+    pending: &Mutex<HashMap<String, tokio::sync::oneshot::Sender<Result<Value, String>>>>,
+    value: Value,
+) {
+    let Some(id) = value.get("id").and_then(Value::as_str) else {
+        return;
+    };
+    let sender = lock(pending).remove(id);
+    if let Some(sender) = sender {
+        let result = parse_response_value(value);
+        let _ = sender.send(result);
+    }
+}
+
+fn parse_response_value(value: Value) -> Result<Value, String> {
+    if let Some(error) = value.get("error") {
+        return Err(format!("MCP error: {error}"));
+    }
+    value
+        .get("result")
+        .cloned()
+        .ok_or_else(|| "MCP response has no result".into())
+}
+
 async fn read_body(response: reqwest::Response) -> Result<String, String> {
     if response
         .content_length()
@@ -786,6 +1226,7 @@ async fn read_body(response: reqwest::Response) -> Result<String, String> {
 enum Transport {
     Stdio(Arc<StdioTransport>),
     Http(HttpTransport),
+    Sse(Arc<SseTransport>),
 }
 
 struct Session {
@@ -809,7 +1250,11 @@ impl Session {
             Transport::Stdio(StdioTransport::spawn(&config)?)
         } else {
             let parsed = validate_url_for_config(config.url.as_deref().unwrap_or_default())?;
-            Transport::Http(HttpTransport::new(&config, parsed)?)
+            if config.transport == "sse" {
+                Transport::Sse(SseTransport::connect(&config, parsed)?)
+            } else {
+                Transport::Http(HttpTransport::new(&config, parsed)?)
+            }
         };
         Ok(Self {
             fingerprint,
@@ -840,6 +1285,7 @@ impl Session {
         match &self.transport {
             Transport::Stdio(transport) => !transport.closed.load(Ordering::SeqCst),
             Transport::Http(_) => true,
+            Transport::Sse(transport) => !transport.closed.load(Ordering::SeqCst),
         }
     }
 
@@ -884,6 +1330,7 @@ impl Session {
                 transport.request("initialize", initialize_params()).await
             }
             Transport::Http(transport) => transport.initialize().await,
+            Transport::Sse(transport) => transport.request("initialize", initialize_params()).await,
         }
     }
 
@@ -891,6 +1338,7 @@ impl Session {
         match &self.transport {
             Transport::Stdio(transport) => transport.notify(method, params),
             Transport::Http(transport) => transport.notify(method, params).await,
+            Transport::Sse(transport) => transport.notify(method, params).await,
         }
     }
 
@@ -899,6 +1347,7 @@ impl Session {
             let error = match &self.transport {
                 Transport::Stdio(transport) => transport.closed_error(),
                 Transport::Http(_) => "MCP session is not running".into(),
+                Transport::Sse(transport) => transport.closed_error(),
             };
             self.record_error(&error);
             return Err(error);
@@ -964,6 +1413,7 @@ impl Session {
         match &self.transport {
             Transport::Stdio(transport) => transport.request(method, params).await,
             Transport::Http(transport) => transport.request(method, params, name).await,
+            Transport::Sse(transport) => transport.request(method, params).await,
         }
     }
 
@@ -992,15 +1442,17 @@ impl Session {
     }
 
     fn shutdown(&self) {
-        if let Transport::Stdio(transport) = &self.transport {
-            transport.kill();
+        match &self.transport {
+            Transport::Stdio(transport) => transport.kill(),
+            Transport::Sse(transport) => transport.kill(),
+            Transport::Http(_) => {}
         }
     }
 
     fn protocol_version(&self) -> Option<String> {
         match &self.transport {
             Transport::Http(transport) => lock(&transport.protocol_version).clone(),
-            Transport::Stdio(_) => self
+            Transport::Stdio(_) | Transport::Sse(_) => self
                 .initialized
                 .try_lock()
                 .ok()
@@ -1014,9 +1466,26 @@ impl Session {
     }
 }
 
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
 #[derive(Default)]
 pub struct McpHost {
     sessions: Mutex<HashMap<String, Arc<Session>>>,
+    recovery: Mutex<HashMap<String, RecoveryState>>,
+}
+
+struct RecoveryState {
+    attempts: u32,
+    next_attempt: Instant,
+}
+
+fn recovery_delay_secs(attempts: u32) -> u64 {
+    let exponent = attempts.saturating_sub(1).min(6);
+    (5u64 << exponent).min(300)
 }
 
 impl McpHost {
@@ -1098,6 +1567,7 @@ impl McpHost {
     }
 
     fn remove(&self, server_id: &str) {
+        lock(&self.recovery).remove(server_id);
         let session = lock(&self.sessions).remove(server_id);
         if let Some(session) = session {
             session.shutdown();
@@ -1140,7 +1610,57 @@ impl McpHost {
         }
     }
 
-    async fn monitor_once(&self, app: &tauri::AppHandle) {
+    async fn liveness_once(&self, app: &tauri::AppHandle) {
+        let sessions: Vec<(String, Arc<Session>)> = {
+            let sessions = lock(&self.sessions);
+            sessions
+                .iter()
+                .map(|(id, session)| (id.clone(), session.clone()))
+                .collect()
+        };
+        for (server_id, session) in sessions {
+            if session.is_alive() || !self.contains(&server_id) {
+                continue;
+            }
+            let now = Instant::now();
+            {
+                let recovery = lock(&self.recovery);
+                if recovery
+                    .get(&server_id)
+                    .is_some_and(|state| state.next_attempt > now)
+                {
+                    continue;
+                }
+            }
+            match self.ready(app, &server_id).await {
+                Ok(_) => {
+                    lock(&self.recovery).remove(&server_id);
+                }
+                Err(error) => {
+                    let mut recovery = lock(&self.recovery);
+                    let attempts = recovery
+                        .get(&server_id)
+                        .map(|state| state.attempts)
+                        .unwrap_or(0)
+                        .saturating_add(1);
+                    let delay = recovery_delay_secs(attempts);
+                    recovery.insert(
+                        server_id.clone(),
+                        RecoveryState {
+                            attempts,
+                            next_attempt: Instant::now() + Duration::from_secs(delay),
+                        },
+                    );
+                    drop(recovery);
+                    if self.contains(&server_id) {
+                        self.publish_error(app, &server_id, &error);
+                    }
+                }
+            }
+        }
+    }
+
+    async fn ping_once(&self, app: &tauri::AppHandle) {
         let sessions: Vec<(String, Arc<Session>)> = {
             let sessions = lock(&self.sessions);
             sessions
@@ -1150,9 +1670,6 @@ impl McpHost {
                 .collect()
         };
         for (server_id, session) in sessions {
-            if !self.contains(&server_id) {
-                continue;
-            }
             match session.ping(Duration::from_secs(8)).await {
                 Ok(_) => {
                     if self.contains(&server_id) {
@@ -1177,17 +1694,28 @@ impl McpHost {
     }
 }
 
-/// Periodically pings connected servers so a dead child or expired HTTP
-/// session surfaces in the UI even when the user is not calling tools.
+/// Fast liveness checks rebuild dead sessions within seconds; the slower ping
+/// loop only probes healthy sessions so idle servers are not spammed.
 pub fn start_health_monitor(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        interval.tick().await;
+        let mut liveness = tokio::time::interval(Duration::from_secs(5));
+        liveness.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut ping = tokio::time::interval(Duration::from_secs(60));
+        ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        liveness.tick().await;
+        ping.tick().await;
         loop {
-            interval.tick().await;
-            if let Some(host) = app.try_state::<McpHost>() {
-                host.monitor_once(&app).await;
+            tokio::select! {
+                _ = liveness.tick() => {
+                    if let Some(host) = app.try_state::<McpHost>() {
+                        host.liveness_once(&app).await;
+                    }
+                }
+                _ = ping.tick() => {
+                    if let Some(host) = app.try_state::<McpHost>() {
+                        host.ping_once(&app).await;
+                    }
+                }
             }
         }
     });
@@ -1286,12 +1814,522 @@ fn is_transient_failure(error: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// configuration import / export
+// ---------------------------------------------------------------------------
+
+fn config_version() -> u32 {
+    1
+}
+
+fn default_enabled() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpConfigEntry {
+    pub name: String,
+    pub transport: String,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub env_keys: Vec<String>,
+    #[serde(default)]
+    pub header_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpConfigExport {
+    #[serde(default = "config_version")]
+    pub version: u32,
+    #[serde(default)]
+    pub exported_at: String,
+    #[serde(default)]
+    pub servers: Vec<McpConfigEntry>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpConfigChange {
+    pub name: String,
+    pub action: String,
+    pub changed_fields: Vec<String>,
+    pub env_keys: Vec<String>,
+    pub header_keys: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpConfigPreview {
+    pub created: usize,
+    pub updated: usize,
+    pub unchanged: usize,
+    pub servers: Vec<McpConfigChange>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpMissingSecrets {
+    pub name: String,
+    pub env_keys: Vec<String>,
+    pub header_keys: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpConfigImportSummary {
+    pub created: usize,
+    pub updated: usize,
+    pub unchanged: usize,
+    pub missing_secrets: Vec<McpMissingSecrets>,
+}
+
+struct ExistingServerConfig {
+    id: String,
+    transport: String,
+    command: Option<String>,
+    url: Option<String>,
+    args: Vec<String>,
+    enabled: bool,
+}
+
+fn existing_server(
+    database: &rusqlite::Connection,
+    name: &str,
+) -> Result<Option<ExistingServerConfig>, String> {
+    database
+        .query_row(
+            "SELECT id,transport,command,url,args_json,enabled FROM mcp_servers WHERE name=?1",
+            params![name],
+            |row| {
+                let args_json: String = row.get(4)?;
+                Ok(ExistingServerConfig {
+                    id: row.get(0)?,
+                    transport: row.get(1)?,
+                    command: row.get(2)?,
+                    url: row.get(3)?,
+                    args: serde_json::from_str(&args_json).unwrap_or_default(),
+                    enabled: row.get::<_, i64>(5)? != 0,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())
+}
+
+fn changed_fields(entry: &McpConfigEntry, existing: &ExistingServerConfig) -> Vec<String> {
+    let mut changed = Vec::new();
+    if entry.transport != existing.transport {
+        changed.push("transport".to_string());
+    }
+    if entry.command != existing.command {
+        changed.push("command".to_string());
+    }
+    if entry.url != existing.url {
+        changed.push("url".to_string());
+    }
+    if entry.args != existing.args {
+        changed.push("args".to_string());
+    }
+    if entry.enabled != existing.enabled {
+        changed.push("enabled".to_string());
+    }
+    changed
+}
+
+fn normalize_config(config: McpConfigExport) -> Result<Vec<McpConfigEntry>, String> {
+    if config.version != config_version() {
+        return Err(format!("unsupported MCP config version: {}", config.version));
+    }
+    if config.servers.is_empty() {
+        return Err("MCP config contains no servers".into());
+    }
+    let mut names = HashSet::new();
+    let mut entries = Vec::new();
+    for mut entry in config.servers {
+        entry.name = entry.name.trim().to_string();
+        entry.transport = entry.transport.to_ascii_lowercase();
+        entry.command = entry.command.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
+        entry.url = entry.url.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
+        entry.args = entry.args.into_iter().map(|value| value.trim().to_string()).filter(|value| !value.is_empty()).collect();
+        entry.env_keys.sort();
+        entry.env_keys.dedup();
+        entry.header_keys.sort();
+        entry.header_keys.dedup();
+        if entry.name.is_empty() {
+            return Err("MCP config entry has an empty name".into());
+        }
+        if !names.insert(entry.name.clone()) {
+            return Err(format!("duplicate MCP server name in config: {}", entry.name));
+        }
+        match entry.transport.as_str() {
+            "stdio" => {
+                if entry.command.as_deref().unwrap_or("").is_empty() {
+                    return Err(format!("stdio server '{}' is missing a command", entry.name));
+                }
+                entry.url = None;
+            }
+            "http" | "sse" => {
+                let url = entry.url.as_deref().unwrap_or("");
+                if url.is_empty() {
+                    return Err(format!("{} server '{}' is missing a URL", entry.transport, entry.name));
+                }
+                validate_url_for_config(url)?;
+                entry.command = None;
+            }
+            other => return Err(format!("unsupported MCP transport: {other}")),
+        }
+        entries.push(entry);
+    }
+    Ok(entries)
+}
+
+fn preview_config(
+    database: &rusqlite::Connection,
+    entries: &[McpConfigEntry],
+) -> Result<McpConfigPreview, String> {
+    let mut preview = McpConfigPreview {
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        servers: Vec::new(),
+    };
+    for entry in entries {
+        let existing = existing_server(database, &entry.name)?;
+        let (action, changed) = match existing {
+            None => {
+                preview.created += 1;
+                ("create", Vec::new())
+            }
+            Some(existing) => {
+                let changed = changed_fields(entry, &existing);
+                if changed.is_empty() {
+                    preview.unchanged += 1;
+                    ("unchanged", changed)
+                } else {
+                    preview.updated += 1;
+                    ("update", changed)
+                }
+            }
+        };
+        preview.servers.push(McpConfigChange {
+            name: entry.name.clone(),
+            action: action.to_string(),
+            changed_fields: changed,
+            env_keys: entry.env_keys.clone(),
+            header_keys: entry.header_keys.clone(),
+        });
+    }
+    Ok(preview)
+}
+
+fn apply_config(
+    database: &rusqlite::Connection,
+    entries: &[McpConfigEntry],
+) -> Result<McpConfigImportSummary, String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut summary = McpConfigImportSummary {
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        missing_secrets: Vec::new(),
+    };
+    for entry in entries {
+        let args_json = serde_json::to_string(&entry.args).map_err(|error| error.to_string())?;
+        match existing_server(database, &entry.name)? {
+            Some(existing) => {
+                let changed = changed_fields(entry, &existing);
+                if changed.is_empty() {
+                    summary.unchanged += 1;
+                } else {
+                    // Secrets are intentionally untouched: the exported file
+                    // only carries key names.
+                    database
+                        .execute(
+                            "UPDATE mcp_servers SET transport=?1, command=?2, url=?3, args_json=?4, enabled=?5, updated_at=?6 WHERE id=?7",
+                            params![
+                                entry.transport,
+                                entry.command,
+                                entry.url,
+                                args_json,
+                                entry.enabled as i64,
+                                now,
+                                existing.id
+                            ],
+                        )
+                        .map_err(|error| error.to_string())?;
+                    summary.updated += 1;
+                }
+            }
+            None => {
+                let id = format!("mcp-{}", uuid::Uuid::new_v4());
+                database
+                    .execute(
+                        "INSERT INTO mcp_servers(id,name,transport,command,url,args_json,env_json,headers_json,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                        params![
+                            id,
+                            entry.name,
+                            entry.transport,
+                            entry.command,
+                            entry.url,
+                            args_json,
+                            "{}",
+                            "{}",
+                            entry.enabled as i64,
+                            now,
+                            now
+                        ],
+                    )
+                    .map_err(|error| error.to_string())?;
+                summary.created += 1;
+                if !entry.env_keys.is_empty() || !entry.header_keys.is_empty() {
+                    summary.missing_secrets.push(McpMissingSecrets {
+                        name: entry.name.clone(),
+                        env_keys: entry.env_keys.clone(),
+                        header_keys: entry.header_keys.clone(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(summary)
+}
+
+fn read_config_entries(database: &rusqlite::Connection) -> Result<Vec<McpConfigEntry>, String> {
+    let mut statement = database
+        .prepare("SELECT id,name,transport,command,url,args_json,env_json,headers_json,enabled FROM mcp_servers ORDER BY name")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, i64>(8)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+    let mut entries = Vec::new();
+    for row in rows {
+        let (id, name, transport, command, url, args_json, env_json, headers_json, enabled) =
+            row.map_err(|error| error.to_string())?;
+        let mut env_keys: BTreeSet<String> = serde_json::from_str::<HashMap<String, String>>(&env_json)
+            .map(|values| values.into_keys().collect())
+            .unwrap_or_default();
+        let mut header_keys: BTreeSet<String> = serde_json::from_str::<HashMap<String, String>>(&headers_json)
+            .map(|values| values.into_keys().collect())
+            .unwrap_or_default();
+        // Migrated rows keep the keys in the OS keyring, not in SQLite.
+        if let Some((secret_env, secret_headers)) = crate::local_store::mcp_secrets(&id) {
+            env_keys.extend(secret_env.into_keys());
+            header_keys.extend(secret_headers.into_keys());
+        }
+        entries.push(McpConfigEntry {
+            name,
+            transport,
+            command,
+            url,
+            args: serde_json::from_str(&args_json).unwrap_or_default(),
+            enabled: enabled != 0,
+            env_keys: env_keys.into_iter().collect(),
+            header_keys: header_keys.into_iter().collect(),
+        });
+    }
+    Ok(entries)
+}
+
+// ---------------------------------------------------------------------------
+// diagnostics
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpDiagnosticStage {
+    pub name: String,
+    pub ok: bool,
+    pub duration_ms: u64,
+    pub count: Option<usize>,
+    pub detail: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpDiagnosticReport {
+    pub server_id: String,
+    pub ok: bool,
+    pub protocol_version: Option<String>,
+    pub server_name: Option<String>,
+    pub server_version: Option<String>,
+    pub total_ms: u64,
+    pub stages: Vec<McpDiagnosticStage>,
+}
+
+async fn diagnose_session(session: &Session) -> Vec<McpDiagnosticStage> {
+    const CHECKS: [(&str, &str, &str); 3] = [
+        ("tools", "tools/list", "tools"),
+        ("resources", "resources/list", "resources"),
+        ("prompts", "prompts/list", "prompts"),
+    ];
+    let mut stages = Vec::new();
+    for (name, method, key) in CHECKS {
+        let started = Instant::now();
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(15),
+            session.call(method, json!({}), None),
+        )
+        .await;
+        let duration_ms = started.elapsed().as_millis() as u64;
+        match outcome {
+            Ok(Ok(value)) => {
+                let count = value
+                    .get(key)
+                    .and_then(Value::as_array)
+                    .map(|items| items.len());
+                stages.push(McpDiagnosticStage {
+                    name: name.to_string(),
+                    ok: true,
+                    duration_ms,
+                    count,
+                    detail: None,
+                    error: None,
+                });
+            }
+            Ok(Err(error)) => stages.push(McpDiagnosticStage {
+                name: name.to_string(),
+                ok: false,
+                duration_ms,
+                count: None,
+                detail: None,
+                error: Some(error),
+            }),
+            Err(_) => stages.push(McpDiagnosticStage {
+                name: name.to_string(),
+                ok: false,
+                duration_ms,
+                count: None,
+                detail: None,
+                error: Some("diagnostic step timed out".into()),
+            }),
+        }
+    }
+    stages
+}
+
+// ---------------------------------------------------------------------------
 // Tauri commands
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn mcp_discover(app: tauri::AppHandle, server_id: String) -> Result<Value, String> {
+pub fn mcp_export_config(app: tauri::AppHandle) -> Result<McpConfigExport, String> {
+    let database = crate::local_store::connection(&app)?;
+    let servers = read_config_entries(&database)?;
+    Ok(McpConfigExport {
+        version: config_version(),
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        servers,
+    })
+}
+
+#[tauri::command]
+pub fn mcp_preview_config(
+    app: tauri::AppHandle,
+    config: McpConfigExport,
+) -> Result<McpConfigPreview, String> {
+    let entries = normalize_config(config)?;
+    let database = crate::local_store::connection(&app)?;
+    preview_config(&database, &entries)
+}
+
+#[tauri::command]
+pub fn mcp_import_config(
+    app: tauri::AppHandle,
+    config: McpConfigExport,
+) -> Result<McpConfigImportSummary, String> {
+    let entries = normalize_config(config)?;
+    let database = crate::local_store::connection(&app)?;
+    apply_config(&database, &entries)
+}
+
+#[tauri::command]
+pub async fn mcp_diagnose(
+    app: tauri::AppHandle,
+    server_id: String,
+) -> Result<McpDiagnosticReport, String> {
     let host = app.state::<McpHost>();
+    let started = Instant::now();
+    let mut report = McpDiagnosticReport {
+        server_id: server_id.clone(),
+        ok: false,
+        protocol_version: None,
+        server_name: None,
+        server_version: None,
+        total_ms: 0,
+        stages: Vec::new(),
+    };
+    let init_started = Instant::now();
+    let session = match host.ready(&app, &server_id).await {
+        Ok(session) => session,
+        Err(error) => {
+            report.stages.push(McpDiagnosticStage {
+                name: "initialize".into(),
+                ok: false,
+                duration_ms: init_started.elapsed().as_millis() as u64,
+                count: None,
+                detail: None,
+                error: Some(error),
+            });
+            report.total_ms = started.elapsed().as_millis() as u64;
+            return Ok(report);
+        }
+    };
+    if let Some(info) = session.info().await {
+        report.protocol_version = info
+            .get("protocolVersion")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        if let Some(server) = info.get("serverInfo") {
+            report.server_name = server.get("name").and_then(Value::as_str).map(str::to_string);
+            report.server_version = server
+                .get("version")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+        }
+    }
+    report.stages.push(McpDiagnosticStage {
+        name: "initialize".into(),
+        ok: true,
+        duration_ms: init_started.elapsed().as_millis() as u64,
+        count: None,
+        detail: report
+            .server_name
+            .clone()
+            .map(|name| match report.server_version.clone() {
+                Some(version) => format!("{name} {version}"),
+                None => name,
+            }),
+        error: None,
+    });
+    report.stages.extend(diagnose_session(&session).await);
+    report.ok = report.stages.iter().all(|stage| stage.ok);
+    report.total_ms = started.elapsed().as_millis() as u64;
+    Ok(report)
+}
+
+#[tauri::command]
+pub async fn mcp_discover(app: tauri::AppHandle, server_id: String) -> Result<Value, String> {    let host = app.state::<McpHost>();
     let session = host.ready(&app, &server_id).await?;
     session
         .info()
@@ -1304,8 +2342,11 @@ pub async fn mcp_list_tools(app: tauri::AppHandle, server_id: String) -> Result<
     let host = app.state::<McpHost>();
     let session = host.ready(&app, &server_id).await?;
     let mut value = session.call("tools/list", json!({}), None).await?;
+    let entries = capability_entries(&value, "tools");
+    let diff = record_capability(&app, &server_id, "tools", &entries);
     let cached = enrich_tools(&app, &server_id, &mut value);
     session.store_tools(cached);
+    attach_capability_diff(&mut value, &diff);
     Ok(value)
 }
 
@@ -1325,14 +2366,30 @@ pub async fn mcp_list_resources(
 ) -> Result<Value, String> {
     let host = app.state::<McpHost>();
     let session = host.ready(&app, &server_id).await?;
-    session.call("resources/list", json!({}), None).await
+    let mut value = session.call("resources/list", json!({}), None).await?;
+    let diff = record_capability(
+        &app,
+        &server_id,
+        "resources",
+        &capability_entries(&value, "resources"),
+    );
+    attach_capability_diff(&mut value, &diff);
+    Ok(value)
 }
 
 #[tauri::command]
 pub async fn mcp_list_prompts(app: tauri::AppHandle, server_id: String) -> Result<Value, String> {
     let host = app.state::<McpHost>();
     let session = host.ready(&app, &server_id).await?;
-    session.call("prompts/list", json!({}), None).await
+    let mut value = session.call("prompts/list", json!({}), None).await?;
+    let diff = record_capability(
+        &app,
+        &server_id,
+        "prompts",
+        &capability_entries(&value, "prompts"),
+    );
+    attach_capability_diff(&mut value, &diff);
+    Ok(value)
 }
 
 #[tauri::command]
@@ -1635,6 +2692,15 @@ mod tests {
     }
 
     #[test]
+    fn recovery_backoff_grows_and_caps() {
+        assert_eq!(recovery_delay_secs(1), 5);
+        assert_eq!(recovery_delay_secs(2), 10);
+        assert_eq!(recovery_delay_secs(3), 20);
+        assert_eq!(recovery_delay_secs(4), 40);
+        assert_eq!(recovery_delay_secs(99), 300);
+    }
+
+    #[test]
     fn disconnected_status_starts_clean() {
         let status = McpServerStatus::disconnected("mcp-1");
         assert!(!status.connected);
@@ -1820,6 +2886,442 @@ rl.on('line', line => {
         assert_eq!(second["count"], 2, "the same child must serve both calls");
         assert_eq!(second["inits"], 1, "initialize must happen once per session");
         session.shutdown();
+    }
+
+    /// Manual compatibility check against a public Streamable HTTP server:
+    /// `cargo test --lib smoke_real_deepwiki_http_server -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "requires network"]
+    async fn smoke_real_deepwiki_http_server() {
+        let config = ServerConfig {
+            transport: "http".into(),
+            url: Some("https://mcp.deepwiki.com/mcp".into()),
+            command: None,
+            args: Vec::new(),
+            env: HashMap::new(),
+            headers: HeaderMap::new(),
+        };
+        let session = Session::new(config, "deepwiki".into()).expect("deepwiki session");
+        let tools = tokio::time::timeout(
+            Duration::from_secs(60),
+            session.call("tools/list", json!({}), None),
+        )
+        .await
+        .expect("deepwiki tools/list timed out")
+        .expect("deepwiki tools/list failed");
+        let names: Vec<&str> = tools["tools"]
+            .as_array()
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(names.contains(&"read_wiki_structure"), "unexpected tools: {names:?}");
+        let result = tokio::time::timeout(
+            Duration::from_secs(60),
+            session.call(
+                "tools/call",
+                json!({"name": "read_wiki_structure", "arguments": {"repoName": "facebook/react"}}),
+                Some("read_wiki_structure"),
+            ),
+        )
+        .await
+        .expect("deepwiki tools/call timed out")
+        .expect("deepwiki tools/call failed");
+        assert!(
+            result["content"].as_array().is_some_and(|content| !content.is_empty()),
+            "unexpected tool result: {result}"
+        );
+        session.shutdown();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_resolves_bare_npx_to_a_cmd_shim() {
+        let available = std::process::Command::new("cmd.exe")
+            .arg("/C")
+            .arg("where")
+            .arg("npx")
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false);
+        if !available {
+            return;
+        }
+        let target = windows_shell_target("npx").expect("npx shim must be resolved");
+        let lower = target.to_ascii_lowercase();
+        assert!(lower.ends_with(".cmd") || lower.ends_with(".bat"));
+    }
+
+    /// Manual compatibility check against the real filesystem server:
+    /// `cargo test --lib smoke_real_filesystem_server -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "requires network and npx"]
+    async fn smoke_real_filesystem_server() {
+        let directory = std::env::temp_dir().join(format!("arcadia-mcp-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).expect("temp dir");
+        std::fs::write(directory.join("hello.txt"), "hi").expect("seed file");
+        let config = ServerConfig {
+            transport: "stdio".into(),
+            url: None,
+            command: Some("npx".into()),
+            args: vec![
+                "-y".into(),
+                "@modelcontextprotocol/server-filesystem".into(),
+                directory.display().to_string(),
+            ],
+            env: HashMap::new(),
+            headers: HeaderMap::new(),
+        };
+        let session = Session::new(config, "smoke".into()).expect("spawn npx server");
+        let tools = tokio::time::timeout(
+            Duration::from_secs(120),
+            session.call("tools/list", json!({}), None),
+        )
+        .await
+        .expect("tools/list timed out")
+        .expect("tools/list failed");
+        assert!(!tools["tools"].as_array().map(Vec::is_empty).unwrap_or(true));
+        let result = tokio::time::timeout(
+            Duration::from_secs(60),
+            session.call(
+                "tools/call",
+                json!({"name": "list_directory", "arguments": {"path": directory.display().to_string()}}),
+                Some("list_directory"),
+            ),
+        )
+        .await
+        .expect("tools/call timed out")
+        .expect("tools/call failed");
+        assert!(result.get("content").is_some());
+        session.shutdown();
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn sse_frames_are_split_and_multiline_data_is_joined() {
+        let mut buffer = String::from(
+            "event: endpoint\ndata: /messages?session=1\n\nevent: message\ndata: {\"a\":\ndata: 1}\n\npartial",
+        );
+        let events = drain_sse_events(&mut buffer);
+        assert_eq!(
+            events[0],
+            ("endpoint".to_string(), "/messages?session=1".to_string())
+        );
+        assert_eq!(events[1].0, "message");
+        assert_eq!(events[1].1, "{\"a\":\n1}");
+        assert_eq!(buffer, "partial");
+    }
+
+    #[test]
+    fn sse_endpoint_must_stay_on_the_stream_origin() {
+        assert!(resolve_sse_endpoint("https://example.com/sse", "/messages").is_ok());
+        assert!(resolve_sse_endpoint(
+            "https://example.com/sse",
+            "https://evil.example/messages"
+        )
+        .is_err());
+        assert!(resolve_sse_endpoint("https://example.com/sse", "javascript:alert(1)").is_err());
+    }
+
+    #[tokio::test]
+    async fn sse_transport_handshakes_and_receives_responses() {
+        use std::io::Write;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind sse mock");
+        let address = listener.local_addr().expect("sse address");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("stream connection");
+            let _ = read_http_request(&mut stream);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n",
+                )
+                .expect("stream headers");
+            stream
+                .write_all(b"event: endpoint\ndata: /messages?session=1\n\n")
+                .expect("endpoint event");
+            stream.flush().expect("flush endpoint");
+
+            let (mut initialize, _) = listener.accept().expect("initialize post");
+            let (_, body) = read_http_request(&mut initialize);
+            let request: Value = serde_json::from_str(&body).expect("initialize json");
+            initialize
+                .write_all(b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .expect("initialize ack");
+            let result = json!({
+                "jsonrpc": "2.0",
+                "id": request["id"].clone(),
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "serverInfo": {"name": "sse-mock", "version": "1.0.0"},
+                    "capabilities": {"tools": {}}
+                }
+            });
+            stream
+                .write_all(format!("event: message\ndata: {result}\n\n").as_bytes())
+                .expect("initialize response");
+            stream.flush().expect("flush initialize");
+
+            let (mut initialized, _) = listener.accept().expect("initialized notification");
+            let _ = read_http_request(&mut initialized);
+            initialized
+                .write_all(b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .expect("notification ack");
+
+            let (mut list, _) = listener.accept().expect("tools post");
+            let (_, body) = read_http_request(&mut list);
+            let request: Value = serde_json::from_str(&body).expect("tools json");
+            list.write_all(b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .expect("tools ack");
+            let result = json!({
+                "jsonrpc": "2.0",
+                "id": request["id"].clone(),
+                "result": {"tools": [{"name": "echo"}]}
+            });
+            stream
+                .write_all(format!("event: message\ndata: {result}\n\n").as_bytes())
+                .expect("tools response");
+            stream.flush().expect("flush tools");
+        });
+
+        let config = ServerConfig {
+            transport: "sse".into(),
+            url: Some(format!("http://{address}/sse")),
+            command: None,
+            args: Vec::new(),
+            env: HashMap::new(),
+            headers: HeaderMap::new(),
+        };
+        let session = Session::new(config, "sse-test".into()).expect("sse session");
+        let result = tokio::time::timeout(
+            Duration::from_secs(10),
+            session.call("tools/list", json!({}), None),
+        )
+        .await
+        .expect("sse call timed out")
+        .expect("sse tools");
+        assert_eq!(result["tools"][0]["name"], "echo");
+        session.shutdown();
+        server.join().expect("sse mock");
+    }
+
+    #[tokio::test]
+    async fn diagnostics_cover_initialize_tools_resources_and_prompts() {
+        use std::io::Write;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind diagnostics mock");
+        let address = listener.local_addr().expect("diagnostics address");
+        let server = std::thread::spawn(move || {
+            for _ in 0..5 {
+                let (mut stream, _) = listener.accept().expect("diagnostics accept");
+                let (_headers, body) = read_http_request(&mut stream);
+                let request: Value = serde_json::from_str(&body).expect("diagnostics json");
+                let method = request["method"].as_str().unwrap_or_default();
+                let id = request["id"].clone();
+                let (status, extra, response) = match method {
+                    "initialize" => (
+                        "200 OK",
+                        Some(("Mcp-Session-Id", "diag-session")),
+                        json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "protocolVersion": "2025-06-18",
+                                "serverInfo": {"name": "diag", "version": "1.2.3"},
+                                "capabilities": {"tools": {}, "resources": {}, "prompts": {}}
+                            }
+                        })
+                        .to_string(),
+                    ),
+                    "notifications/initialized" => ("202 Accepted", None, String::new()),
+                    "tools/list" => (
+                        "200 OK",
+                        None,
+                        json!({"jsonrpc": "2.0", "id": id, "result": {"tools": [{"name": "a"}, {"name": "b"}]}}).to_string(),
+                    ),
+                    "resources/list" => (
+                        "200 OK",
+                        None,
+                        json!({"jsonrpc": "2.0", "id": id, "result": {"resources": [{"uri": "file:///a"}]}}).to_string(),
+                    ),
+                    "prompts/list" => (
+                        "200 OK",
+                        None,
+                        json!({"jsonrpc": "2.0", "id": id, "result": {"prompts": []}}).to_string(),
+                    ),
+                    other => panic!("unexpected diagnostics method {other}"),
+                };
+                let mut response_text = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n",
+                    response.len()
+                );
+                if let Some((name, value)) = extra {
+                    response_text.push_str(&format!("{name}: {value}\r\n"));
+                }
+                response_text.push_str("\r\n");
+                response_text.push_str(&response);
+                stream
+                    .write_all(response_text.as_bytes())
+                    .expect("diagnostics response");
+            }
+        });
+
+        let config = ServerConfig {
+            transport: "http".into(),
+            url: Some(format!("http://{address}/mcp")),
+            command: None,
+            args: Vec::new(),
+            env: HashMap::new(),
+            headers: HeaderMap::new(),
+        };
+        let parsed = validate_url_for_config(config.url.as_deref().unwrap()).expect("diag url");
+        let transport = HttpTransport::new(&config, parsed).expect("diag transport");
+        let session = Session {
+            fingerprint: "diag".into(),
+            transport: Transport::Http(transport),
+            initialized: tokio::sync::Mutex::new(None),
+            tools: Mutex::new(None),
+            runtime: Mutex::new(RuntimeState::default()),
+        };
+        let stages = diagnose_session(&session).await;
+        assert_eq!(stages.len(), 3);
+        assert!(stages.iter().all(|stage| stage.ok));
+        assert_eq!(stages[0].count, Some(2));
+        assert_eq!(stages[1].count, Some(1));
+        assert_eq!(stages[2].count, Some(0));
+        server.join().expect("diagnostics mock");
+    }
+
+    #[test]
+    fn capability_diff_reports_added_removed_and_changed() {
+        let entry = |name: &str, digest: &str| CapabilityEntry {
+            name: name.into(),
+            digest: digest.into(),
+        };
+        let previous = vec![entry("a", "1"), entry("b", "1"), entry("c", "1")];
+        let current = vec![entry("a", "2"), entry("b", "1"), entry("d", "1")];
+        let diff = diff_capabilities(&previous, &current);
+        assert_eq!(diff.added, vec!["d"]);
+        assert_eq!(diff.removed, vec!["c"]);
+        assert_eq!(diff.changed, vec!["a"]);
+        assert!(!diff.first_seen);
+        let first = diff_capabilities(&[], &current);
+        assert!(first.first_seen);
+        assert_eq!(first.added, vec!["a", "b", "d"]);
+        assert!(diff_capabilities(&previous, &previous).added.is_empty());
+    }
+
+    #[test]
+    fn capability_entries_use_uri_or_name_and_stable_digests() {
+        let value = json!({
+            "tools": [{"name": "search", "description": "one"}],
+            "resources": [{"uri": "file:///a", "name": "a"}],
+        });
+        let tools = capability_entries(&value, "tools");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "search");
+        assert_eq!(tools[0].digest, value_digest(&json!({"name": "search", "description": "one"})));
+        let resources = capability_entries(&value, "resources");
+        assert_eq!(resources[0].name, "file:///a");
+        assert!(capability_entries(&value, "prompts").is_empty());
+    }
+
+    #[test]
+    fn config_import_preview_and_apply_preserve_secrets() {
+        let database = rusqlite::Connection::open_in_memory().expect("memory db");
+        database
+            .execute_batch(
+                "CREATE TABLE mcp_servers (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, transport TEXT NOT NULL,
+                    command TEXT, url TEXT, args_json TEXT NOT NULL DEFAULT '[]',
+                    env_json TEXT NOT NULL DEFAULT '{}', headers_json TEXT NOT NULL DEFAULT '{}',
+                    enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );",
+            )
+            .expect("schema");
+        database
+            .execute(
+                "INSERT INTO mcp_servers VALUES(?1,'local','stdio','node',NULL,'[]','{\"TOKEN\":\"secret\"}','{}',1,'t','t')",
+                params![format!("cfg-{}", uuid::Uuid::new_v4())],
+            )
+            .expect("seed");
+
+        let exported = read_config_entries(&database).expect("export");
+        assert_eq!(exported.len(), 1);
+        assert_eq!(exported[0].env_keys, vec!["TOKEN".to_string()]);
+
+        let update = McpConfigEntry {
+            name: "local".into(),
+            transport: "stdio".into(),
+            command: Some("node".into()),
+            url: None,
+            args: vec!["server.js".into()],
+            enabled: false,
+            env_keys: vec!["TOKEN".into()],
+            header_keys: Vec::new(),
+        };
+        let create = McpConfigEntry {
+            name: "remote".into(),
+            transport: "http".into(),
+            command: None,
+            url: Some("https://example.com/mcp".into()),
+            args: Vec::new(),
+            enabled: true,
+            env_keys: vec!["API_KEY".into()],
+            header_keys: Vec::new(),
+        };
+        let preview = preview_config(&database, &[update.clone(), create.clone()]).expect("preview");
+        assert_eq!((preview.created, preview.updated, preview.unchanged), (1, 1, 0));
+        assert_eq!(preview.servers[0].changed_fields, vec!["args", "enabled"]);
+
+        let summary = apply_config(&database, &[update, create]).expect("apply");
+        assert_eq!((summary.created, summary.updated, summary.unchanged), (1, 1, 0));
+        assert_eq!(summary.missing_secrets[0].name, "remote");
+
+        let env_json: String = database
+            .query_row("SELECT env_json FROM mcp_servers WHERE name='local'", [], |row| row.get(0))
+            .expect("existing env");
+        assert_eq!(env_json, r#"{"TOKEN":"secret"}"#);
+        let new_env: String = database
+            .query_row("SELECT env_json FROM mcp_servers WHERE name='remote'", [], |row| row.get(0))
+            .expect("new env");
+        assert_eq!(new_env, "{}");
+        let enabled: i64 = database
+            .query_row("SELECT enabled FROM mcp_servers WHERE name='local'", [], |row| row.get(0))
+            .expect("enabled");
+        assert_eq!(enabled, 0);
+    }
+
+    #[test]
+    fn config_normalization_rejects_invalid_entries() {
+        let entry = |name: &str| McpConfigEntry {
+            name: name.into(),
+            transport: "http".into(),
+            command: None,
+            url: Some("https://example.com/mcp".into()),
+            args: Vec::new(),
+            enabled: true,
+            env_keys: Vec::new(),
+            header_keys: Vec::new(),
+        };
+        let config = |version: u32, servers: Vec<McpConfigEntry>| McpConfigExport {
+            version,
+            exported_at: String::new(),
+            servers,
+        };
+        assert!(normalize_config(config(2, vec![entry("a")])).is_err());
+        assert!(normalize_config(config(1, Vec::new())).is_err());
+        assert!(normalize_config(config(1, vec![entry("a"), entry("a")])).is_err());
+        let mut private = entry("private");
+        private.url = Some("https://10.0.0.5/mcp".into());
+        assert!(normalize_config(config(1, vec![private])).is_err());
+        let mut missing_url = entry("missing");
+        missing_url.url = None;
+        assert!(normalize_config(config(1, vec![missing_url])).is_err());
+        assert!(normalize_config(config(1, vec![entry("ok")])).is_ok());
     }
 
     fn read_http_request(stream: &mut std::net::TcpStream) -> (HashMap<String, String>, String) {

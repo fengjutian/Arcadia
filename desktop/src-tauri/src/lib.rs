@@ -2142,15 +2142,10 @@ pub fn run() {
                 let supervisor = std::sync::Arc::new(rag::indexer::RagSupervisor::new());
                 supervisor.spawn(database_arc.clone(), provider_ids);
 
-                // Agent supervisor — same shared connection; the supervisor
-                // runs `agent_runs` rows through the state machine and
-                // renews leases. The tool registry is a one-time build.
-                let registry =
-                    std::sync::Arc::new(agent::runtime::registry_with_basics(app.handle().clone()));
-                let agent_supervisor = std::sync::Arc::new(
-                    agent::supervisor::AgentSupervisor::new(database_arc.clone(), registry),
-                );
-                agent_supervisor.spawn();
+                // The backend-driven agent supervisor is intentionally not
+                // started: the product agent runs in the frontend over
+                // `local_record_agent_run` / `local_update_agent_run_status`.
+                // Its modules stay available for a future backend agent.
             }
             Ok(())
         })
@@ -2287,6 +2282,10 @@ pub fn run() {
             local_store::local_list_mcp_servers,
             local_store::local_delete_mcp_server,
             mcp::mcp_discover,
+            mcp::mcp_diagnose,
+            mcp::mcp_export_config,
+            mcp::mcp_preview_config,
+            mcp::mcp_import_config,
             mcp::mcp_list_tools,
             mcp::mcp_list_resources,
             mcp::mcp_list_prompts,
@@ -2323,20 +2322,6 @@ pub fn run() {
             rag::extras::rag_sync_extras,
             assistant_tasks::assistant_task_start,
             assistant_tasks::assistant_task_get,
-            agent::commands::agent_recover_interrupted,
-            agent::commands::agent_start,
-            agent::commands::agent_pause,
-            agent::commands::agent_resume,
-            agent::commands::agent_cancel,
-            agent::commands::agent_get_run,
-            agent::commands::agent_record_step,
-            agent::commands::agent_request_approval,
-            agent::commands::agent_approve,
-            agent::commands::agent_deny,
-            agent::commands::agent_verify_approval,
-            agent::commands::agent_save_checkpoint,
-            agent::commands::agent_latest_checkpoint,
-            agent::commands::agent_mark_unknown_runs,
             agent::security_commands::agent_detect_injection,
             agent::security_commands::agent_validate_mcp_url,
             privacy::commands::privacy_list_blocklists,

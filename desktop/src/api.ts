@@ -479,6 +479,90 @@ export async function revokeMcpToolGrant(serverId: string, toolName: string): Pr
   await invoke('mcp_revoke_tool_grant', { serverId, toolName })
 }
 
+export interface McpConfigEntry {
+  name: string
+  transport: McpTransport
+  command?: string
+  url?: string
+  args: string[]
+  enabled: boolean
+  envKeys: string[]
+  headerKeys: string[]
+}
+
+export interface McpConfigExport {
+  version: number
+  exportedAt?: string
+  servers: McpConfigEntry[]
+}
+
+export interface McpConfigChange {
+  name: string
+  action: 'create' | 'update' | 'unchanged'
+  changedFields: string[]
+  envKeys: string[]
+  headerKeys: string[]
+}
+
+export interface McpConfigPreview {
+  created: number
+  updated: number
+  unchanged: number
+  servers: McpConfigChange[]
+}
+
+export interface McpImportSummary {
+  created: number
+  updated: number
+  unchanged: number
+  missingSecrets: Array<{ name: string; envKeys: string[]; headerKeys: string[] }>
+}
+
+export async function exportMcpConfig(): Promise<McpConfigExport> {
+  if (!isTauri()) throw new Error('MCP requires the desktop app')
+  return invoke<McpConfigExport>('mcp_export_config')
+}
+
+export async function previewMcpConfig(config: McpConfigExport): Promise<McpConfigPreview> {
+  if (!isTauri()) throw new Error('MCP requires the desktop app')
+  return invoke<McpConfigPreview>('mcp_preview_config', { config })
+}
+
+export async function importMcpConfig(config: McpConfigExport): Promise<McpImportSummary> {
+  if (!isTauri()) throw new Error('MCP requires the desktop app')
+  return invoke<McpImportSummary>('mcp_import_config', { config })
+}
+
+export interface McpDiagnosticStage {  name: string
+  ok: boolean
+  durationMs: number
+  count?: number
+  detail?: string
+  error?: string
+}
+
+export interface McpDiagnosticReport {
+  serverId: string
+  ok: boolean
+  protocolVersion?: string
+  serverName?: string
+  serverVersion?: string
+  totalMs: number
+  stages: McpDiagnosticStage[]
+}
+
+export interface McpCapabilityDiff {
+  added: string[]
+  removed: string[]
+  changed: string[]
+  firstSeen: boolean
+}
+
+export async function diagnoseMcpServer(serverId: string): Promise<McpDiagnosticReport> {
+  if (!isTauri()) throw new Error('MCP requires the desktop app')
+  return invoke<McpDiagnosticReport>('mcp_diagnose', { serverId })
+}
+
 export async function disconnectMcpServer(serverId: string): Promise<void> {
   if (!isTauri()) return
   await invoke('mcp_disconnect', { serverId })
@@ -1348,83 +1432,7 @@ export async function siteBlacklistSummary(): Promise<SiteBlacklistSummary> {
 
 // ---------------------------------------------------------------------------
 // Agent API surface.
+//
+// The backend-driven agent supervisor is not started; the product research
+// agent runs in the frontend via the local_record_agent_run family above.
 // ---------------------------------------------------------------------------
-
-export interface AgentRunMeta {
-  id: string
-  title: string
-  objective: string
-  providerId: string
-  model: string
-  status: string
-  currentStep: number
-  maxSteps: number
-  maxToolCalls: number
-  finalAnswer?: string | null
-  lastError?: string | null
-  createdAt: number
-  startedAt: number
-  finishedAt?: number | null
-}
-
-export interface AgentBudgetLimits {
-  maxSteps: number
-  maxToolCalls: number
-  maxModelCalls: number
-  maxPromptTokens: number
-  maxCompletionTokens: number
-  maxCostMicros: number
-  deadlineUnixSeconds?: number | null
-}
-
-export async function agentStart(
-  title: string,
-  objective: string,
-  providerId: string,
-  model: string,
-  limits: AgentBudgetLimits,
-): Promise<string> {
-  if (!isTauri()) return ''
-  return invoke<string>('agent_start', {
-    title,
-    objective,
-    providerId,
-    model,
-    limits,
-  })
-}
-
-export async function agentPause(runId: string): Promise<void> {
-  if (!isTauri()) return
-  await invoke('agent_pause', { runId })
-}
-
-export async function agentResume(runId: string): Promise<void> {
-  if (!isTauri()) return
-  await invoke('agent_resume', { runId })
-}
-
-export async function agentCancel(runId: string): Promise<void> {
-  if (!isTauri()) return
-  await invoke('agent_cancel', { runId })
-}
-
-export async function agentGetRun(runId: string): Promise<AgentRunMeta | null> {
-  if (!isTauri()) return null
-  return invoke<AgentRunMeta | null>('agent_get_run', { runId })
-}
-
-export async function agentApprove(approvalId: string): Promise<void> {
-  if (!isTauri()) return
-  await invoke('agent_approve', { approvalId })
-}
-
-export async function agentDeny(approvalId: string): Promise<void> {
-  if (!isTauri()) return
-  await invoke('agent_deny', { approvalId })
-}
-
-export async function agentRecoverInterrupted(): Promise<number> {
-  if (!isTauri()) return 0
-  return invoke<number>('agent_recover_interrupted')
-}

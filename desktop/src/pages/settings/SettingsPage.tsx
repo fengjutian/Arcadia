@@ -44,6 +44,7 @@ import { deleteWorkspace, listWorkspaces, saveWorkspace, validateWorkspaceDescri
 import { getWorkspace } from '../../services/workspaces'
 import { addSearchAlias, deleteSearchAlias, getSearchIndexStatus, listSearchAliases, rebuildSearchIndex, type SearchAlias, type SearchIndexStatus } from '../../api'
 import { DEFAULT_BROWSER_APPEARANCE, readBrowserAppearance, writeBrowserAppearance, type BrowserAppearanceSettings, type OptionalToolbarItem } from '../../features/settings/browserAppearance'
+import { readShellSettings, SHELL_SETTINGS_EVENT, writeShellSettings, type ShellSettings } from '../../features/settings/shell'
 import { readDownloadSettings, writeDownloadSettings, type DownloadSettings } from '../../features/settings/downloadSettings'
 import { getDefaultDownloadDirectory } from '../../services/downloads'
 import { resetBrowserPreferences } from '../../features/settings/resetSettings'
@@ -125,6 +126,7 @@ function GeneralSettings() {
   const [bingHistory, setBingHistory] = useState<BingDailyImage[]>(readBingDailyHistory)
   const [bingLoading, setBingLoading] = useState(false)
   const [bingDailyRefresh, setBingDailyRefresh] = useState(readBingDailyRefresh)
+  const [shell, setShell] = useState<ShellSettings>(readShellSettings)
 
   useEffect(() => {
     if (themeKind !== 'image') return
@@ -133,6 +135,20 @@ function GeneralSettings() {
       setBingHistory(readBingDailyHistory())
     })
   }, [themeKind])
+
+  // The rail is toggled from the title bar too, and "重置设置" rewrites the
+  // stored value, so mirror the event instead of trusting local state.
+  useEffect(() => {
+    const onShellChange = (event: Event) => {
+      setShell((event as CustomEvent<ShellSettings>).detail ?? readShellSettings())
+    }
+    window.addEventListener(SHELL_SETTINGS_EVENT, onShellChange)
+    return () => window.removeEventListener(SHELL_SETTINGS_EVENT, onShellChange)
+  }, [])
+
+  function changeSidebarVisible(value: boolean) {
+    setShell(writeShellSettings({ ...shell, sidebarVisible: value }))
+  }
 
   function changeTheme(next: string | number) {
     const preference = next as ThemePreference
@@ -299,6 +315,16 @@ function GeneralSettings() {
         <aside><i/><i className="is-active"/><i/><i/></aside>
         <main><strong>{themeKind === 'image' ? selectedImageLabel : selected.label}</strong><small>{themeKind === 'image' ?t("图像主题已应用到浏览器标签区和新标签页"):selected.description}</small><div><span/><span/><span/></div></main>
       </div>
+    </div>
+  </Card>
+  <Card title={t("界面布局")} className="settings-card shell-layout-settings">
+    <Typography.Paragraph type="secondary">{t("控制应用外框的组成部分。更改会立即生效，并自动保存。")}</Typography.Paragraph>
+    <div className="advanced-setting-row">
+      <div>
+        <Typography.Text strong>{t("显示侧边栏")}</Typography.Text>
+        <Typography.Paragraph type="secondary">{t("关闭后隐藏左侧导航栏，为页面留出更多宽度；需要时可从标题栏左侧的按钮重新打开。")}</Typography.Paragraph>
+      </div>
+      <Switch checked={shell.sidebarVisible} aria-label={t("显示侧边栏")} onChange={changeSidebarVisible}/>
     </div>
   </Card>
   </>
@@ -762,7 +788,7 @@ function ResetSettingsPanel() {
   }
 
   return <>{contextHolder}<Card title={t("重置设置")} className="settings-card reset-settings-card">
-    <div className="reset-settings-hero"><ReloadOutlined/><div><Typography.Title level={4}>{t("将设置还原为默认值")}</Typography.Title><Typography.Paragraph type="secondary">{t("恢复外观、工具栏、缩放、下载、字体、搜索引擎、快捷键、系统和性能及内置插件设置。")}</Typography.Paragraph></div></div>
+    <div className="reset-settings-hero"><ReloadOutlined/><div><Typography.Title level={4}>{t("将设置还原为默认值")}</Typography.Title><Typography.Paragraph type="secondary">{t("恢复外观、界面布局、工具栏、缩放、下载、字体、搜索引擎、快捷键、系统和性能及内置插件设置。")}</Typography.Paragraph></div></div>
     <Alert type="info" showIcon message={t("你的个人数据不会被删除")} description={t("书签、浏览历史、下载文件、知识库文档、笔记、工作区、已保存密码、AI Provider 和 MCP 配置都会保留。")}/>
     <div className="reset-settings-actions">
       <Popconfirm title={t("将所有设置恢复为默认值？")} description={t("偏好设置将立即重置，此操作不会删除个人数据。")} okText={t("确认重置")} cancelText={t("取消")} okButtonProps={{danger:true}} onConfirm={()=>void resetSettings()}>

@@ -1,5 +1,6 @@
 import { DEFAULT_ADVANCED_SETTINGS, writeAdvancedSettings } from './advanced'
 import { DEFAULT_BROWSER_APPEARANCE, writeBrowserAppearance } from './browserAppearance'
+import { DEFAULT_SHELL_SETTINGS, writeShellSettings } from './shell'
 import { DEFAULT_DOWNLOAD_SETTINGS, writeDownloadSettings } from './downloadSettings'
 import { DEFAULT_TYPOGRAPHY_SETTINGS, writeTypographySettings } from './typography'
 import { writeThemePreference } from './theme'
@@ -19,6 +20,7 @@ export function resetBrowserPreferences(): void {
   writeThemeKind('color')
   writeBingDailyRefresh(true)
   writeBrowserAppearance(DEFAULT_BROWSER_APPEARANCE)
+  writeShellSettings(DEFAULT_SHELL_SETTINGS)
   writeDownloadSettings(DEFAULT_DOWNLOAD_SETTINGS)
   writeAdvancedSettings(DEFAULT_ADVANCED_SETTINGS)
   writeTypographySettings(DEFAULT_TYPOGRAPHY_SETTINGS)

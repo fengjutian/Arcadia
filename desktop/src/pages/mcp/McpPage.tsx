@@ -1,10 +1,12 @@
 import { t } from '../../i18n'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import {
   Boxes,
   ChevronRight,
+  Copy,
   Database,
+  Download,
   History,
   MessageSquare,
   Pencil,
@@ -15,32 +17,45 @@ import {
   Server,
   Store,
   Trash2,
+  Upload,
   Wrench,
 } from 'lucide-react'
 import {
   callMcpTool,
   clearMcpAudit,
   deleteMcpServer,
+  diagnoseMcpServer,
   discoverMcpServer,
   disconnectMcpServer,
+  exportMcpConfig,
   getMcpPrompt,
   getMcpServerStatus,
+  importMcpConfig,
   listMcpAudit,
   listMcpPrompts,
   listMcpResources,
   listMcpServers,
   listMcpTools,
   pingMcpServer,
+  previewMcpConfig,
   readMcpResource,
   revokeMcpToolGrant,
   saveMcpServer,
   type McpAuditEntry,
+  type McpCapabilityDiff,
+  type McpConfigExport,
+  type McpConfigPreview,
+  type McpDiagnosticReport,
+  type McpImportSummary,
   type McpServer,
   type McpServerStatus,
   type McpTransport,
 } from '../../api'
 import { Alert, Button, Card, Drawer, Input, Modal, Popconfirm, Segmented, Spin, Switch, Tag, Typography, message } from '../../components/ui'
 import { formatStringMap, parseArguments, parseStringMap } from '../../features/mcp/config'
+import { initialArguments, validateArguments, type ArgumentIssue } from '../../features/mcp/schema'
+import { ToolArgumentsEditor } from '../../features/mcp/ToolArgumentsEditor'
+import { ToolResultView } from '../../features/mcp/ToolResultView'
 import { SkillHubPage } from '../skillhub/SkillHubPage'
 
 type McpTool = { name: string; description?: string; inputSchema?: unknown; arcadiaRisk?: string; arcadiaGranted?: boolean }
@@ -71,6 +86,50 @@ function riskLabel(risk?: string): string {
   }
 }
 
+function configFieldLabel(field: string): string {
+  switch (field) {
+    case 'transport': return t("传输方式")
+    case 'command': return t("启动命令")
+    case 'url': return t("服务地址")
+    case 'args': return t("参数")
+    case 'enabled': return t("启用")
+    default: return field
+  }
+}
+
+function capabilityKindLabel(kind: string): string {
+  switch (kind) {
+    case 'tools': return t("工具")
+    case 'resources': return t("资源")
+    case 'prompts': return t("提示词")
+    default: return kind
+  }
+}
+
+function diagnosticStageLabel(name: string): string {
+  switch (name) {
+    case 'initialize': return t("初始化")
+    case 'tools': return t("工具")
+    case 'resources': return t("资源")
+    case 'prompts': return t("提示词")
+    default: return name
+  }
+}
+
+function argumentIssueMessage(issue: ArgumentIssue): string {
+  switch (issue.reason) {
+    case 'required': return t("字段 {value0} 为必填项",{value0:issue.field})
+    case 'string': return t("字段 {value0} 必须是字符串",{value0:issue.field})
+    case 'number': return t("字段 {value0} 必须是数字",{value0:issue.field})
+    case 'integer': return t("字段 {value0} 必须是整数",{value0:issue.field})
+    case 'boolean': return t("字段 {value0} 必须是布尔值",{value0:issue.field})
+    case 'array': return t("字段 {value0} 必须是数组",{value0:issue.field})
+    case 'object': return t("字段 {value0} 必须是对象",{value0:issue.field})
+    case 'enum': return t("字段 {value0} 的值不在允许范围内",{value0:issue.field})
+    default: return issue.field
+  }
+}
+
 export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [messageApi, contextHolder] = message.useMessage()
   const [servers, setServers] = useState<McpServer[]>([])
@@ -79,7 +138,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [tools, setTools] = useState<McpTool[]>([])
   const [resources, setResources] = useState<McpResource[]>([])
   const [prompts, setPrompts] = useState<McpPrompt[]>([])
-  const [toolArgs, setToolArgs] = useState<Record<string, string>>({})
+  const [toolArgs, setToolArgs] = useState<Record<string, Record<string, unknown>>>({})
   const [result, setResult] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -97,6 +156,18 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [auditOpen, setAuditOpen] = useState(false)
   const [auditBusy, setAuditBusy] = useState(false)
   const [auditEntries, setAuditEntries] = useState<McpAuditEntry[]>([])
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportJson, setExportJson] = useState('')
+  const [importOpen, setImportOpen] = useState(false)
+  const [importConfig, setImportConfig] = useState<McpConfigExport>()
+  const [importPreview, setImportPreview] = useState<McpConfigPreview>()
+  const [importResult, setImportResult] = useState<McpImportSummary | null>(null)
+  const [importBusy, setImportBusy] = useState(false)
+  const [diagnoseOpen, setDiagnoseOpen] = useState(false)
+  const [diagnoseBusy, setDiagnoseBusy] = useState(false)
+  const [diagnostic, setDiagnostic] = useState<McpDiagnosticReport>()
+  const [capabilityNotice, setCapabilityNotice] = useState<Array<{ kind: 'tools' | 'resources' | 'prompts'; diff: McpCapabilityDiff }>>()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selected = useMemo(() => servers.find(server => server.id === selectedId), [selectedId, servers])
   const status = selectedId ? statuses[selectedId] ?? EMPTY_STATUS : EMPTY_STATUS
@@ -138,6 +209,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     setResources([])
     setPrompts([])
     setResult(undefined)
+    setCapabilityNotice(undefined)
   }
 
   function selectServer(id: string) {
@@ -158,9 +230,25 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
         listMcpResources(server.id),
         listMcpPrompts(server.id),
       ])
-      if (toolResponse.status === 'fulfilled') setTools((toolResponse.value as { tools?: McpTool[] }).tools ?? [])
+      if (toolResponse.status === 'fulfilled') {
+        const list = (toolResponse.value as { tools?: McpTool[] }).tools ?? []
+        setTools(list)
+        setToolArgs(Object.fromEntries(list.map(tool => [tool.name, initialArguments(tool.inputSchema)])))
+      }
       if (resourceResponse.status === 'fulfilled') setResources((resourceResponse.value as { resources?: McpResource[] }).resources ?? [])
       if (promptResponse.status === 'fulfilled') setPrompts((promptResponse.value as { prompts?: McpPrompt[] }).prompts ?? [])
+      const notices: Array<{ kind: 'tools' | 'resources' | 'prompts'; diff: McpCapabilityDiff }> = []
+      const collect = (kind: 'tools' | 'resources' | 'prompts', result: PromiseSettledResult<unknown>) => {
+        if (result.status !== 'fulfilled') return
+        const diff = (result.value as { arcadiaCapabilityDiff?: McpCapabilityDiff }).arcadiaCapabilityDiff
+        if (!diff || diff.firstSeen) return
+        if (diff.added.length + diff.removed.length + diff.changed.length === 0) return
+        notices.push({ kind, diff })
+      }
+      collect('tools', toolResponse)
+      collect('resources', resourceResponse)
+      collect('prompts', promptResponse)
+      setCapabilityNotice(notices.length > 0 ? notices : undefined)
       const nextStatus = await getMcpServerStatus(server.id).catch(() => ({ ...EMPTY_STATUS, serverId: server.id }))
       setStatuses(current => ({ ...current, [server.id]: nextStatus }))
       messageApi.success(t("已连接 {value0}",{value0:server.name}))
@@ -186,11 +274,12 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
 
   async function invoke(tool: McpTool) {
     if (!selected) return
-    let parsed: Record<string, unknown>
-    try {
-      parsed = JSON.parse(toolArgs[tool.name] || '{}') as Record<string, unknown>
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error()
-    } catch { messageApi.error(t("工具参数必须是 JSON 对象"));return}
+    const parsed = toolArgs[tool.name] ?? initialArguments(tool.inputSchema)
+    const issues = validateArguments(tool.inputSchema, parsed)
+    if (issues.length > 0) {
+      messageApi.error(t("参数校验失败：{value0}",{value0:issues.map(argumentIssueMessage).join("；")}))
+      return
+    }
     const risk = tool.arcadiaRisk ?? 'R2'
     if (risk !== 'R0' && !tool.arcadiaGranted) {
       const prompt = risk === 'R3'
@@ -337,6 +426,80 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     } catch (error) { messageApi.error(String(error)) }
   }
 
+  async function exportConfig() {
+    setBusy(true)
+    try {
+      const config = await exportMcpConfig()
+      setExportJson(JSON.stringify(config, null, 2))
+      setExportOpen(true)
+    } catch (error) {
+      messageApi.error(t("导出失败：{value0}",{value0:String(error)}))
+    } finally { setBusy(false) }
+  }
+
+  async function copyExport() {
+    try {
+      await navigator.clipboard.writeText(exportJson)
+      messageApi.success(t("已复制到剪贴板"))
+    } catch { messageApi.error(t("复制失败，请手动选择文本")) }
+  }
+
+  function downloadExport() {
+    const blob = new Blob([exportJson], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'arcadia-mcp-config.json'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const parsed: unknown = JSON.parse(await file.text())
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(t("配置文件格式不正确"))
+      const preview = await previewMcpConfig(parsed as McpConfigExport)
+      setImportConfig(parsed as McpConfigExport)
+      setImportPreview(preview)
+      setImportOpen(true)
+    } catch (error) {
+      messageApi.error(t("导入失败：{value0}",{value0:String(error)}))
+    }
+  }
+
+  async function confirmImport() {
+    if (!importConfig) return
+    setImportBusy(true)
+    try {
+      const summary = await importMcpConfig(importConfig)
+      setImportOpen(false)
+      setImportConfig(undefined)
+      setImportPreview(undefined)
+      setImportResult(summary.missingSecrets.length > 0 ? summary : null)
+      messageApi.success(t("导入完成：新建 {value0}，更新 {value1}",{value0:String(summary.created),value1:String(summary.updated)}))
+      await reload()
+    } catch (error) {
+      messageApi.error(t("导入失败：{value0}",{value0:String(error)}))
+    } finally { setImportBusy(false) }
+  }
+
+  async function runDiagnose(server: McpServer) {
+    setDiagnoseOpen(true)
+    setDiagnoseBusy(true)
+    setDiagnostic(undefined)
+    try {
+      setDiagnostic(await diagnoseMcpServer(server.id))
+    } catch (error) {
+      messageApi.error(t("诊断失败：{value0}",{value0:String(error)}))
+      setDiagnoseOpen(false)
+    } finally { setDiagnoseBusy(false) }
+  }
+
   const connected = status.connected
   const statusLabel = !selected?.enabled ? t("已停用") : connected ? t("已连接") : t("未连接")
 
@@ -344,7 +507,12 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     {contextHolder}
     <header className="mcp-page__header">
       <div><span className="eyebrow">MODEL CONTEXT PROTOCOL</span><Typography.Title level={1}>{t("MCP 工作台")}</Typography.Title><Typography.Text type="secondary">{t("连接外部工具与数据源，每次工具调用都需要你的明确授权。")}</Typography.Text></div>
-      {section === 'servers' && <Button type="primary" icon={<Plus size={16}/>} onClick={openAdd}>{t("添加 Server")}</Button>}
+      {section === 'servers' && <div className="mcp-page__header-actions">
+        <Button icon={<Download size={15}/>} onClick={()=>void exportConfig()}>{t("导出")}</Button>
+        <Button icon={<Upload size={15}/>} onClick={()=>fileInputRef.current?.click()}>{t("导入")}</Button>
+        <Button type="primary" icon={<Plus size={16}/>} onClick={openAdd}>{t("添加 Server")}</Button>
+        <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={event=>void handleImportFile(event)}/>
+      </div>}
     </header>
 
     <nav className="mcp-section-nav" aria-label={t("MCP 工作台功能")}>
@@ -379,6 +547,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
               <Button size="small" icon={<Pencil size={14}/>} onClick={()=>openEdit(selected)}>{t("编辑")}</Button>
               <Popconfirm title={t("删除这个 MCP Server？")} onConfirm={()=>void removeServer(selected)}><Button size="small" danger icon={<Trash2 size={14}/>}>{t("删除")}</Button></Popconfirm>
               <Button size="small" icon={<History size={14}/>} onClick={()=>void openAudit()}>{t("审计")}</Button>
+              <Button size="small" loading={diagnoseBusy} onClick={()=>void runDiagnose(selected)}>{t("诊断")}</Button>
               {connected
                 ? <>
                     <Button size="small" loading={busy} onClick={()=>void ping(selected)}>{t("检测")}</Button>
@@ -388,18 +557,22 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
             </div>
           </div>
           {!connected && status.lastError && <Alert type="error" showIcon message={t("最近一次连接错误")} description={status.lastError}/>}
+          {capabilityNotice && <Alert type="warning" showIcon closable message={t("服务能力已变化")} description={<ul className="mcp-capability-changes">{capabilityNotice.map(item => <li key={item.kind}>{t("{value0}：新增 {value1}、移除 {value2}、变更 {value3}",{value0:capabilityKindLabel(item.kind),value1:String(item.diff.added.length),value2:String(item.diff.removed.length),value3:String(item.diff.changed.length)})}</li>)}</ul>}/>}
           <Alert type="info" showIcon message={t("安全调用")} description={t("工具名称、参数会在执行前展示。只有确认后，Arcadia 才会发送本次调用。")}/>
           {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("正在发现服务能力…")}</span></div>:<div className="mcp-capabilities">
             <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("工具")}</span><Tag>{tools.length}</Tag></div>
-              {tools.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回工具") : t("连接 Server 后显示工具")}</div>:tools.map(tool=><Card key={tool.name} className="mcp-tool-card">
-                <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("无描述")}</p></div><div className="mcp-tool-card__actions">
-                  <Tag color={riskColor(tool.arcadiaRisk)} title={riskLabel(tool.arcadiaRisk)}>{tool.arcadiaRisk ?? 'R2'}</Tag>
-                  {tool.arcadiaGranted && <Tag color="cyan">{t("已记住授权")}</Tag>}
-                  {tool.arcadiaGranted && <Button size="small" onClick={()=>void revokeGrant(tool)}>{t("撤销授权")}</Button>}
-                  <Button icon={<Play size={14}/>} disabled={busy} onClick={()=>void invoke(tool)}>{t("审核并调用")}</Button>
-                </div></div>
-                <Input.TextArea value={toolArgs[tool.name] ?? '{}'} onChange={event => setToolArgs(current => ({...current,[tool.name]:event.target.value}))} autoSize={{minRows:2,maxRows:8}}/>
-              </Card>)}
+              {tools.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回工具") : t("连接 Server 后显示工具")}</div>:tools.map(tool => {
+                const args = toolArgs[tool.name] ?? initialArguments(tool.inputSchema)
+                return <Card key={tool.name} className="mcp-tool-card">
+                  <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("无描述")}</p></div><div className="mcp-tool-card__actions">
+                    <Tag color={riskColor(tool.arcadiaRisk)} title={riskLabel(tool.arcadiaRisk)}>{tool.arcadiaRisk ?? 'R2'}</Tag>
+                    {tool.arcadiaGranted && <Tag color="geekblue">{t("已记住授权")}</Tag>}
+                    {tool.arcadiaGranted && <Button size="small" onClick={()=>void revokeGrant(tool)}>{t("撤销授权")}</Button>}
+                    <Button icon={<Play size={14}/>} disabled={busy} onClick={()=>void invoke(tool)}>{t("审核并调用")}</Button>
+                  </div></div>
+                  <ToolArgumentsEditor schema={tool.inputSchema} value={args} disabled={busy} onChange={next => setToolArgs(current => ({...current,[tool.name]:next}))}/>
+                </Card>
+              })}
             </section>
             <section>
               <div className="mcp-section-title"><span><Database size={17}/>{t("资源")}</span><Tag>{resources.length}</Tag></div>
@@ -414,7 +587,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
               </div>)}
             </section>
           </div>}
-          {result !== undefined && <section className="mcp-result"><div className="mcp-section-title"><span>{t("调用结果")}</span></div><pre>{JSON.stringify(result,null,2)}</pre></section>}
+          {result !== undefined && <section className="mcp-result"><div className="mcp-section-title"><span>{t("调用结果")}</span></div><ToolResultView value={result}/></section>}
         </>}
       </main>
     </div>}
@@ -456,5 +629,67 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
           </div>)}
         </div>}
     </Drawer>
+
+    <Drawer title={t("兼容性诊断")} open={diagnoseOpen} onClose={()=>setDiagnoseOpen(false)} width={640}>
+      {diagnoseBusy ? <div className="mcp-loading"><Spin/></div> : diagnostic && <>
+        <p className="mcp-diagnose__summary">{diagnostic.serverName ?? selected?.name}{diagnostic.protocolVersion ? ` · MCP ${diagnostic.protocolVersion}` : ''} · {t("总耗时 {value0} ms",{value0:String(diagnostic.totalMs)})}</p>
+        <div className="mcp-diagnose__stages">{diagnostic.stages.map(stage => <div className="mcp-diagnose__row" key={stage.name}>
+          <Tag color={stage.ok ? 'green' : 'red'}>{stage.ok ? t("成功") : t("失败")}</Tag>
+          <b>{diagnosticStageLabel(stage.name)}</b>
+          {stage.count !== undefined && <span>{t("{value0} 项",{value0:String(stage.count)})}</span>}
+          {stage.detail && <span className="mcp-diagnose__detail">{stage.detail}</span>}
+          <span className="mcp-diagnose__time">{stage.durationMs} ms</span>
+          {stage.error && <p>{stage.error}</p>}
+        </div>)}</div>
+      </>}
+    </Drawer>
+
+    <Modal
+      title={t("导出 MCP 配置")}
+      open={exportOpen}
+      width={720}
+      onCancel={()=>setExportOpen(false)}
+      footer={<>
+        <Button icon={<Copy size={14}/>} onClick={()=>void copyExport()}>{t("复制")}</Button>
+        <Button icon={<Download size={14}/>} onClick={downloadExport}>{t("下载文件")}</Button>
+        <Button type="primary" onClick={()=>setExportOpen(false)}>{t("关闭")}</Button>
+      </>}
+    >
+      <p className="mcp-import__note">{t("配置不包含密钥；导入后请重新填写。")}</p>
+      <Input.TextArea value={exportJson} readOnly rows={16} className="mcp-export-json"/>
+    </Modal>
+
+    <Modal
+      title={t("导入 MCP 配置")}
+      open={importOpen}
+      width={680}
+      okText={t("确认导入")}
+      okButtonProps={{ loading: importBusy }}
+      onOk={()=>void confirmImport()}
+      onCancel={()=>{ setImportOpen(false); setImportPreview(undefined); setImportConfig(undefined) }}
+    >
+      {importPreview && <>
+        <p>{t("将创建 {value0} 个、更新 {value1} 个 Server，{value2} 个无变化。",{value0:String(importPreview.created),value1:String(importPreview.updated),value2:String(importPreview.unchanged)})}</p>
+        <div className="mcp-import__list">{importPreview.servers.map(change => <div className="mcp-import__row" key={change.name}>
+          <Tag color={change.action === 'create' ? 'green' : change.action === 'update' ? 'blue' : 'default'}>{change.action === 'create' ? t("新建") : change.action === 'update' ? t("更新") : t("无变化")}</Tag>
+          <b>{change.name}</b>
+          {change.changedFields.length > 0 && <span className="mcp-import__meta">{t("变更字段：{value0}",{value0:change.changedFields.map(configFieldLabel).join("、")})}</span>}
+        </div>)}</div>
+        <p className="mcp-import__note">{t("密钥不会随配置导入；新建 Server 的密钥需要在导入后重新填写。")}</p>
+      </>}
+    </Modal>
+
+    <Modal
+      title={t("需要补充密钥的 Server")}
+      open={importResult !== null}
+      okText={t("关闭")}
+      onOk={()=>setImportResult(null)}
+      onCancel={()=>setImportResult(null)}
+    >
+      {importResult && <ul className="mcp-secret-list">{importResult.missingSecrets.map(item => {
+        const keys = [...item.envKeys, ...item.headerKeys]
+        return <li key={item.name}><b>{item.name}</b>{keys.length > 0 ? <> — <code>{keys.join(", ")}</code></> : null}</li>
+      })}</ul>}
+    </Modal>
   </section>
 }

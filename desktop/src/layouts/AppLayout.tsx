@@ -2,7 +2,7 @@ import { t } from '../i18n'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { Avatar, Badge, Dropdown, Layout, Space, Tooltip, Typography, type MenuProps } from '../components/ui'
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui/icons'
-import { BookOpen, Boxes, Globe2, Layers, Minus, Search, Settings, Sparkles, Square, X } from 'lucide-react'
+import { BookOpen, Boxes, Globe2, Layers, Minus, PanelLeft, Search, Settings, Sparkles, Square, X } from 'lucide-react'
 import type { View } from '../types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TopBarPortalProvider } from '../app/TopBarPortal'
@@ -11,6 +11,7 @@ import { listWorkspaces, type WorkspaceSummary } from '../services/workspaces'
 import { listCollections, type Collection } from '../api'
 import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_SCOPE_EVENT, SPACE_SURFACE_EVENT, clearCurrentSpace, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, spaceColorFor, spaceIconFor, writeSpaceIdentity, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
 import { spaceMenuRows } from '../features/browser/spaceMenu'
+import { readShellSettings, SHELL_SETTINGS_EVENT, writeShellSettings, type ShellSettings } from '../features/settings/shell'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label:t("浏览器")},{key:'library',icon:<BookOpen/>,label:t("知识库")},{key:'search',icon:<Search/>,label:t("搜索")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const
 
@@ -31,6 +32,9 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   const [menuOpen, setMenuOpen] = useState(false)
   const spaceButtonRef = useRef<HTMLButtonElement>(null)
   const collapsed = true
+  // The rail can be hidden from Settings → 通用. Kept in state so the title bar
+  // and the rail react together, wherever the change comes from.
+  const [sidebarVisible, setSidebarVisible] = useState(() => readShellSettings().sidebarVisible)
 
   async function refreshSpaces() {
     try {
@@ -51,6 +55,19 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
     window.addEventListener(SPACE_CHANGED_EVENT, onChanged)
     return () => window.removeEventListener(SPACE_CHANGED_EVENT, onChanged)
   }, [])
+
+  useEffect(() => {
+    const onShellChange = (event: Event) => {
+      const next = (event as CustomEvent<ShellSettings>).detail
+      setSidebarVisible(next ? next.sidebarVisible : readShellSettings().sidebarVisible)
+    }
+    window.addEventListener(SHELL_SETTINGS_EVENT, onShellChange)
+    return () => window.removeEventListener(SHELL_SETTINGS_EVENT, onShellChange)
+  }, [])
+
+  function showSidebar() {
+    setSidebarVisible(writeShellSettings({ ...readShellSettings(), sidebarVisible: true }).sidebarVisible)
+  }
 
   // Toasts are portalled to `body`, so they can no longer read the active
   // route from their DOM position: the browser route owns an extra chrome row
@@ -184,12 +201,13 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
           also be handled in React or the window would be toggled twice. */}
       <header className={`app-topbar${collapsed ? ' app-topbar--collapsed' : ''}${view === 'browser' ? ' app-topbar--browser' : ''}`} data-tauri-drag-region="deep">
         <div className="brand"><span className="brand__mark"><ThunderboltOutlined /></span><b>Arcadia</b></div>
+        {!sidebarVisible && <button type="button" className="app-topbar__reveal" title={t("显示侧边栏")} aria-label={t("显示侧边栏")} onClick={showSidebar}><PanelLeft size={17} strokeWidth={1.6}/></button>}
         <div className="app-topbar__slot" ref={setTopBarSlot}/>
       </header>
       <Layout className="app-body">
-        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}>{nativeSurface
+        {sidebarVisible && <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}>{nativeSurface
           ? <button ref={spaceButtonRef} type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel} style={spaceColor ? { borderColor: spaceColor, color: spaceColor } : undefined} onClick={() => void openSpaceMenu()}>{spaceIcon ?? <Layers size={18} strokeWidth={1.6}/>}</button>
-          : <Dropdown menu={{ items: dropdownItems }} open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (!open) setNativeSurface(document.body.dataset.nativeSurface === '1') }} placement="bottomLeft"><button ref={spaceButtonRef} type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel} style={spaceColor ? { borderColor: spaceColor, color: spaceColor } : undefined}>{spaceIcon ?? <Layers size={18} strokeWidth={1.6}/>}</button></Dropdown>}</Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
+          : <Dropdown menu={{ items: dropdownItems }} open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (!open) setNativeSurface(document.body.dataset.nativeSurface === '1') }} placement="bottomLeft"><button ref={spaceButtonRef} type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel} style={spaceColor ? { borderColor: spaceColor, color: spaceColor } : undefined}>{spaceIcon ?? <Layers size={18} strokeWidth={1.6}/>}</button></Dropdown>}</Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>}
         <Layout.Content className="app-content">{children}</Layout.Content>
       </Layout>
     </Layout>

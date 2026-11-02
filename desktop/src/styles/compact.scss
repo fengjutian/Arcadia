@@ -322,6 +322,33 @@ body[data-theme='github'] {
   align-items: stretch;
 }
 
+// Settings → 通用 → 界面布局 can hide the navigation rail. With no rail the
+// title bar carries the way back, in the space the rail buttons used to fill.
+.app-topbar__reveal {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 30px;
+  margin: 7px 0 7px 10px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+
+  &:hover {
+    border-color: var(--accent-border, #d7e0d9);
+    background: rgba(53, 64, 57, .08);
+  }
+
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+}
+
+body[data-theme='dark'] .app-topbar__reveal:hover { background: rgba(255, 255, 255, .09); }
+
 // Only the browser route owns chrome for the title bar. Its tab strip stays
 // mounted while another view is active (the route is hidden, not unmounted), so
 // the slot itself has to be hidden or the tabs would float over every page.
@@ -1568,12 +1595,10 @@ body[data-theme-kind='image'] {
   // Wallpaper strength for image themes. The photo is decoration, not content:
   // `--app-theme-image-opacity` is the share of the page surface the wallpaper
   // may claim on the new-tab backdrop (10% = the photo is veiled by the page
-  // colour, leaving it as a faint texture). The browser chrome needs a much
-  // stronger surface: inactive tabs are transparent pills with 12px labels, so
-  // a 90%-visible wallpaper makes every tab title unreadable. Keep the tab
-  // strip close to the chrome colour and let only a hint of the photo through.
+  // colour, leaving it as a faint texture). The titlebar keeps the photo behind
+  // a single frosted pane (below) so the window reads as one continuous image.
   --app-theme-image-opacity: .1;
-  --app-theme-chrome-scrim: .82;
+  --app-theme-chrome-scrim: .08;
 
   .app-topbar,
   .new-tab {
@@ -1589,6 +1614,21 @@ body[data-theme-kind='image'] {
       ),
       var(--app-theme-image);
     background-position: center 18%;
+
+    // One frosted pane across the whole title row — brand, tabs and window
+    // buttons all sit on it. The tint is mostly the chrome colour (so labels
+    // keep contrast on any photo) with a quarter of the blurred wallpaper
+    // bleeding through for colour.
+    &::before {
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      background: color-mix(in srgb, var(--chrome-bg, #e7ebe7) 78%, transparent);
+      -webkit-backdrop-filter: blur(30px) saturate(135%);
+      backdrop-filter: blur(30px) saturate(135%);
+      content: '';
+      pointer-events: none;
+    }
   }
 
   .new-tab {
@@ -1634,6 +1674,85 @@ body[data-theme-kind='image'] {
     background: rgba(255,255,255,.40) !important;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.62);
   }
+
+  // Tabs are quiet glass chips on the pane: a translucent white fill with a
+  // hairline highlight, and a solid white card for the active tab. The pane
+  // behind them already carries the photograph, so no per-tab blur is needed.
+  .browser-tabs { padding-inline: 10px !important; }
+  .browser-tabs .ant-tabs-nav-list { gap: 5px !important; }
+
+  .browser-tabs .ant-tabs-tab {
+    border-color: rgba(255,255,255,.42) !important;
+    background: rgba(255,255,255,.34) !important;
+    color: #2f3d35;
+    opacity: 1;
+
+    &::after { display: none; }
+  }
+
+  .browser-tabs .ant-tabs-tab:not(.ant-tabs-tab-active):hover {
+    border-color: rgba(255,255,255,.66) !important;
+    background: rgba(255,255,255,.58) !important;
+    color: #1b2721;
+  }
+
+  .browser-tabs .ant-tabs-tab.ant-tabs-tab-active {
+    border-color: rgba(255,255,255,.96) !important;
+    background: #fff !important;
+    box-shadow: 0 1px 2px rgba(20,35,27,.12), 0 4px 12px rgba(20,35,27,.08);
+    color: #1f2d26;
+  }
+
+  .browser-tabs .ui-tabs__close { color: #53625a; }
+  .browser-tabs .ui-tabs__close:hover { background: rgba(20,35,27,.10); color: #16211b; }
+
+  .browser-tabs .ant-tabs-nav-add {
+    border-radius: 50%;
+    background: transparent !important;
+
+    &:hover { background: rgba(255,255,255,.55) !important; }
+  }
+
+  // The window buttons live on the same pane; pin their ink and hover plate so
+  // they never disappear into a bright or busy wallpaper.
+  .window-controls > button { color: #2c3a32; }
+  .window-controls > button:hover { background: rgba(20,35,27,.08); }
+}
+
+body[data-theme='dark'][data-theme-kind='image'] {
+  // The dark theme paints an opaque strip (`#1a221e`) under the tabs; clear it
+  // so the frosted pane shows through instead of a flat panel.
+  .browser-tabs {
+    background: transparent !important;
+    border-bottom-color: transparent !important;
+  }
+
+  .browser-tabs .ant-tabs-tab {
+    border-color: rgba(255,255,255,.10) !important;
+    background: rgba(255,255,255,.07) !important;
+    color: #d5dfd9;
+  }
+
+  .browser-tabs .ant-tabs-tab:not(.ant-tabs-tab-active):hover {
+    border-color: rgba(255,255,255,.16) !important;
+    background: rgba(255,255,255,.13) !important;
+    color: #f2f7f4;
+  }
+
+  .browser-tabs .ant-tabs-tab.ant-tabs-tab-active {
+    border-color: rgba(255,255,255,.26) !important;
+    background: rgba(255,255,255,.18) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,.30), 0 4px 12px rgba(0,0,0,.18);
+    color: #f4f8f5;
+  }
+
+  .browser-tabs .ui-tabs__close { color: #b9c6bf; }
+  .browser-tabs .ui-tabs__close:hover { background: rgba(255,255,255,.14); color: #fff; }
+
+  .browser-tabs .ant-tabs-nav-add:hover { background: rgba(255,255,255,.12) !important; }
+
+  .window-controls > button { color: #dfe8e3; }
+  .window-controls > button:hover { background: rgba(255,255,255,.10); }
 }
 
 .new-tab__workspace {
@@ -3526,6 +3645,10 @@ body[data-view='browser'] .ui-message {
     width: auto;
     min-width: 0;
     overflow: hidden;
+    // Inactive labels must follow the tab's own colour. Without this the shared
+    // `.ui-tabs .ant-tabs-tab-btn` grey wins, which is invisible on a dark or
+    // wallpaper-backed strip (only the active tab inherits today).
+    color: inherit;
 
     > .ui-floating-trigger {
       display: flex;

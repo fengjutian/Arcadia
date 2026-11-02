@@ -78,4 +78,34 @@ describe('AI conversation persistence', () => {
       backgroundTaskId:'assistant-123',
     }])
   })
+
+  it('preserves a bounded research trail', () => {
+    const raw = JSON.stringify([{
+      id:'a-steps',
+      role:'assistant',
+      content:'answer',
+      steps:[
+        { index:1, kind:'mcp_tool', summary:'调用 MCP 工具 srv · search', detail:'{"hits":2}', at:'2026-11-02T00:00:00Z' },
+        { index:2, kind:'answer', summary:'生成回答', at:'2026-11-02T00:00:01Z' },
+      ],
+    }])
+    const parsed = parseStoredConversation(raw)
+    expect(parsed[0].steps).toHaveLength(2)
+    expect(parsed[0].steps?.[0]).toMatchObject({ kind:'mcp_tool', detail:'{"hits":2}' })
+  })
+
+  it('keeps small structured tool results and drops oversized ones', () => {
+    const raw = JSON.stringify([{
+      id:'a-results',
+      role:'assistant',
+      content:'answer',
+      steps:[
+        { index:1, kind:'mcp_tool', summary:'small', result:{ content:[{ type:'text', text:'ok' }] }, at:'' },
+        { index:2, kind:'mcp_tool', summary:'big', result:{ content:[{ type:'text', text:'x'.repeat(30_000) }] }, at:'' },
+      ],
+    }])
+    const parsed = parseStoredConversation(raw)
+    expect(parsed[0].steps?.[0].result).toEqual({ content:[{ type:'text', text:'ok' }] })
+    expect(parsed[0].steps?.[1].result).toBeUndefined()
+  })
 })

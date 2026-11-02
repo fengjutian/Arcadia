@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../../types'
+import type { AgentStep } from './agentLoop'
 
 export interface StoredConversationTurn {
   id: string
@@ -16,6 +17,8 @@ export interface StoredConversationTurn {
   interrupted?: boolean
   generalKnowledge?: boolean
   backgroundTaskId?: string
+  /** Bounded research-agent trail, including MCP tool calls. */
+  steps?: AgentStep[]
 }
 
 /** Error text written by older builds when a pending answer was reloaded. */
@@ -56,6 +59,29 @@ export function parseStoredConversation(raw: string | null): StoredConversationT
       if (turn.interrupted === true) clean.interrupted = true
       if (turn.generalKnowledge === true) clean.generalKnowledge = true
       if (typeof turn.backgroundTaskId === 'string' && turn.backgroundTaskId.length > 0) clean.backgroundTaskId = turn.backgroundTaskId
+      if (Array.isArray(turn.steps)) {
+        const steps: AgentStep[] = turn.steps
+          .filter((item): item is AgentStep => Boolean(item) && typeof item === 'object')
+          .slice(0, 20)
+          .map((step, index) => {
+            const bounded: AgentStep = {
+              index: typeof step.index === 'number' ? step.index : index + 1,
+              kind: step.kind === 'search' || step.kind === 'mcp_tool' || step.kind === 'answer' ? step.kind : 'answer',
+              summary: typeof step.summary === 'string' ? step.summary.slice(0, 300) : '',
+              ...(typeof step.detail === 'string' ? { detail: step.detail.slice(0, 4000) } : {}),
+              at: typeof step.at === 'string' ? step.at : '',
+            }
+            if (step.result !== undefined) {
+              try {
+                const serialized = JSON.stringify(step.result)
+                if (serialized && serialized.length <= 20_000) bounded.result = step.result
+              } catch { /* drop unserializable payloads */ }
+            }
+            return bounded
+          })
+          .filter(step => step.summary.length > 0)
+        if (steps.length > 0) clean.steps = steps
+      }
       return clean
     })
   } catch { return [] }

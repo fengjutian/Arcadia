@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { resetBrowserPreferences } from './resetSettings'
 import { readAdvancedSettings, DEFAULT_ADVANCED_SETTINGS } from './advanced'
 import { readBrowserAppearance, DEFAULT_BROWSER_APPEARANCE } from './browserAppearance'
+import { readShellSettings, DEFAULT_SHELL_SETTINGS } from './shell'
 import { readDownloadSettings, DEFAULT_DOWNLOAD_SETTINGS } from './downloadSettings'
 import { readTypographySettings, DEFAULT_TYPOGRAPHY_SETTINGS } from './typography'
 import { readThemePreference } from './theme'
@@ -18,6 +19,7 @@ describe('reset browser preferences', () => {
     expect(readThemePreference()).toBe('green')
     expect(readAdvancedSettings()).toEqual(DEFAULT_ADVANCED_SETTINGS)
     expect(readBrowserAppearance()).toEqual(DEFAULT_BROWSER_APPEARANCE)
+    expect(readShellSettings()).toEqual(DEFAULT_SHELL_SETTINGS)
     expect(readDownloadSettings()).toEqual(DEFAULT_DOWNLOAD_SETTINGS)
     expect(readTypographySettings()).toEqual(DEFAULT_TYPOGRAPHY_SETTINGS)
     expect(readSearchEngineConfig()).toEqual(DEFAULT_SEARCH_ENGINE_CONFIG)
