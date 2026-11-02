@@ -8,7 +8,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TopBarPortalProvider } from '../app/TopBarPortal'
 import { diagnosticLog } from '../shared/diagnostics'
 import { listWorkspaces, type WorkspaceSummary } from '../services/workspaces'
-import { SPACE_CHANGED_EVENT, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, type CurrentSpace } from '../features/browser/spaces'
+import { listCollections, type Collection } from '../api'
+import { SPACE_CHANGED_EVENT, SPACE_SCOPE_EVENT, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label:t("浏览器")},{key:'library',icon:<BookOpen/>,label:t("知识库")},{key:'search',icon:<Search/>,label:t("搜索")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const
 
@@ -19,6 +20,7 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   // strip) portals into it so the whole title row spans the window width.
   const [topBarSlot, setTopBarSlot] = useState<HTMLDivElement | null>(null)
   const [spaces, setSpaces] = useState<WorkspaceSummary[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [currentSpace, setCurrentSpace] = useState<CurrentSpace | null>(() => readCurrentSpace())
   const collapsed = true
 
@@ -57,12 +59,30 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   const spaceItems = spaces.length
     ? spaces.map(space => ({ key: space.id, label: `${space.name} · ${space.tabCount}`, onClick: () => dispatchSpaceRestore(space.id) }))
     : [{ key: 'empty', label: t("还没有已保存的 Space"), disabled: true }]
+  const activeScope = currentSpace ? readSpaceScopes()[currentSpace.id] ?? null : null
+  function applyScope(collectionId: string | null) {
+    if (!currentSpace) return
+    writeSpaceScope(currentSpace.id, collectionId)
+    window.dispatchEvent(new CustomEvent(SPACE_SCOPE_EVENT, { detail: { collectionId } }))
+    setCollections(current => [...current])
+  }
+  const scopeItems = currentSpace
+    ? [
+        { key: 'scope:all', label: `${activeScope ? '' : '✓ '}${t("全部知识库")}`, onClick: () => applyScope(null) },
+        ...collections.map(collection => ({
+          key: `scope:${collection.id}`,
+          label: `${activeScope === collection.id ? '✓ ' : ''}${collection.name}`,
+          onClick: () => applyScope(collection.id),
+        })),
+      ]
+    : []
   const spaceMenu = {
     items: [
       ...spaceItems,
       { type: 'divider' as const },
       { key: 'save', label: t("保存当前为 Space"), onClick: () => dispatchSpaceSave() },
       { key: 'manage', label: t("管理 Space"), onClick: () => onViewChange('settings') },
+      ...(currentSpace ? [{ type: 'divider' as const }, { key: 'scope', label: t("知识范围"), children: scopeItems }] : []),
     ],
   }
   const spaceLabel = currentSpace ? t("Space：{value0}", { value0: currentSpace.name }) : t("切换 Space")
@@ -86,7 +106,7 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
         <div className="app-topbar__slot" ref={setTopBarSlot}/>
       </header>
       <Layout className="app-body">
-        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}><Dropdown menu={spaceMenu} trigger={['click']} placement="bottomLeft" onOpenChange={open => { if (open) void refreshSpaces() }}><button type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel}><Layers size={18} strokeWidth={1.6}/></button></Dropdown></Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
+        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}><Dropdown menu={spaceMenu} trigger={['click']} placement="bottomLeft" onOpenChange={open => { if (open) { void refreshSpaces(); try { void listCollections().then(setCollections).catch(() => setCollections([])) } catch { setCollections([]) } } }}><button type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel}><Layers size={18} strokeWidth={1.6}/></button></Dropdown></Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
         <Layout.Content className="app-content">{children}</Layout.Content>
       </Layout>
     </Layout>

@@ -121,6 +121,8 @@ export const iteration6: Messages = {
   '自动保存当前标签失败：{value0}': 'Failed to auto-save current tabs: {value0}',
   '今日阅读': "Today's reading",
   '{value0} 次访问 · {value1} 个站点': '{value0} visits across {value1} sites',
+  '知识范围': 'Knowledge scope',
+  '全部知识库': 'All knowledge',
   '研究现场': 'Research desk',
   '从一次搜索开始：保存的页面、待读与笔记会出现在这里。': 'Start with a search — saved pages, read-later items and notes will show up here.',
   '当前 Space': 'Current Space',

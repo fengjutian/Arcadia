@@ -2150,6 +2150,7 @@ pub fn run() {
             local_store::local_add_to_collection,
             local_store::local_remove_from_collection,
             local_store::local_list_collections_for_document,
+            local_store::local_list_collection_document_ids,
             local_store::local_enqueue_task,
             local_store::local_claim_pending_task,
             local_store::local_complete_task,

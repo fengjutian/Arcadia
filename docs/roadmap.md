@@ -116,7 +116,8 @@
 - [~] 借鉴：Arc 的 Space 是独立标签集合 + 身份 + 默认行为，切换 Space 等于换一个浏览器。
 - 现状：`workspaces` 表只存 `payload` 快照，入口在设置页点「恢复」；标签仍是顶部横向 Tabs；左侧 64px rail 只切换视图。
 - 已落地（2026-11-02，V1）：Workspace 升级为 Space 的第一层——rail 顶部新增 Space 切换器（当前 Space 名称在 tooltip），菜单列出已保存 Space、标签数、「保存当前为 Space」「管理 Space」；切换前自动把当前标签另存为「自动保存 MM-DD HH:mm」，不丢未保存标签；保存或切换后写入 `arcadia.space.current.v1` 并广播 `arcadia-space-changed`，侧栏即时更新。
-- 待补：Space 绑定知识集合与 AI 上下文范围；按 Space 还原会话（目前只还原标签）；旧 `workspaces.payload` 迁移路径；整体打开与标签组（第二层结构）。
+- 已落地（2026-11-02，V2）：Space 可绑定知识集合（`arcadia.space.scope.v1`，rail Space 菜单「知识范围」中切换，带 ✓ 标记）；AI 问答的 RAG 请求携带 `collectionIds`，只检索该集合；未绑定则检索全部知识库。
+- 待补：搜索页与知识库页按 Space 范围过滤；按 Space 还原会话（目前只还原标签）；旧 `workspaces.payload` 迁移路径；整体打开与标签组（第二层结构）。
 - 做法：Workspace 升级为 Space，绑定知识集合、AI 上下文范围与站点路由（见 6.5）；新标签与保存默认落当前 Space；侧栏提供 Space 切换。
 - 验收：切换 Space 不丢失未保存标签；集合与 AI 上下文按 Space 隔离；会话恢复按 Space 还原；旧 `workspaces` payload 有迁移路径。
 - 增补（借 Edge Workspaces / Chrome 标签组）：支持「整体打开」；命名/颜色/持久化的标签组作为 Space 内的第二层结构。
@@ -246,7 +247,7 @@
 
 ## 测试现状
 
-`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **93 个文件 / 669 用例全部通过**（含 i18n 完整性、布局契约、Space、睡眠规则与新标签页模型）。Rust 侧最近一次全量：269 通过、1 个既有的 CJK 拼音索引用例在本机环境失败（`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`，与近期改动无关）。
+`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **94 个文件 / 678 用例全部通过**（含 i18n 完整性、布局契约、Space 与知识范围、睡眠规则与新标签页模型）。Rust 侧最近一次全量：269 通过、1 个既有的 CJK 拼音索引用例在本机环境失败（`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`，与近期改动无关）。
 
 直接用 `cargo test` 会让测试二进制在加载阶段以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出：`tauri` 默认特性 `common-controls-v6` 与 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6` 都会静态导入 `comctl32!TaskDialogIndirect`，该导出只存在于 comctl32 v6 组件，需要应用清单声明 `Microsoft.Windows.Common-Controls`。应用主程序由 `tauri-build` 注入清单，测试 harness 没有。
 

@@ -209,6 +209,12 @@ export async function listCollections(): Promise<Collection[]> {
   return invoke<Collection[]>('local_list_collections')
 }
 
+/** Document ids in a collection, used to scope search/library to a Space. */
+export async function listCollectionDocumentIds(collectionId: string): Promise<string[]> {
+  if (!isTauri()) return []
+  return invoke<string[]>('local_list_collection_document_ids', { collectionId })
+}
+
 export async function deleteCollection(id: string): Promise<void> {
   if (!isTauri()) return
   await invoke('local_delete_collection', { id })

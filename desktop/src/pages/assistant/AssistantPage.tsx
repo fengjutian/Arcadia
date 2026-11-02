@@ -51,6 +51,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listDocuments, ragAnswer, saveDocument, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse, type RagCitation } from '../../api'
 import type { RagQuery } from '../../api'
+import { activeCollectionId } from '../../features/browser/spaces'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
 import { PeekDrawer, type PeekTarget } from '../../features/peek/PeekDrawer'
 import { buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from '../../features/ai/crossAsk'
@@ -463,12 +464,15 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
       // Prefer the Rust `rag_answer` pipeline: it builds the evidence pack,
       // calls the model, validates citations, and applies one repair pass on
       // the Rust side.
+      // Respect the active Space's knowledge scope: a Space bound to a
+      // collection answers from that collection only.
+      const scopedCollection = activeCollectionId()
       const ragQuery: RagQuery = {
         query: prompt,
         topK: 8,
         candidateK: 16,
         documentIds: undefined,
-        collectionIds: undefined,
+        collectionIds: scopedCollection ? [scopedCollection] : undefined,
         tags: undefined,
         dateFrom: undefined,
         dateTo: undefined,

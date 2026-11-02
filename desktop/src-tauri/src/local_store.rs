@@ -2835,6 +2835,24 @@ pub fn local_list_collections_for_document(
         .map_err(|error| error.to_string())
 }
 
+/// Document ids inside one collection, used to scope search and the library to
+/// the active Space.
+#[tauri::command]
+pub fn local_list_collection_document_ids(
+    app: tauri::AppHandle,
+    collection_id: String,
+) -> Result<Vec<String>, String> {
+    let database = connection(&app)?;
+    let mut statement = database
+        .prepare("SELECT document_id FROM collection_documents WHERE collection_id=?1")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![collection_id], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
 fn row_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalTask> {
     Ok(LocalTask {
         id: row.get(0)?,
