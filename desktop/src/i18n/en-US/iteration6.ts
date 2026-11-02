@@ -151,6 +151,8 @@ export const iteration6: Messages = {
   '完整站点设置': 'Full site settings',
   '隐藏元素': 'Hide elements',
   '隐藏元素选择器（逗号分隔）': 'Element selectors to hide (comma separated)',
+  '左侧': 'Left pane',
+  '右侧': 'Right pane',
   '切换右侧标签': 'Switch the right pane tab',
   '两个文档对比': 'Compare two documents',
   '选择两篇文档': 'Choose two documents',

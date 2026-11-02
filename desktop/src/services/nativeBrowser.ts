@@ -302,6 +302,10 @@ export async function setNativeAdBlocking(enabled: boolean): Promise<void> {
 export async function setNativeMuted(tabId: string, muted: boolean): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_set_muted',{label,muted}) }
 /** Apply local-only CSS (user-authored) to the live page. */
 export async function injectSiteCss(tabId: string, css: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_inject_css',{label,css}) }
+/** Move keyboard focus into one split pane's WebView. */
+export async function focusNativeTab(tabId: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_focus',{label}) }
+/** Publish the host→Space rule snapshot used before navigation starts. */
+export async function syncSiteRoutes(routes: Array<{ host: string; spaceId: string }>): Promise<void> { if (isTauri()) await invoke('site_routes_set', { routes }) }
 export async function captureNativePage(tabId: string): Promise<NativePageSnapshot> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<NativePageSnapshot>('browser_snapshot',{label}) }
 export async function scanNativeResources(tabId: string): Promise<NativeResourceCandidate[]> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<NativeResourceCandidate[]>('browser_resource_candidates',{label}) }
 export function hasNativeTab(tabId: string): boolean { return labels.has(tabId) }

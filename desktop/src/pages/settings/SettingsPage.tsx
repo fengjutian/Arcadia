@@ -254,14 +254,14 @@ function GeneralSettings() {
           <div className="image-theme-daily-history__heading">
             <div><strong>{t("历史图片")}</strong><small>{t("保留之前加载过的每日一图，点击可切换。")}</small></div>
           </div>
-          <div className="image-theme-daily-history__grid" role="listbox" aria-label={t("历史图片")}>
+          <div className="image-theme-daily-history__grid" role="radiogroup" aria-label={t("历史图片")}>
             {bingHistory.map(image => {
               const active = imageTheme === 'bing' && bingImage?.url === image.url
               return <button
                 key={image.url}
                 type="button"
-                role="option"
-                aria-selected={active}
+                role="radio"
+                aria-checked={active}
                 title={`${image.title} — ${image.copyright}`}
                 className={`image-theme-daily-history__item${active ? ' is-active' : ''}`}
                 onClick={() => applyBingHistoryImage(image)}

@@ -483,6 +483,47 @@ struct NavStacks {
 #[derive(Default)]
 struct ToolbarMenuTokens(Mutex<HashMap<String, String>>);
 
+/// Snapshot of host -> Space routing, readable from the navigation commands
+/// without touching SQLite or the renderer.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SiteRouteEntry {
+    host: String,
+    space_id: String,
+}
+
+#[derive(Default)]
+struct SiteRouteRegistry(Mutex<Vec<SiteRouteEntry>>);
+
+#[tauri::command]
+fn site_routes_set(app: tauri::AppHandle, routes: Vec<SiteRouteEntry>) {
+    if let Some(registry) = app.try_state::<SiteRouteRegistry>() {
+        if let Ok(mut guard) = registry.0.lock() {
+            *guard = routes;
+        }
+    }
+}
+
+/// Emit the pre-navigation match. Never blocks the navigation itself.
+fn emit_site_route(app: &tauri::AppHandle, url: &str) {
+    let Some(registry) = app.try_state::<SiteRouteRegistry>() else { return };
+    let Ok(parsed) = url::Url::parse(url) else { return };
+    let Some(host) = parsed.host_str().map(|value| value.to_ascii_lowercase()) else { return };
+    let Ok(guard) = registry.0.lock() else { return };
+    let mut best: Option<&SiteRouteEntry> = None;
+    for route in guard.iter() {
+        if host == route.host || host.ends_with(&format!(".{}", route.host)) {
+            if best.map(|current| route.host.len() > current.host.len()).unwrap_or(true) {
+                best = Some(route);
+            }
+        }
+    }
+    if let Some(route) = best {
+        let payload = serde_json::json!({ "url": url, "spaceId": route.space_id });
+        let _ = tauri::Emitter::emit_to(app, "main", "arcadia-site-route", payload);
+    }
+}
+
 #[derive(Default)]
 struct NavStack {
     entries: Vec<String>,
@@ -767,6 +808,7 @@ async fn browser_create(
         return Ok(());
     }
     let url = external_url(&url)?;
+    emit_site_route(&app, url.as_str());
     let nav_url = url.to_string();
     let private_mode = private.unwrap_or(false);
     if let Some(found) = site_blacklist::match_url(&nav_url) {
@@ -887,6 +929,7 @@ async fn browser_navigate(
 ) -> Result<String, String> {
     validate_browser_label(&label)?;
     let url = external_url(&url)?;
+    emit_site_route(&app, url.as_str());
     let private = privacy::platform::tab_origin(&label)
         .map(|state| state.private)
         .unwrap_or(false);
@@ -2025,6 +2068,7 @@ pub fn run() {
         .manage(plugins::WasmRuntime::default())
         .manage(PermissionWaiters::default())
         .manage(session_lock::SessionBootState::default())
+        .manage(SiteRouteRegistry::default())
         .setup(|app| {
             {
                 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
@@ -2151,6 +2195,7 @@ pub fn run() {
             browser_inject_css,
             browser_set_bounds,
             browser_focus,
+            site_routes_set,
             browser_set_visible,
             browser_navigate,
             browser_reload,

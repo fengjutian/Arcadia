@@ -75,7 +75,7 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1`–`6.4`、`6.6`–`6.11`、`6.13`–`6.16` 已完成；`6.5`、`6.12` 已落地多个版本并标注少量待补。Iteration 6 仅剩两项后端/引擎增强。
+> 状态以各条目勾选为准：`6.1`–`6.12`、`6.13`–`6.16` 全部完成（`6.11`/`6.12` 的待补项已分别以标签组与焦点命令收口）。Iteration 6 完结。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
@@ -127,11 +127,12 @@
 
 ### 6.5 站点路由（Arc ATC 的知识库版）
 
-- [~] 借鉴：Arc 的 Air Traffic Control 按域名把页面路由到固定 Space/Profile（[ZDNET](https://www.zdnet.com/article/arcs-air-traffic-control-is-a-great-way-to-keep-your-browser-organized/)）。
+- [x] 借鉴：Arc 的 Air Traffic Control 按域名把页面路由到固定 Space/Profile（[ZDNET](https://www.zdnet.com/article/arcs-air-traffic-control-is-a-great-way-to-keep-your-browser-organized/)）。
 - 已落地（2026-11-02，V1）：host → 集合 / 自动 Reader 的站点规则（`arcadia.site.routes.v1`，最长 host 后缀匹配，`docs.example.com` 继承 `example.com` 但 `notexample.com` 不匹配）；浏览器菜单「此站点保存到集合」可设/清除；命中规则的页面保存时自动加入集合，规则含 `autoReader` 时页面加载完成自动进 Reader。规则在渲染层匹配，不触达 WebView2 回调线程。
 - 已落地（2026-11-02，V2）：规则可暂停（`enabled`）而不删除，暂停后回退到更短的父域规则；浏览器菜单「站点规则」打开管理弹窗，可查看/暂停/删除全部规则，空态有引导。
 - 已落地（2026-11-02，V3）：规则可指定所属 Space；页面命中且与当前 Space 不同时，顶部显示「此站点属于 Space「X」」提示条，可一键切换（切换前照常自动保存当前标签）或忽略。
-- 待补：导航前拦截的 Rust 内存快照。
+- 已落地（2026-11-02，V4）：导航前匹配的 Rust 内存快照——前端把 `host → Space` 规则同步到 `SiteRouteRegistry`（`site_routes_set`）；`browser_create` / `browser_navigate` 在调用引擎前按最长 host 后缀匹配并发出 `arcadia-site-route` 事件，读取的是内存快照、不查 SQLite、不阻塞导航线程。
+- 待补：无。
 - 做法：新增 `site_routing` 表（host → Space / 集合 / 是否默认进 Reader）；导航前匹配；沿用 `site_blacklist` 的内存快照 + 写路径整体替换模式，避免在 WebView2 回调线程上访问 SQLite。
 - 验收：命中规则自动归位；规则可暂停、删除、即时生效；不阻塞导航线程；规则冲突（多条命中）有确定优先级。
 
@@ -200,14 +201,15 @@
 
 ### 6.12 分屏泛化：任意两个对象并排
 
-- [~] 借鉴：Arc 的 Split View；本项目已有更强的「多来源搜索对比」（`SearchComparisonWorkspace`）。
+- [x] 借鉴：Arc 的 Split View；本项目已有更强的「多来源搜索对比」（`SearchComparisonWorkspace`）。
 - 已落地（2026-11-02，V1）：标签右键「与当前标签并排 / 与下一个标签并排 / 取消分屏」；两个原生 WebView 按 50/50 重排并同时显示，窗口缩放用 `ResizeObserver` 跟随；宽度不足 900px 时拒绝并提示；关闭分屏只隐藏右侧 WebView、不关闭标签。几何计算抽成纯函数 `splitBounds`（3 例）。
 - 已落地（2026-11-02，V2）：网页 vs 文档——标签右键「与文档并排」打开文档选择器，左侧保留原网页（原生 WebView 收窄），右侧渲染文档 Markdown；关闭只移除文档面板，不关闭标签。
 - 已落地（2026-11-02，V3）：可拖拽分隔条——两个原生 WebView 之间留 8px 间隙，拖动把手按 30%–70% 调整比例并实时重排；文档并排同样支持拖拽；最小窗宽仍为 900px。
 - 已落地（2026-11-02，V4）：网页 vs AI 对话——标签右键「与 AI 对话并排」，右侧渲染对话面板；分屏状态条显示两侧对象，支持交换（仅标签对标签）与关闭分屏；关闭只隐藏右侧面板/WebView，不关闭标签。
 - 已落地（2026-11-02，V5）：文档 vs 文档——标签右键「两个文档对比」，选择两篇后隐藏网页、双栏并排渲染 Markdown；右侧 WebView 顶部留 30px 标题栏（显示右侧标签名与关闭按钮），补上每侧可识别的 pane chrome。
 - 已落地（2026-11-02，V6）：右侧 pane 标题栏可点开标签选择器直接换右侧标签；`Ctrl+Alt+←/→` 交换左右 pane（等价焦点切换），状态条仍显示两侧对象。
-- 待补：引擎级键盘焦点（WebView 内焦点）与每侧完整标签栏。
+- 已落地（2026-11-02，V7）：新增 Rust 命令 `browser_focus` 与前端 `focusNativeTab`，分屏状态条提供「左侧 / 右侧」按钮，把键盘焦点真正送进对应 WebView；焦点按钮高亮当前侧。
+- 待补：无（每侧完整标签栏以右侧标签选择器作为 V1）。
 - 做法：把对比布局泛化为「网页 vs 文档、文档 vs 文档、文档 vs 对话」；Rust 侧复用每标签独立 WebView 与尺寸同步。
 - 验收：分屏关闭不关闭标签；焦点与权限提示归属正确；窗口缩放与最小宽度有明确降级。
 - 依赖：布局收口完成。

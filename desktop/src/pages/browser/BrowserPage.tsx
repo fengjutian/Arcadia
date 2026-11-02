@@ -6,7 +6,7 @@ import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue, saveClip, listReadingQueue, removeFromReadingQueue, addToCollection, listCollections } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, injectSiteCss, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeAdBlocking, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, focusNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, injectSiteCss, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeAdBlocking, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, syncSiteRoutes, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -235,6 +235,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [sitePanelOpen, setSitePanelOpen] = useState(false)
   const [siteRulesOpen, setSiteRulesOpen] = useState(false)
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
+  const [splitFocus, setSplitFocus] = useState<'left' | 'right'>('left')
   const splitTabIdRef = useRef<string | null>(null)
   const [splitRatio, setSplitRatio] = useState(0.5)
   const [splitDocument, setSplitDocument] = useState<KnowledgeDocument | null>(null)
@@ -1847,6 +1848,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   })()
 
   useEffect(() => {
+    void syncSiteRoutes(siteRoutes.filter(route => route.spaceId).map(route => ({ host: route.host, spaceId: route.spaceId! }))).catch(() => undefined)
+  }, [siteRoutes])
+
+  useEffect(() => {
     void listCollections().then(items => setRouteCollections(items.map(item => ({ id: item.id, name: item.name })))).catch(() => setRouteCollections([]))
     void listWorkspaces().then(items => setSpaceOptions(items.map(item => ({ id: item.id, name: item.name })))).catch(() => setSpaceOptions([]))
   }, [])
@@ -2830,6 +2835,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     {(splitTabId || splitDocument || splitChat) && <div className="split-status">
       <span>{translate("分屏")}：{active.title} ｜ {splitTabId ? tabs.find(tab => tab.id === splitTabId)?.title ?? '' : splitDocument ? splitDocument.title : translate("AI 对话")}</span>
       <Space>
+        {splitTabId && <Button size="small" type={splitFocus === 'left' ? 'primary' : 'text'} onClick={() => { setSplitFocus('left'); void focusNativeTab(active.id).catch(() => undefined) }}>{translate("左侧")}</Button>}
+        {splitTabId && <Button size="small" type={splitFocus === 'right' ? 'primary' : 'text'} onClick={() => { setSplitFocus('right'); void focusNativeTab(splitTabId).catch(() => undefined) }}>{translate("右侧")}</Button>}
         <Button size="small" type="text" disabled={!splitTabId} onClick={() => { if (!splitTabId) return; const left = active.id; activateTab(splitTabId); setSplitTabId(left) }}>{translate("交换")}</Button>
         <Button size="small" type="text" onClick={() => { closeSplit(); closeDocumentSplit(); setSplitChat(false) }}>{translate("关闭分屏")}</Button>
       </Space>
