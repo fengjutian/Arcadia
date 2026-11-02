@@ -1,4 +1,22 @@
 import type { Messages } from '../types'
 
-/** SkillHub. */
-export const skillhub: Messages = {}
+export const skillhub: Messages = {
+  '“{value0}”的搜索结果': '',
+  '查看详情': '',
+  '访问官网': '',
+  '个 Skills': '',
+  '官方 API': '',
+  '换一个更宽泛的关键词试试。': '',
+  '技能内容来自 SkillHub 公开 API。安装或使用第三方 Skill 前，请检查其权限、文件内容和安全评测。': '',
+  '没有找到相关技能': '',
+  '企业发布': '',
+  '认证发布者': '',
+  '社区': '',
+  '搜索技能，例如：网页搜索、文档处理、代码审查': '',
+  '探索中文优先的 Agent Skills，查看可信发布者、版本与社区热度。': '',
+  '为 AI 找到下一项能力': '',
+  '下载热榜': '',
+  '暂无描述': '',
+  '正在连接 SkillHub…': '',
+  'SkillHub 加载失败：{value0}': '',
+}
