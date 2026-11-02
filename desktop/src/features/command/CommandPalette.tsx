@@ -15,7 +15,7 @@ import type { HistoryEntry } from '../history/dedupeHistory'
 import type { BookmarkRecord } from '../../services/bookmarks'
 import { getSession, listArchivedTabs, searchDocuments, setSession } from '../../api'
 import { formatArchivedAt } from '../archive/archive'
-import { mergeSiteSearchShortcuts, parseCustomShortcuts, resolveSiteSearch, type SiteSearchShortcut } from './siteSearch'
+import { buildSiteSearchUrl, mergeSiteSearchShortcuts, parseCustomShortcuts, resolveSiteSearch, resolveTabToSearch, type SiteSearchShortcut } from './siteSearch'
 import { SiteSearchManager } from './SiteSearchManager'
 import {
   groupCommandItems,
@@ -103,6 +103,7 @@ export function CommandPalette({
   const [documents, setDocuments] = useState<CommandItem[]>([])
   const [customShortcuts, setCustomShortcuts] = useState<SiteSearchShortcut[]>([])
   const [managerOpen, setManagerOpen] = useState(false)
+  const [siteMode, setSiteMode] = useState<SiteSearchShortcut | null>(null)
   const [archived, setArchived] = useState<CommandItem[]>([])
   const inputRef = useRef<InputRef | null>(null)
 
@@ -122,6 +123,7 @@ export function CommandPalette({
     setMode('all')
     setHighlight(0)
     setDocuments([])
+    setSiteMode(null)
     // Focus after the modal has mounted its portal.
     const frame = requestAnimationFrame(() => inputRef.current?.focus({ cursor: 'all' }))
     return () => cancelAnimationFrame(frame)
@@ -240,12 +242,23 @@ export function CommandPalette({
         run: () => onOpenUrlInNewTab(siteSearch.url),
       }
     : null
-  const sections: CommandSection[] = askItem
-    ? [{ kind: 'action', label: 'AI', items: [askItem] }]
-    : [
-        ...(siteSearchItem ? [{ kind: 'action' as const, label: t("快捷搜索"), items: [siteSearchItem] }] : []),
-        ...groupCommandItems(items, effectiveMode, effectiveQuery),
-      ]
+  const siteModeItem: CommandItem | null = siteMode && effectiveQuery
+    ? {
+        id: 'site-mode-search',
+        kind: 'action',
+        title: `在 ${siteMode.label} 搜索：${effectiveQuery}`,
+        subtitle: t("站内搜索"),
+        run: () => onOpenUrlInNewTab(buildSiteSearchUrl(siteMode, effectiveQuery)),
+      }
+    : null
+  const sections: CommandSection[] = siteMode
+    ? (siteModeItem ? [{ kind: 'action', label: t("站内搜索"), items: [siteModeItem] }] : [])
+    : askItem
+      ? [{ kind: 'action', label: 'AI', items: [askItem] }]
+      : [
+          ...(siteSearchItem ? [{ kind: 'action' as const, label: t("快捷搜索"), items: [siteSearchItem] }] : []),
+          ...groupCommandItems(items, effectiveMode, effectiveQuery),
+        ]
   const rows = sections.flatMap(section => section.items)
   const activeIndex = Math.min(highlight, Math.max(rows.length - 1, 0))
   const current = rows[activeIndex]
@@ -266,9 +279,19 @@ export function CommandPalette({
         onClose()
       } else if (event.key === 'Escape') {
         event.preventDefault()
+        if (siteMode) { setSiteMode(null); setQuery(''); setHighlight(0); return }
         onClose()
       } else if (event.key === 'Tab') {
         event.preventDefault()
+        if (siteMode) { setSiteMode(null); return }
+        const target = resolveTabToSearch(effectiveQuery)
+        if (target) {
+          setSiteMode(target)
+          setQuery('')
+          setMode('all')
+          setHighlight(0)
+          return
+        }
         setMode(value => nextCommandMode(value === 'all' ? effectiveMode : value, event.shiftKey ? -1 : 1))
         setQuery(effectiveQuery)
         setHighlight(0)
@@ -276,9 +299,10 @@ export function CommandPalette({
     }
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
-  }, [open, rows.length, current, onClose, effectiveMode, effectiveQuery])
+  }, [open, rows.length, current, onClose, effectiveMode, effectiveQuery, siteMode])
 
-  return <Modal
+  return <>
+    <Modal
     open={open}
     footer={null}
     closable={false}
@@ -293,14 +317,18 @@ export function CommandPalette({
         ref={inputRef}
         value={query}
         onChange={event => { setQuery(event.target.value); setHighlight(0) }}
-        placeholder={t("搜索标签、历史、收藏、归档、知识库，或输入 @ ~ / ? > ! 前缀")}
+        placeholder={siteMode
+          ? t("在 {value0} 中搜索", { value0: siteMode.label })
+          : t("搜索标签、历史、收藏、归档、知识库，或输入 @ ~ / ? > ! 前缀")}
         size="large"
         prefix={<SearchOutlined />}
-        suffix={<span className="command-palette__mode">{MODE_LABEL[effectiveMode]} {t("\xB7 Tab 切换")}</span>}
+        suffix={<span className="command-palette__mode">{siteMode ? `${siteMode.label} ${t("\xB7 站内搜索")}` : <>{MODE_LABEL[effectiveMode]} {t("\xB7 Tab 切换")}</>}</span>}
       />
       <div className="tab-search-palette__list">
         {rows.length === 0
-          ? <div className="tab-search-palette__empty">{t("没有匹配项")}</div>
+          ? <div className="tab-search-palette__empty">{siteMode
+              ? t("输入关键词，在 {value0} 中搜索", { value0: siteMode.label })
+              : t("没有匹配项")}</div>
           : sections.map(section => <section key={section.kind} className="command-palette__section">
               <header>{section.label}</header>
               {section.items.map(item => {

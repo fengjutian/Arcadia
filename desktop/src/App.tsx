@@ -16,6 +16,7 @@ const PALETTES = {
   github: { primary: '#0969da', sider: '#f6f8fa', item: '#57606a', hover: '#eaeef2', hoverText: '#1f2328', selected: '#ddf4ff', selectedText: '#0969da' },
   ocean: { primary: '#2563a8', sider: '#edf4fb', item: '#5b6d7e', hover: '#e1edf8', hoverText: '#194f89', selected: '#d7e9f8', selectedText: '#194f89' },
   cyan: { primary: '#087f8c', sider: '#ecf7f8', item: '#587477', hover: '#ddf1f3', hoverText: '#05636d', selected: '#cfebee', selectedText: '#05636d' },
+  midnight: { primary: '#28536b', sider: '#eef5f7', item: '#5b7079', hover: '#e0edf1', hoverText: '#1c4054', selected: '#d2e7ed', selectedText: '#1c4054' },
   mint: { primary: '#2f7d68', sider: '#edf7f3', item: '#5c746d', hover: '#dff0e9', hoverText: '#22604f', selected: '#d2eae1', selectedText: '#22604f' },
   amber: { primary: '#9a6a00', sider: '#fbf5e7', item: '#786d54', hover: '#f4ead1', hoverText: '#755000', selected: '#f0e1b9', selectedText: '#755000' },
   coral: { primary: '#b4512f', sider: '#fbf0eb', item: '#7c675f', hover: '#f5e3da', hoverText: '#8c3d22', selected: '#f1d7cb', selectedText: '#8c3d22' },

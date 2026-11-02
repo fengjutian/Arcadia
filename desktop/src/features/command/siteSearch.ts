@@ -12,17 +12,19 @@ export interface SiteSearchShortcut {
   label: string
   /** `%s` is replaced with the encoded query. */
   template: string
+  /** Hosts that turn `Tab` on a bare domain into a site search. */
+  hosts?: readonly string[]
 }
 
 export const SITE_SEARCH_SHORTCUTS: readonly SiteSearchShortcut[] = [
-  { id: 'github', triggers: ['gh', 'github'], label: 'GitHub', template: 'https://github.com/search?q=%s&type=repositories' },
-  { id: 'mdn', triggers: ['mdn'], label: 'MDN', template: 'https://developer.mozilla.org/en-US/search?q=%s' },
-  { id: 'wikipedia', triggers: ['wiki', 'wikipedia'], label: '维基百科', template: 'https://zh.wikipedia.org/w/index.php?search=%s' },
-  { id: 'stackoverflow', triggers: ['so', 'stackoverflow'], label: 'Stack Overflow', template: 'https://stackoverflow.com/search?q=%s' },
-  { id: 'bilibili', triggers: ['bili', 'bilibili'], label: '哔哩哔哩', template: 'https://search.bilibili.com/all?keyword=%s' },
-  { id: 'zhihu', triggers: ['zhihu'], label: '知乎', template: 'https://www.zhihu.com/search?type=content&q=%s' },
-  { id: 'youtube', triggers: ['yt', 'youtube'], label: 'YouTube', template: 'https://www.youtube.com/results?search_query=%s' },
-  { id: 'arxiv', triggers: ['arxiv'], label: 'arXiv', template: 'https://arxiv.org/search/?query=%s&searchtype=all' },
+  { id: 'github', triggers: ['gh', 'github'], label: 'GitHub', template: 'https://github.com/search?q=%s&type=repositories', hosts: ['github.com'] },
+  { id: 'mdn', triggers: ['mdn'], label: 'MDN', template: 'https://developer.mozilla.org/en-US/search?q=%s', hosts: ['developer.mozilla.org'] },
+  { id: 'wikipedia', triggers: ['wiki', 'wikipedia'], label: '维基百科', template: 'https://zh.wikipedia.org/w/index.php?search=%s', hosts: ['zh.wikipedia.org', 'wikipedia.org'] },
+  { id: 'stackoverflow', triggers: ['so', 'stackoverflow'], label: 'Stack Overflow', template: 'https://stackoverflow.com/search?q=%s', hosts: ['stackoverflow.com'] },
+  { id: 'bilibili', triggers: ['bili', 'bilibili'], label: '哔哩哔哩', template: 'https://search.bilibili.com/all?keyword=%s', hosts: ['bilibili.com', 'search.bilibili.com'] },
+  { id: 'zhihu', triggers: ['zhihu'], label: '知乎', template: 'https://www.zhihu.com/search?type=content&q=%s', hosts: ['zhihu.com'] },
+  { id: 'youtube', triggers: ['yt', 'youtube'], label: 'YouTube', template: 'https://www.youtube.com/results?search_query=%s', hosts: ['youtube.com'] },
+  { id: 'arxiv', triggers: ['arxiv'], label: 'arXiv', template: 'https://arxiv.org/search/?query=%s&searchtype=all', hosts: ['arxiv.org'] },
 ] as const
 
 export interface ResolvedSiteSearch {
@@ -138,4 +140,35 @@ export function mergeSiteSearchShortcuts(
   custom: readonly SiteSearchShortcut[],
 ): SiteSearchShortcut[] {
   return [...SITE_SEARCH_SHORTCUTS, ...custom]
+}
+
+function normalizeHost(input: string): string | null {
+  const trimmed = input.trim().toLowerCase()
+  if (!trimmed || /\s/.test(trimmed)) return null
+  try {
+    const withScheme = /^[a-z]+:\/\//.test(trimmed) ? trimmed : `https://${trimmed}`
+    return new URL(withScheme).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Chrome-style Tab-to-search: a bare known domain in the command bar turns the
+ * next `Tab` into "search inside this site". Only hosts we ship a template for
+ * qualify — guessing a site's search URL would navigate to a 404.
+ */
+export function resolveTabToSearch(
+  input: string,
+  shortcuts: readonly SiteSearchShortcut[] = SITE_SEARCH_SHORTCUTS,
+): SiteSearchShortcut | null {
+  const host = normalizeHost(input)
+  if (!host) return null
+  return shortcuts.find(shortcut =>
+    shortcut.hosts?.some(candidate => candidate.replace(/^www\./, '') === host),
+  ) ?? null
+}
+
+export function buildSiteSearchUrl(shortcut: SiteSearchShortcut, query: string): string {
+  return shortcut.template.replace('%s', encodeURIComponent(query))
 }

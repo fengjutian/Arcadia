@@ -6,6 +6,7 @@ pub mod browser;
 pub mod capabilities;
 pub mod certificate_guard;
 pub mod downloads;
+pub mod engine;
 pub mod event_bus;
 pub mod local_store;
 pub mod mcp;
@@ -27,25 +28,17 @@ use rusqlite::params;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::image::Image;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
-use tauri::webview::DownloadEvent;
 use tauri::{Emitter, LogicalPosition, Manager};
+
+use crate::engine::{CaptureRequest, PageBounds, PageEngine, PageObserver, PageSpec};
 
 use crate::providers::{AiProvider, ChatMessage, ChatRequest, ChatResponse};
 
 pub const KEYRING_SERVICE: &str = "ai-knowledge-browser";
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowserBounds {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -167,9 +160,9 @@ impl DownloadIndex {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SitePermissionRule {
+pub struct SitePermissionRule {
     origin: String,
     camera: String, // "allow" | "deny" | "ask"
     microphone: String,
@@ -686,48 +679,60 @@ async fn browser_create(
     app: tauri::AppHandle,
     label: String,
     url: String,
-    bounds: BrowserBounds,
+    bounds: PageBounds,
     permissions: Option<Vec<SitePermissionRule>>,
     ad_block_enabled: Option<bool>,
     private: Option<bool>,
 ) -> Result<(), String> {
     validate_browser_label(&label)?;
-    if app.get_webview(&label).is_some() {
+    let engine = engine::page_engine(&app);
+    if engine.exists(&label) {
         return Ok(());
     }
     let url = external_url(&url)?;
     let nav_url = url.to_string();
-    let opener_label = label.clone();
-    let event_app = app.clone();
-    let download_app = app.clone();
-    let download_label = label.clone();
     let private_mode = private.unwrap_or(false);
     if let Some(found) = site_blacklist::match_url(&nav_url) {
         site_blacklist::block_document(&app, &nav_url, &found, Some(&label), private_mode);
         return Err(site_blacklist::blocked_error(&found));
     }
-    let page_app = app.clone();
-    let page_label = label.clone();
-    // WebView2's native InPrivate controller is not available on every runtime
-    // used by child WebViews. Give private tabs a dedicated ephemeral profile
-    // instead: it provides the same storage separation without depending on
-    // that controller API, and the directory is removed when the tab closes.
-    let mut builder = tauri::webview::WebviewBuilder::new(&label, tauri::WebviewUrl::External(url));
-    if private_mode {
-        builder = builder.data_directory(
-            std::env::temp_dir().join("arcadia-private-webviews").join(&label),
-        );
-    }
-    let builder = builder
-        .initialization_script(permission_guard_script(
-            permissions.as_deref().unwrap_or(&[]),
-            private_mode,
-        ))
-        .initialization_script(context_menu_script())
-        .initialization_script(audio_monitor_script(&label))
-        .initialization_script(password_manager_script(&label, private_mode))
-        .initialization_script(ad_blocker_script(&label, ad_block_enabled.unwrap_or(true)))
-        .on_page_load(move |webview, payload| {
+    let permissions = permissions.unwrap_or_default();
+    // Page-injection scripts stay in the browser domain: the engine decides
+    // where scripts run, never what a page may do.
+    let init_scripts = vec![
+        permission_guard_script(&permissions, private_mode),
+        context_menu_script(),
+        audio_monitor_script(&label),
+        password_manager_script(&label, private_mode),
+        ad_blocker_script(&label, ad_block_enabled.unwrap_or(true)),
+    ];
+    engine.create(PageSpec {
+        label: label.clone(),
+        url,
+        bounds,
+        private: private_mode,
+        permissions,
+        init_scripts,
+        observer: Arc::new(AppPageObserver {
+            app: app.clone(),
+            private: private_mode,
+        }),
+    })?;
+    let navs = app.state::<NavStacks>();
+    let mut guard = navs
+        .stacks
+        .lock()
+        .map_err(|_| "nav stack poisoned".to_string())?;
+    let stack = guard.entry(label).or_default();
+    stack.push(nav_url);
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn removed_builder_tail() {
+    if false {
+        let _ = 0;
+        {
             // `on_page_load` takes an `Fn`, so clone per call rather than moving
             // the captures out of the closure.
             if payload.event() == tauri::webview::PageLoadEvent::Finished {

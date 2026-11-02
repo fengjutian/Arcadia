@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   SITE_SEARCH_SHORTCUTS,
+  buildSiteSearchUrl,
   mergeSiteSearchShortcuts,
   parseCustomShortcuts,
   parseTriggerList,
   resolveSiteSearch,
+  resolveTabToSearch,
   validateCustomShortcut,
 } from './siteSearch'
 
@@ -96,5 +98,31 @@ describe('mergeSiteSearchShortcuts', () => {
     const merged = mergeSiteSearchShortcuts([{ id: 'x', triggers: ['npm'], label: 'npm', template: 'https://e.com?q=%s' }])
     expect(merged[0]).toBe(SITE_SEARCH_SHORTCUTS[0])
     expect(merged[merged.length - 1].id).toBe('x')
+  })
+})
+
+describe('resolveTabToSearch', () => {
+  it('maps known domains, with or without scheme and path', () => {
+    expect(resolveTabToSearch('github.com')?.id).toBe('github')
+    expect(resolveTabToSearch('https://www.github.com/explore')?.id).toBe('github')
+    expect(resolveTabToSearch('developer.mozilla.org/en-US/docs')?.id).toBe('mdn')
+    expect(resolveTabToSearch('ZH.WIKIPEDIA.ORG')?.id).toBe('wikipedia')
+  })
+
+  it('ignores free text and unknown hosts', () => {
+    expect(resolveTabToSearch('react hooks')).toBeNull()
+    expect(resolveTabToSearch('example.com')).toBeNull()
+    expect(resolveTabToSearch('')).toBeNull()
+  })
+
+  it('accepts custom shortcuts that declare a host', () => {
+    const custom = [{ id: 'custom-npm', triggers: ['npm'], label: 'npm', template: 'https://www.npmjs.com/search?q=%s', hosts: ['npmjs.com'] }]
+    expect(resolveTabToSearch('npmjs.com', custom)?.id).toBe('custom-npm')
+  })
+})
+
+describe('buildSiteSearchUrl', () => {
+  it('encodes the query into the template', () => {
+    expect(buildSiteSearchUrl(SITE_SEARCH_SHORTCUTS[0], 'a b')).toContain('a%20b')
   })
 })

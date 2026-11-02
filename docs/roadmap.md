@@ -82,8 +82,8 @@
 
 - [~] 借鉴：Arc 的 `⌘T` 命令栏把导航、切标签与动作执行合并在一个输入框，动作本身可被搜索（[Command Bar Actions](https://start.arc.net/command-bar-actions)）。
 - 现状：`TabSearchPalette`、`BookmarkSearchPalette`、`HistorySearchPalette`、`BulkSummaryPalette` 是四个独立 Modal；地址栏只负责导航。
-- 已落地（2026-11-02）：`features/command/` 提供 `CommandPalette` 与 `commandModel`（前缀解析、评分、分组），`Ctrl/⌘ + K` 打开；覆盖标签页、历史、收藏、归档、知识库与 9 个浏览器动作；`Tab` 循环范围，`@` / `~` / `/` / `?` / `>` 前缀直选；`!gh` 一类站内搜索（8 个内置快捷词，结果在新标签打开）；旧 palette 入口保留。测试 16 + 4 例。
-- 待补：域名 + `Tab` 的站内搜索模板、用户自定义 `!` 词表、旧 palette 下线；三项完成后改标 `[x]`。
+- 已落地（2026-11-02）：`features/command/` 提供 `CommandPalette` 与 `commandModel`（前缀解析、评分、分组），`Ctrl/⌘ + K` 打开；覆盖标签页、历史、收藏、归档、知识库与 10 个浏览器动作；`Tab` 循环范围，`@` / `~` / `/` / `?` / `>` 前缀直选；`!gh` 一类站内搜索（8 个内置快捷词，结果在新标签打开）；自定义 `!` 词表通过「管理快捷搜索词」维护，存 `local_session` 并随备份导出；已知域名 + `Tab` 进入站内搜索模式（再按 `Tab` 或 `Esc` 退出）。测试 16 + 16 例。
+- 待补：旧四个 palette 下线；之后改标 `[x]`。
 - 做法：新增单一命令栏，前缀分域：`@` 标签、`/` 知识库、`?` 问 AI、`>` 动作；复用 `tabSearchIndex`、`historySearchIndex`、`bookmarkSearchIndex`；动作表映射现有高频 Tauri command。
 - 增补（借 Chrome / Firefox）：`Tab` 就地切换搜索域；域名 + Tab 触发站内搜索，模板复用 `searchEngine.ts`；允许用户自定义 `!` 快捷词。
 - 验收：`Ctrl/Cmd + K` 打开；四类结果同屏分组且键盘可达；动作有成功/失败反馈；旧 palette 入口保留一个版本周期后移除；新增纯函数与交互测试。
