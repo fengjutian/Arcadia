@@ -27,6 +27,16 @@ describe('spaceMenuRows', () => {
     expect(rows[0]).toEqual({ key: 'space:sp-1', label: '研究 · 4' })
   })
 
+  it('marks the active Space so its no-op row is recognisable', () => {
+    const rows = spaceMenuRows({
+      ...base,
+      spaces: [{ id: 'sp-1', name: '研究', tabCount: 4 }, { id: 'sp-2', name: '写作', tabCount: 1 }],
+      currentSpace: { id: 'sp-1', name: '研究' },
+    })
+    expect(rows[0]).toMatchObject({ key: 'space:sp-1', checked: true })
+    expect(rows[1]).toEqual({ key: 'space:sp-2', label: '写作 · 1' })
+  })
+
   it('marks the active scope and the active colour', () => {
     const rows = spaceMenuRows({
       ...base,

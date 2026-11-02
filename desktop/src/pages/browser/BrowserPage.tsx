@@ -40,7 +40,7 @@ import { useDownloadQueue } from '../../features/downloads/useDownloadQueue'
 import { saveWorkspace, snapshotTabsToPayload, getWorkspace, listWorkspaces, type WorkspaceRecord } from '../../services/workspaces'
 import { restoreTabsFromWorkspace } from '../../features/browser/restoreWorkspace'
 import { WORKSPACE_RESTORE_EVENT } from '../../features/browser/workspaces'
-import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_RESTORE_EVENT, SPACE_SAVE_EVENT, SPACE_SURFACE_EVENT, autoSpaceName, dispatchSpaceRestore, readCurrentSpace, writeCurrentSpace } from '../../features/browser/spaces'
+import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_RESTORE_EVENT, SPACE_SAVE_EVENT, SPACE_SURFACE_EVENT, autoSpaceName, dispatchSpaceRestore, hasAutoSavedSnapshot, readCurrentSpace, rememberAutoSavedSnapshot, tabSnapshotSignature, writeCurrentSpace } from '../../features/browser/spaces'
 import { useTabRuntime } from '../../features/browser/useTabRuntime'
 import { buildAddressSuggestions } from '../../features/browser/addressSuggestions'
 import { DownloadSummary } from '../../features/downloads/DownloadCenter'
@@ -236,6 +236,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
   const [splitRatio, setSplitRatio] = useState(0.5)
   const [splitDocument, setSplitDocument] = useState<KnowledgeDocument | null>(null)
+  const [splitChat, setSplitChat] = useState(false)
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false)
   const [pickerDocuments, setPickerDocuments] = useState<KnowledgeDocument[]>([])
   const [pickerQuery, setPickerQuery] = useState('')
@@ -255,7 +256,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   }, [documentPickerOpen])
 
   useEffect(() => {
-    if (!isNativeBrowserAvailable() || !splitDocument) return
+    if (!isNativeBrowserAvailable() || (!splitDocument && !splitChat)) return
     const apply = () => {
       const rect = bounds()
       if (!rect) return
@@ -273,10 +274,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       window.removeEventListener('resize', apply)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splitDocument, active.id, splitRatio])
+  }, [splitDocument, splitChat, active.id, splitRatio])
 
   function closeDocumentSplit() {
     setSplitDocument(null)
+    setSplitChat(false)
     const rect = bounds()
     if (rect) void resizeNativeTab(active.id, rect).catch(() => undefined)
   }
@@ -1364,19 +1366,27 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       await applyWorkspaceRestore(workspace)
     }
     async function restoreSpace(id: string) {
+      // Already in this Space: restoring the same snapshot would only close and
+      // reopen the same tabs, and it used to add an empty auto-save row.
+      if (readCurrentSpace()?.id === id) return
       const workspace = await getWorkspace(id)
       if (!workspace) {
         messageApi.error(translate("工作区不存在或已删除"))
         return
       }
       const current = tabsRef.current.filter(tab => !tab.private && tab.url)
-      if (current.length > 0) {
+      const payload = snapshotTabsToPayload(current)
+      const signature = tabSnapshotSignature(payload)
+      // Never store the same tab set twice: this is what filled the Space menu
+      // with rows like "自动保存 11-02 16:16" repeated a dozen times.
+      if (current.length > 0 && !hasAutoSavedSnapshot(signature)) {
         try {
-          await saveWorkspace({
+          const saved = await saveWorkspace({
             name: autoSpaceName(new Date()),
             description: translate("切换 Space 前自动保存"),
-            payload: snapshotTabsToPayload(current),
+            payload,
           })
+          rememberAutoSavedSnapshot(signature, saved.id)
         } catch (error) {
           messageApi.warning(translate("自动保存当前标签失败：{value0}", { value0: String(error) }))
         }
@@ -2092,6 +2102,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     } else {
       setTabs(current => current.map(item => item.loading ? { ...item, loading: false } : item))
     }
+    // The restored active tab may be a brand-new WebView; the visibility effect
+    // does not re-run when only the handle appears, so show it explicitly.
+    if (visibleRef.current && activeTabIdRef.current === result.activeTabId && hasNativeTab(result.activeTabId)) {
+      await showNativeTab(result.activeTabId).catch(() => undefined)
+    }
     void enforceLiveTabLimit(result.activeTabId)
     messageApi.success(translate("已恢复工作区（+{value0} / \u2212{value1}）",{value0:result.addedCount,value1:result.removedCount}))
   }
@@ -2412,7 +2427,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         : splitTabId
           ? { key: 'split-close', label: translate("取消分屏"), onClick: closeSplit }
           : { key: 'split-next', label: translate("与下一个标签并排"), disabled: !nativeMode || !tabs.some(item => item.id !== tab.id && !item.private && Boolean(item.url)), onClick: () => { const next = tabs.find(item => item.id !== tab.id && !item.private && Boolean(item.url)); if (next) openSplit(next.id) } },
-      ...(tab.id === active.id ? [{ key: 'split-document', label: translate("与文档并排"), disabled: !nativeMode, onClick: () => { setSplitTabId(null); setDocumentPickerOpen(true) } }] : []),
+      ...(tab.id === active.id ? [{ key: 'split-document', label: translate("与文档并排"), disabled: !nativeMode, onClick: () => { setSplitTabId(null); setSplitChat(false); setDocumentPickerOpen(true) } }] : []),
+      ...(tab.id === active.id ? [{ key: 'split-chat', label: translate("与 AI 对话并排"), disabled: !nativeMode, onClick: () => { setSplitTabId(null); setSplitDocument(null); setSplitChat(true) } }] : []),
       { key: 'rename-tab', label: translate("重命名标签页"), onClick: () => { setRenameTabId(tab.id); setRenameDraft(tab.title) } },
       { key: 'queue', label:translate("稍后读"),disabled:!tab.url||tab.private,onClick:()=>{void queueTabForLater(tab)}},
       { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
@@ -2769,6 +2785,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     {active.private&&<div className="browser-private-bar"><LockOutlined/><strong>{translate("私密浏览")}</strong><span>{translate("不会保存历史记录、关闭记录与站点权限")}</span></div>}
     {findOpen&&<div className="browser-find"><Input autoFocus allowClear prefix={<SearchOutlined/>} value={findQuery} status={findStatus==='missing'?'error':undefined} placeholder={translate("在页面中查找")} onChange={event=>{setFindQuery(event.target.value);setFindStatus('idle')}} onPressEnter={event=>void runFind(event.shiftKey)}/><Typography.Text type={findStatus==='missing'?'danger':'secondary'}>{findStatus==='missing'?translate("未找到"):findStatus==='found'?translate("已定位"):''}</Typography.Text><Button type="text" aria-label={translate("上一个匹配项")} icon={<ArrowUpOutlined/>} onClick={()=>void runFind(true)}/><Button type="text" aria-label={translate("下一个匹配项")} icon={<ArrowDownOutlined/>} onClick={()=>void runFind(false)}/><Button type="text" aria-label={translate("关闭查找")} icon={<CloseOutlined/>} onClick={closeFind}/></div>}
     <PermissionPromptBar prompt={permissionPrompt} />
+    {(splitTabId || splitDocument || splitChat) && <div className="split-status">
+      <span>{translate("分屏")}：{active.title} ｜ {splitTabId ? tabs.find(tab => tab.id === splitTabId)?.title ?? '' : splitDocument ? splitDocument.title : translate("AI 对话")}</span>
+      <Space>
+        <Button size="small" type="text" disabled={!splitTabId} onClick={() => { if (!splitTabId) return; const left = active.id; activateTab(splitTabId); setSplitTabId(left) }}>{translate("交换")}</Button>
+        <Button size="small" type="text" onClick={() => { closeSplit(); closeDocumentSplit(); setSplitChat(false) }}>{translate("关闭分屏")}</Button>
+      </Space>
+    </div>}
     {activeSiteRoute?.spaceId && activeSiteRoute.spaceId !== readCurrentSpace()?.id && dismissedSpaceRoute !== activeSiteRoute.host && (
       <div className="space-route-bar">
         <span>{translate("此站点属于 Space「{value0}」", { value0: spaceOptions.find(space => space.id === activeSiteRoute.spaceId)?.name ?? activeSiteRoute.spaceId })}</span>
@@ -2981,7 +3004,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:translate("当前环境暂时无法打开此网页。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
               : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison} onOpenLibrary={onOpenLibrary}/>}
       {splitDocument && <DocumentSplitPane document={splitDocument} onClose={closeDocumentSplit} ratio={splitRatio}/>}
-      {(splitTabId || splitDocument) && <div className="split-divider" style={{ left: `${splitRatio * 100}%` }} onPointerDown={startSplitDrag}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+      {splitChat && <div className="split-chat-pane" style={{ width: `${Math.round((1 - splitRatio) * 100)}%` }}>
+        <AssistantPanel close={() => setSplitChat(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>
+      </div>}
+      {(splitTabId || splitDocument || splitChat) && <div className="split-divider" style={{ left: `${splitRatio * 100}%` }} onPointerDown={startSplitDrag}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{

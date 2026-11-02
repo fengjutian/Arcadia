@@ -6,16 +6,56 @@ import {
   clearCurrentSpace,
   currentSpaceNamespace,
   documentInScope,
+  hasAutoSavedSnapshot,
   readCurrentSpace,
   readSpaceIdentities,
   readSpaceScopes,
+  rememberAutoSavedSnapshot,
   spaceColorFor,
+  tabSnapshotSignature,
   writeCurrentSpace,
   writeSpaceIdentity,
   writeSpaceScope,
 } from './spaces'
 
 beforeEach(() => localStorage.clear())
+
+describe('tabSnapshotSignature', () => {
+  const tabs = [
+    { url: 'https://a.test/', title: 'A', pinned: false },
+    { url: 'https://b.test/', title: 'B', pinned: true },
+  ]
+
+  it('is stable for the same tab set', () => {
+    expect(tabSnapshotSignature({ tabs })).toBe(tabSnapshotSignature({ tabs: [...tabs] }))
+    expect(tabSnapshotSignature({ tabs })).not.toBe('')
+  })
+
+  it('changes with url, title, order or pinned state', () => {
+    const base = tabSnapshotSignature({ tabs })
+    expect(tabSnapshotSignature({ tabs: [{ ...tabs[0], url: 'https://c.test/' }, tabs[1]] })).not.toBe(base)
+    expect(tabSnapshotSignature({ tabs: [{ ...tabs[0], title: 'A2' }, tabs[1]] })).not.toBe(base)
+    expect(tabSnapshotSignature({ tabs: [tabs[1], tabs[0]] })).not.toBe(base)
+    expect(tabSnapshotSignature({ tabs: [{ ...tabs[0], pinned: true }, tabs[1]] })).not.toBe(base)
+  })
+
+  it('is empty for an empty tab set', () => {
+    expect(tabSnapshotSignature({ tabs: [] })).toBe('')
+    expect(tabSnapshotSignature(null)).toBe('')
+  })
+})
+
+describe('auto-save index', () => {
+  it('remembers a snapshot so a repeated switch does not duplicate it', () => {
+    const signature = tabSnapshotSignature({ tabs: [{ url: 'https://a.test/', title: 'A' }] })
+    expect(hasAutoSavedSnapshot(signature)).toBe(false)
+    rememberAutoSavedSnapshot(signature, 'ws-1')
+    expect(hasAutoSavedSnapshot(signature)).toBe(true)
+    // Another tab set is still considered unsaved.
+    expect(hasAutoSavedSnapshot(tabSnapshotSignature({ tabs: [{ url: 'https://b.test/', title: 'B' }] }))).toBe(false)
+    expect(hasAutoSavedSnapshot('')).toBe(false)
+  })
+})
 
 describe('autoSpaceName', () => {
   it('formats month, day, hour and minute with padding', () => {

@@ -39,7 +39,14 @@ export function spaceMenuRows(input: SpaceMenuInput): SpaceMenuRow[] {
   const rows: SpaceMenuRow[] = []
   if (input.spaces.length) {
     for (const space of input.spaces) {
-      rows.push({ key: `space:${space.id}`, label: `${space.name} · ${space.tabCount}` })
+      const active = space.id === input.currentSpace?.id
+      rows.push({
+        key: `space:${space.id}`,
+        label: `${space.name} · ${space.tabCount}`,
+        // Clicking the active Space is a no-op (no tab swap, no auto-save), so
+        // mark it instead of leaving the user with a row that does nothing.
+        ...(active ? { checked: true } : {}),
+      })
     }
   } else {
     rows.push({ key: 'empty', label: t('还没有已保存的 Space'), disabled: true })

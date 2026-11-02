@@ -193,3 +193,65 @@ export function spaceIconFor(spaceId: string | null | undefined): string | null 
   if (!spaceId) return null
   return readSpaceIdentities()[spaceId]?.icon ?? null
 }
+
+/**
+ * Fingerprints of tab sets that were already auto-saved before a Space switch.
+ *
+ * Switching Spaces replaces the tab strip, so the app snapshots the outgoing
+ * tabs first. Without this index every switch (and every repeat click on the
+ * same Space) added another "自动保存 HH:MM" row; with it, a tab set is saved at
+ * most once and the Space menu stops filling with duplicates.
+ */
+export const SPACE_AUTOSAVE_INDEX_KEY = 'arcadia.space.autosave-index.v1'
+const AUTOSAVE_INDEX_LIMIT = 80
+
+/** Stable fingerprint of a tab set: URLs, titles and pinned state, in order. */
+export function tabSnapshotSignature(payload: { tabs?: unknown[] } | null | undefined): string {
+  const tabs = Array.isArray(payload?.tabs) ? payload.tabs : []
+  if (tabs.length === 0) return ''
+  const normalized = tabs.map(item => {
+    const record = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+    const url = typeof record.url === 'string' ? record.url : ''
+    const title = typeof record.title === 'string' ? record.title : ''
+    return `${url}\u0000${title}\u0000${record.pinned === true ? '1' : '0'}`
+  }).join('\u0001')
+  // FNV-1a, just enough to keep localStorage small.
+  let hash = 0x811c9dc5
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+function readAutoSaveIndex(): Record<string, string> {
+  if (typeof localStorage === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(SPACE_AUTOSAVE_INDEX_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const index: Record<string, string> = {}
+    for (const [signature, id] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof id === 'string' && id) index[signature] = id
+    }
+    return index
+  } catch {
+    return {}
+  }
+}
+
+export function hasAutoSavedSnapshot(signature: string): boolean {
+  if (!signature) return false
+  return Boolean(readAutoSaveIndex()[signature])
+}
+
+export function rememberAutoSavedSnapshot(signature: string, workspaceId: string): void {
+  if (typeof localStorage === 'undefined' || !signature || !workspaceId) return
+  try {
+    const index = readAutoSaveIndex()
+    index[signature] = workspaceId
+    const entries = Object.entries(index).slice(-AUTOSAVE_INDEX_LIMIT)
+    localStorage.setItem(SPACE_AUTOSAVE_INDEX_KEY, JSON.stringify(Object.fromEntries(entries)))
+  } catch { /* storage full: a duplicate snapshot may reappear */ }
+}

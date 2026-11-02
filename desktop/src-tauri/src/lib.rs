@@ -1997,6 +1997,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let _ = tauri::Emitter::emit_to(app, "main", "little-arc://hotkey", ());
+                    }
+                })
+                .build(),
+        )
         .manage(NavStacks::default())
         .manage(ToolbarMenuTokens::default())
         .manage(DownloadIndex::default())
