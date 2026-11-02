@@ -2194,6 +2194,8 @@ pub fn run() {
             rag::commands::rag_rebuild_index,
             rag::commands::rag_retrieve,
             rag::commands::rag_answer,
+            rag::extras::rag_reindex_extras,
+            rag::extras::rag_sync_extras,
             assistant_tasks::assistant_task_start,
             assistant_tasks::assistant_task_get,
             agent::commands::agent_recover_interrupted,

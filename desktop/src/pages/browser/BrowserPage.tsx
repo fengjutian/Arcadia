@@ -25,7 +25,9 @@ import { archivedTabFromBrowserTab } from '../../features/archive/archive'
 import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
+import { normalizeSleepHost, readSleepExceptions, sleepReasonLabel, toggleSleepException, writeSleepExceptions } from '../../features/browser/sleepSettings'
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
+import { scheduleExtrasSync } from '../../features/search/extrasSync'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
 import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '../../features/ai/floatingAssistant'
 import { listen } from '@tauri-apps/api/event'
@@ -132,6 +134,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [findOpen, setFindOpen] = useState(false)
   const [pendingShellOpen, setPendingShellOpen] = useState<string | null>(null)
   const [commandOpen, setCommandOpen] = useState(false)
+  const [sleepExceptions, setSleepExceptions] = useState<string[]>(readSleepExceptions)
+  const sleepExceptionsRef = useRef<string[]>(sleepExceptions)
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
   const [blockEvents, setBlockEvents] = useState<Awaited<ReturnType<typeof privacyListBlockEvents>>>([])
@@ -1237,6 +1241,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         maxLive: currentSettings.maxLiveWebviews,
         idleThresholdMs,
         suspendIdle,
+        excludedHosts: new Set(sleepExceptionsRef.current),
       })
       for (const id of plan.toClose) {
         try {
@@ -1245,7 +1250,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         } catch { /* retain the last observed position */ }
         const retained = await suspendNativeTab(id).catch(() => false)
         if (!retained) await closeNativeTab(id)
-        setTabs(current => current.map(item => item.id === id ? { ...item, suspended: true, loading: false } : item))
+        setTabs(current => current.map(item => item.id === id ? { ...item, suspended: true, suspendedReason: 'lru', loading: false } : item))
       }
     } finally {
       lruSweepRunningRef.current = false
@@ -1287,6 +1292,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     } catch (error) {
       setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: classifyNavigationError(error) } : item))
     }
+  }
+
+  function updateSleepExceptions(next: string[]) {
+    sleepExceptionsRef.current = next
+    setSleepExceptions(next)
+    writeSleepExceptions(next)
   }
 
   /** Explicit "sleep this tab now": keep the record, release the WebView. */
@@ -1790,7 +1801,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       color: 'yellow',
     }
     setNotes(current => [entry, ...current])
-    void persistPageNote(entry).catch(error => messageApi.error(translate("笔记保存失败：{value0}",{value0:String(error)})))
+    void persistPageNote(entry).then(() => scheduleExtrasSync()).catch(error => messageApi.error(translate("笔记保存失败：{value0}",{value0:String(error)})))
     setNotesOpen(true)
     messageApi.success(translate("已加入笔记"),2)
     return
@@ -1809,6 +1820,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     }
     try {
       await saveClip(clip)
+      scheduleExtrasSync()
       messageApi.success(translate("已剪藏，可在知识库「剪藏」中查看"), 2)
     } catch (error) {
       messageApi.error(translate("剪藏失败：{value0}", { value0: String(error) }))
@@ -1993,12 +2005,14 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   }
 
   function tabMenu(tab: BrowserTab, index: number): MenuProps['items'] {
+    const sleepHost = normalizeSleepHost(tab.url ?? '')
     const sameDomainCount = idsToCloseForSameDomain(tabs, tab.id).length
     const items: NonNullable<MenuProps['items']> = [
       { key: 'reload', label:translate("重新加载"),disabled:!hasNativeTab(tab.id),onClick:()=>void reloadNativeTab(tab.id)},
       { key: 'duplicate', label:translate("复制标签页"),disabled:!tab.url,onClick:()=>duplicateTab(tab)},
       { key: 'pin', label: tab.pinned ?translate("取消固定"):translate("固定标签页"),onClick:()=>togglePinned(tab.id)},
       { key: 'sleep', label: tab.suspended ? translate("唤醒标签页") : translate("立即休眠"), disabled: tab.pinned || tab.id === activeTabId, onClick: () => { if (tab.suspended) void resumeTab(tab); else void suspendTabNow(tab) } },
+      { key: 'sleep-site', label: sleepHost && sleepExceptions.includes(sleepHost) ? translate("恢复此站点自动休眠") : translate("此站点不再自动休眠"), disabled: !sleepHost, onClick: () => updateSleepExceptions(toggleSleepException(sleepExceptions, tab.url ?? '')) },
       { key: 'archive', label:translate("归档标签页"),disabled:!tab.url||tab.private,onClick:()=>{void archiveTabToStore(tab)}},
       { key: 'queue', label:translate("稍后读"),disabled:!tab.url||tab.private,onClick:()=>{void queueTabForLater(tab)}},
       { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
@@ -2106,6 +2120,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     try {
       await archiveTab(entry, readAutoArchiveSettings().retention)
       void dequeueUrl(target.url)
+      scheduleExtrasSync()
       messageApi.success(translate("已归档，可在知识库「归档」中找回"),2)
       closeTab(target.id)
     } catch (error) {
@@ -2152,6 +2167,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         return
       }
       await saveClip(clip)
+      scheduleExtrasSync()
       messageApi.success(translate("已剪藏整页，可在知识库「剪藏」中查看"), 2)
     } catch (error) {
       messageApi.error(translate("剪藏失败：{value0}", { value0: String(error) }))

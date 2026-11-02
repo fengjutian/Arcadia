@@ -1,7 +1,8 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Spin } from '../components/ui'
 import { AppLayout } from '../layouts/AppLayout'
 import { takeViewAfterReload } from './returnView'
+import { scheduleExtrasSync } from '../features/search/extrasSync'
 import type { View } from '../types'
 
 const BrowserPage=lazy(()=>import('../pages/browser/BrowserPage').then(module=>({default:module.BrowserPage})))
@@ -15,6 +16,8 @@ export function AppRouter() {
   const [view, setView] = useState<View>(() => takeViewAfterReload() ?? 'browser')
   const [mountedViews, setMountedViews] = useState<Set<View>>(() => new Set([view]))
   const [knowledgeQuery, setKnowledgeQuery] = useState('')
+  // Bring the extra-source vector index up to date once the app has settled.
+  useEffect(() => { scheduleExtrasSync(2_000) }, [])
   const changeView = (next: View) => {
     setMountedViews(current => {
       if (current.has(next)) return current

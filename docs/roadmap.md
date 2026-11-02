@@ -75,7 +75,7 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1`、`6.2`、`6.15` 已完成；`6.3`、`6.6`、`6.13`、`6.14` 部分落地，其余未开始。按性价比排序：`6.3` 不依赖布局收口；`6.4` 起依赖布局收口。
+> 状态以各条目勾选为准：`6.1`、`6.2`、`6.3`、`6.14`、`6.15` 已完成；`6.6`、`6.13` 部分落地，其余未开始。按性价比排序：`6.6`/`6.13` 不依赖布局收口；`6.4` 起依赖布局收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
@@ -102,10 +102,11 @@
 
 ### 6.3 笔记/高亮落库并进入检索与 RAG
 
-- [~] 借鉴：Arc 让笔记贴着浏览发生；本项目已实现划词笔记，但只完成了一半。
+- [x] 借鉴：Arc 让笔记贴着浏览发生；本项目已实现划词笔记，但只完成了一半。
 - 现状：`features/notes/notes.ts` 把高亮存在 `localStorage`（上限 500 条），不进 SQLite、不进 FTS、不进备份、不参与 RAG。
-- 已落地（2026-11-02）：迁移 #32 `page_notes` + `page_notes_fts`；命令 `local_list/save/delete/clear_page_notes` 与 `local_search_page_notes`；`features/notes/noteStore.ts` 负责读写、旧 `localStorage` 一次性迁移与失败回滚；BrowserPage 改为异步加载并逐条持久化；SearchPage 新增「笔记」结果分组（FTS 命中、高亮引文与批注、点击回到原文）；备份（`local_export/import_backup`）新增 `notes` 字段并兼容旧备份。RAG 检索新增笔记/剪藏召回（`retrieval::extra_source_hits`，合成 chunk id `note:<id>` / `clip:<id>`），AI 回答可引用；前端引用条支持无文档行的来源，点击打开原文。Rust 测试 `page_notes_roundtrip_through_fts`、`extra_source_hits_include_notes_and_clips`。
-- 待补：颜色与文本锚点的写入 UI、独立笔记浏览页、向量索引覆盖笔记。
+- 已落地（2026-11-02）：迁移 #32 `page_notes` + `page_notes_fts`；命令 `local_list/save/delete/clear_page_notes` 与 `local_search_page_notes`；`features/notes/noteStore.ts` 负责读写、旧 `localStorage` 一次性迁移与失败回滚；BrowserPage 改为异步加载并逐条持久化；SearchPage 新增「笔记」结果分组（FTS 命中、高亮引文与批注、点击回到原文）；备份（`local_export/import_backup`）新增 `notes` 字段并兼容旧备份。RAG 检索新增笔记/剪藏/归档召回（`retrieval::extra_source_hits` + `extras` 向量索引，合成 chunk id `note:<id>` / `clip:<id>` / `archive:<id>`），AI 回答可引用；前端引用条支持无文档行的来源，点击打开原文。
+- 向量索引：迁移 #35 `extra_embeddings` + 命令 `rag_reindex_extras`（全量，知识库状态面板可手动触发）与 `rag_sync_extras`（增量，只补缺向量的条目）；应用启动后、以及保存笔记/剪藏或归档后 4 秒防抖自动补齐，用户无需手动点。检索在词法之外叠加余弦召回并去重。
+- 待补（增强，不计入本项验收）：颜色与文本锚点的写入 UI、独立笔记浏览页。
 - 做法：迁移到 SQLite 并随文档关联；写入 FTS5 与向量索引；保存网页时把该页笔记挂到文档；备份/导出覆盖笔记；一次性迁移旧 `localStorage` 数据。
 - 验收：重启与备份恢复后笔记仍在；可按笔记正文检索；RAG 引用可标注笔记来源；迁移可重复执行且幂等。
 - 增补（借 Chrome highlights）：高亮记录 `quote / prefix / suffix / color`，用文本锚点而非 XPath，保证页面改版后仍可定位。
@@ -175,17 +176,17 @@
 
 - [~] 借鉴：Chrome Memory Saver / Edge Sleeping Tabs——机制的价值在可见性与可控性，不在回收本身。
 - 现状：`webview_suspend.rs` 已在 Windows 真实调用 `ICoreWebView2_3::TrySuspend`，`lruPolicy.ts` 已保护固定/发声/下载中的标签；但界面没有睡眠态、没有原因说明、没有站点例外。
-- 已落地（2026-11-02）：睡眠标签在标签条显示月亮徽标 + 悬停提示；标签右键新增「立即休眠 / 唤醒标签页」（当前标签与固定标签不可休眠）；手动休眠会先记录滚动位置再挂起，非 Windows 走「销毁 WebView + 点击重建」的既有降级路径。
-- 待补：站点级「永不自动休眠」与原因说明；唤醒后滚动位置的恢复提示。
+- 已落地（2026-11-02）：睡眠标签在标签条显示月亮徽标 + 悬停提示；标签右键新增「立即休眠 / 唤醒标签页」（当前标签与固定标签不可休眠）；手动休眠会先记录滚动位置再挂起，非 Windows 走「销毁 WebView + 点击重建」的既有降级路径；站点级「此站点不再自动休眠」写入 `arcadia.sleep.exceptions.v1`，LRU 扫描按 host 跳过，右键可随时恢复。
+- 待补：休眠原因说明（LRU / 用户手动）、唤醒后滚动位置的恢复提示、非 Windows 的显式降级提示。
 - 做法：标签睡眠徽标与 hover 原因；右键「立即休眠 / 唤醒」；站点级「永不自动休眠」；唤醒后的状态恢复提示。
 - 验收：睡眠态可被用户识别；唤醒不丢导航历史；例外规则持久化并即时生效；非 Windows 平台明确降级为不可用而非静默失败。
 
 ### 6.14 阅读队列（待读）
 
-- [~] 借鉴：Chrome Reading List——「稍后读」与「已保存」是两种不同意图。
+- [x] 借鉴：Chrome Reading List——「稍后读」与「已保存」是两种不同意图。
 - 现状：只有「保存到知识库」，没有轻量的待读队列。
-- 已落地（2026-11-02）：迁移 #33 `reading_queue`（按 URL 去重，重复加入只更新时间）；命令 `local_list/add/remove/clear_reading_queue`；标签右键「稍后读」、命令栏「稍后读（加入待读）」动作；知识库「待读」页签（打开原文、移出）。Rust 测试 `reading_queue_upserts_by_url_and_keeps_newest_first`，前端 `features/reading-queue/` 5 例。
-- 待补：地址栏星标旁的快捷入口；「读完转保存」的一键动作。
+- 已落地（2026-11-02）：迁移 #33 `reading_queue`（按 URL 去重，重复加入只更新时间）；命令 `local_list/add/remove/clear_reading_queue`；标签右键「稍后读」、命令栏动作、工具栏「加入待读」按钮；知识库「待读」页签（打开原文、移出）；保存到知识库或归档时自动把该 URL 移出队列。Rust 测试 `reading_queue_upserts_by_url_and_keeps_newest_first`，前端 `features/reading-queue/` 5 例。
+- 待补：无（「读完转保存」通过在浏览器保存/归档时自动出队实现，不需要跨视图编排）。
 - 做法：新增阅读队列（`reading_queue` 表或 documents 状态扩展）；入口在地址栏星标旁与知识库「待读」页签；读完可一键转保存或归档。
 - 验收：加入/移除有即时反馈；队列按加入时间排序；重启后保留；与归档（6.2）语义不重叠。
 

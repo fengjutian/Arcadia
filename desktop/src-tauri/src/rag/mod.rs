@@ -10,6 +10,7 @@ pub mod chunker;
 pub mod citation;
 pub mod commands;
 pub mod evaluator;
+pub mod extras;
 pub mod fusion;
 pub mod indexer;
 pub mod lexical;

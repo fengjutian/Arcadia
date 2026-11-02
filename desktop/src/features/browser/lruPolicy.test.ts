@@ -113,4 +113,21 @@ describe('planLruSweep', () => {
     expect(plan.toClose).not.toContain('pinned')
     expect(plan.toClose).not.toContain('recent')
   })
+
+  it('keeps tabs whose host is excluded from auto-sleep', () => {
+    const plan = planLruSweep({
+      tabs,
+      liveIds: new Set(['pinned', 'recent', 'stale']),
+      lastActiveAt,
+      activeDownloads,
+      protectedId: 'recent',
+      maxLive: 8,
+      idleThresholdMs: 120_000,
+      suspendIdle: true,
+      excludedHosts: new Set(['e.com']),
+      now: NOW,
+    })
+    expect(plan.toClose).toEqual([])
+    expect(plan.kept).toContain('stale')
+  })
 })

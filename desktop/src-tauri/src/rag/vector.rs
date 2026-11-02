@@ -175,14 +175,14 @@ struct RawRow {
     end_offset: usize,
 }
 
-fn blob_to_vector(bytes: &[u8]) -> Vec<f32> {
+pub(crate) fn blob_to_vector(bytes: &[u8]) -> Vec<f32> {
     bytes
         .chunks_exact(4)
         .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect()
 }
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }

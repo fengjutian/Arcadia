@@ -1014,6 +1014,18 @@ export async function ragRebuildIndex(providerId: string, model: string): Promis
   return invoke<number>('rag_rebuild_index', { providerId, model })
 }
 
+/** Embed notes, clips and archived tabs so semantic search can reach them. */
+export async function ragReindexExtras(providerId: string): Promise<number> {
+  if (!isTauri()) return 0
+  return invoke<number>('rag_reindex_extras', { providerId })
+}
+
+/** Incrementally embed only the extra sources that have no vector yet. */
+export async function ragSyncExtras(): Promise<number> {
+  if (!isTauri()) return 0
+  return invoke<number>('rag_sync_extras')
+}
+
 export async function ragRetrieve(providerId: string, query: RagQuery): Promise<RagRetrieveResponse> {
   if (!isTauri()) return { hits: [], degraded: true, warnings: ['not running in Tauri'], timings: {}, indexKey: null }
   return invoke<RagRetrieveResponse>('rag_retrieve', { providerId, query })

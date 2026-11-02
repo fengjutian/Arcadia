@@ -815,6 +815,20 @@ const MIGRATIONS: &[(i64, &str)] = &[
                 VALUES (new.rowid, new.content, new.note, new.title, new.source_title);
         END;",
     ),
+    (
+        35,
+        "CREATE TABLE extra_embeddings (
+            kind TEXT NOT NULL CHECK(kind IN ('note','clip','archive')),
+            source_id TEXT NOT NULL,
+            model TEXT NOT NULL,
+            dims INTEGER NOT NULL,
+            vector BLOB NOT NULL,
+            excerpt TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY(kind, source_id, model)
+        );
+        CREATE INDEX idx_extra_embeddings_model ON extra_embeddings(model);",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

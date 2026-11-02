@@ -148,6 +148,7 @@ pub async fn orchestrate_with_embedder(
         RetrievalMode::Vector | RetrievalMode::Hybrid
     );
     let mut vector: Vec<VectorCandidate> = Vec::new();
+    let mut query_vector: Option<Vec<f32>> = None;
     if wants_vector {
         if index_key.is_none() {
             warnings.push("vector requested but provider/model not specified".into());
@@ -160,6 +161,7 @@ pub async fn orchestrate_with_embedder(
             match embed_result {
                 Ok(vec) => {
                     let dims = vec.len();
+                    query_vector = Some(vec.clone());
                     if let Some(key) = &index_key {
                         if key.dimensions != 0 && key.dimensions != dims {
                             let msg = format!(
@@ -268,11 +270,33 @@ pub async fn orchestrate_with_embedder(
     // fragment without turning it into a document.
     if query.document_ids.is_none() {
         let conn = database.lock().await;
-        let extras = extra_source_hits(&conn, &query.query, 6);
+        let mut extras = extra_source_hits(&conn, &query.query, 6);
+        if let (Some(vector), Some(key)) = (query_vector.as_deref(), index_key.as_ref()) {
+            for candidate in super::extras::search_extra_vectors(&conn, vector, &key.model, 4) {
+                let chunk_id = format!("{}:{}", candidate.kind, candidate.source_id);
+                if extras.iter().any(|hit| hit.chunk.document_id == chunk_id) {
+                    continue;
+                }
+                if let Some(source) = super::extras::extra_source_by_id(&conn, &candidate.kind, &candidate.source_id) {
+                    let mut hit = synthetic_hit(
+                        &candidate.kind,
+                        &candidate.source_id,
+                        source.title,
+                        source.url,
+                        source.text,
+                        super::extras::kind_label(&candidate.kind),
+                    );
+                    hit.score.vector_score = Some(candidate.score as f64);
+                    hit.score.fused_score = candidate.score as f64;
+                    hit.reasons = vec!["向量相似".into()];
+                    extras.push(hit);
+                }
+            }
+        }
         drop(conn);
         if !extras.is_empty() {
             hits.extend(extras);
-            hits.truncate(query.top_k + 6);
+            hits.truncate(query.top_k + 8);
         }
     }
 

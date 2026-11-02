@@ -2,7 +2,7 @@ import { t } from '../../i18n'
 import { Alert, Button, Empty, Space, Table, Tag, Typography, message } from '../../components/ui'
 import { ReloadOutlined } from '../../components/ui/icons'
 import { useCallback, useEffect, useState } from 'react'
-import { getMigrationStatus, listStoredSitePermissions, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragRetryJob, replaceSitePermissions, type MigrationStatus, type RagIndexStatus, type RagJobRow, listAIProviders } from '../../api'
+import { getMigrationStatus, listStoredSitePermissions, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragReindexExtras, ragRetryJob, replaceSitePermissions, type MigrationStatus, type RagIndexStatus, type RagJobRow, listAIProviders } from '../../api'
 import type { AIProvider } from '../../types'
 import { SITE_PERMISSION_KINDS, type SitePermissionRule } from '../browser/sitePermissions'
 
@@ -65,8 +65,7 @@ export function KnowledgeBaseStatusPanel() {
     void refresh()
   }
 
-  async function enqueueAll() {
-    const target = providers.find(p => p.embeddingModel)
+  async function enqueueAll() {    const target = providers.find(p => p.embeddingModel)
     if (!target) {
       messageApi.warning(t("请先在「AI Provider」中配置带 embeddingModel 的 Provider"))
       return
@@ -76,8 +75,17 @@ export function KnowledgeBaseStatusPanel() {
     void refresh()
   }
 
-  async function retryJob(jobId: string) {
-    await ragRetryJob(jobId)
+  async function reindexExtras() {
+    const target = providers.find(p => p.embeddingModel)
+    if (!target) {
+      messageApi.warning(t("请先在「AI Provider」中配置带 embeddingModel 的 Provider"))
+      return
+    }
+    const n = await ragReindexExtras(target.id)
+    messageApi.success(t("已为 {value0} 条笔记/剪藏/归档生成向量", { value0: n }))
+  }
+
+  async function retryJob(jobId: string) {    await ragRetryJob(jobId)
     void refresh()
   }
 
@@ -137,6 +145,7 @@ export function KnowledgeBaseStatusPanel() {
       : <Alert type="info" showIcon message={t("非桌面环境，跳过 RAG 索引")}/>}
     <Space style={{ marginTop: 8 }} wrap>
       <Button size="small" onClick={() => void rebuildIndex()}>{t("重建索引")}</Button>
+      <Button size="small" onClick={() => void reindexExtras()}>{t("索引笔记与剪藏")}</Button>
       <Button size="small" onClick={() => void enqueueAll()}>{t("入队新文档")}</Button>
     </Space>
     {ragJobs.length > 0 &&(

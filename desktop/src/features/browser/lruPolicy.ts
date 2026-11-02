@@ -54,15 +54,26 @@ export interface LruCandidateInputs {
   idleThresholdMs?: number
   /** Suspend every eligible idle tab, even when the hard live-count cap is not exceeded. */
   suspendIdle?: boolean
+  /** Hosts the user marked "never auto-sleep" (normalised, no `www.`). */
+  excludedHosts?: ReadonlySet<string>
   /** Reference timestamp for idle math (test seam). */
   now?: number
 }
 
-export interface LruPlan {
-  /** Tabs to close in order; first id is closed first. */
+export interface LruPlan {  /** Tabs to close in order; first id is closed first. */
   toClose: string[]
   /** Tabs skipped because they hit the keep-alive whitelist. */
   kept: string[]
+}
+
+function tabHost(url: string | undefined): string | null {
+  if (!url) return null
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '')
+    return host || null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -88,6 +99,11 @@ export function planLruSweep(inputs: LruCandidateInputs): LruPlan {
   for (const tab of candidates) {
     const overCap = inputs.liveIds.size - toClose.length > maxLive
     if (!overCap && !inputs.suspendIdle) break
+    const host = tabHost(tab.url)
+    if (inputs.excludedHosts && host && inputs.excludedHosts.has(host)) {
+      kept.push(tab.id)
+      continue
+    }
     if (shouldKeepTabLive(tab, activeDownloads, now, idleThresholdMs)) {
       kept.push(tab.id)
       continue

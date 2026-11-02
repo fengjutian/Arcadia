@@ -219,6 +219,9 @@ pub struct CefPageEngine {
     shared: Arc<Shared>,
     /// Parent HWND of every tab container (the Tauri main window).
     parent: isize,
+    /// Logical to physical pixel factor captured at startup. Raw Win32 window
+    /// calls take physical pixels while PageBounds is logical.
+    scale: f64,
 }
 
 impl CefPageEngine {
@@ -238,7 +241,7 @@ impl PageEngine for CefPageEngine {
             ..
         } = spec;
 
-        let hwnd = create_container(&label, self.parent, bounds)?;
+        let hwnd = create_container(&label, self.parent, bounds, self.scale)?;
         self.shared.set_window(&label, hwnd);
         self.shared.set_url(&label, url.clone());
 
@@ -331,10 +334,10 @@ impl PageEngine for CefPageEngine {
         let hwnd = self.view(label)?;
         platform::set_rect(
             hwnd,
-            bounds.x.round() as i32,
-            bounds.y.round() as i32,
-            bounds.width.round().max(1.0) as i32,
-            bounds.height.round().max(1.0) as i32,
+            (bounds.x * self.scale).round() as i32,
+            (bounds.y * self.scale).round() as i32,
+            (bounds.width * self.scale).round().max(1.0) as i32,
+            (bounds.height * self.scale).round().max(1.0) as i32,
         )
         .map_err(EngineError::Message)
     }
@@ -470,7 +473,7 @@ pub fn initialize() -> std::result::Result<(), String> {
 
 /// Build the CEF engine, or explain why it cannot run here.
 pub fn try_create(app: &tauri::AppHandle) -> std::result::Result<Arc<dyn PageEngine>, String> {
-    let parent = main_window_hwnd(app).ok_or_else(|| {
+    let (parent, scale) = main_window_hwnd(app).ok_or_else(|| {
         "main window has no Win32 handle yet (CEF must be selected after the window exists)"
             .to_string()
     })?;
@@ -478,15 +481,19 @@ pub fn try_create(app: &tauri::AppHandle) -> std::result::Result<Arc<dyn PageEng
     Ok(Arc::new(CefPageEngine {
         shared: Arc::new(Shared::default()),
         parent,
+        scale,
     }))
 }
 
 /// The Tauri main window's HWND as a plain integer so it can cross threads.
-fn main_window_hwnd(app: &tauri::AppHandle) -> Option<isize> {
+fn main_window_hwnd(app: &tauri::AppHandle) -> Option<(isize, f64)> {
     use tauri::Manager;
-    let window = app.windows().into_values().next()?;
+    // Resolve main explicitly: multiple windows are possible and
+    // into_values().next() has no ordering guarantee.
+    let window = app.get_window("main")?;
     let hwnd = window.hwnd().ok()?;
-    Some(hwnd.0 as isize)
+    let scale = window.scale_factor().unwrap_or(1.0);
+    Some((hwnd.0 as isize, scale))
 }
 
 pub fn shutdown() {
@@ -505,14 +512,14 @@ fn window_handle(hwnd: isize) -> cef::WindowHandle {
     unsafe { std::mem::transmute_copy(&hwnd) }
 }
 
-fn create_container(label: &str, parent: RawHwnd, bounds: PageBounds) -> Result<RawHwnd> {
+fn create_container(label: &str, parent: RawHwnd, bounds: PageBounds, scale: f64) -> Result<RawHwnd> {
     platform::create_child_window(
         label,
         parent,
-        bounds.x.round() as i32,
-        bounds.y.round() as i32,
-        bounds.width.round().max(1.0) as i32,
-        bounds.height.round().max(1.0) as i32,
+        (bounds.x * scale).round() as i32,
+        (bounds.y * scale).round() as i32,
+        (bounds.width * scale).round().max(1.0) as i32,
+        (bounds.height * scale).round().max(1.0) as i32,
     )
     .map_err(EngineError::Message)
 }
