@@ -77,3 +77,50 @@ export function importToSpacePayload(imported: readonly ImportedBookmark[]): { v
   }))
   return { version: 2, tabs, activeTabId: tabs[0]?.id ?? '' }
 }
+
+interface TabLike {
+  url?: unknown
+  title?: unknown
+  name?: unknown
+}
+
+function tabFrom(value: unknown): ImportedBookmark | null {
+  if (typeof value === 'string') return /^https?:\/\//i.test(value) ? { title: value, url: value } : null
+  if (!value || typeof value !== 'object') return null
+  const record = value as TabLike
+  const url = typeof record.url === 'string' ? record.url.trim() : ''
+  if (!/^https?:\/\//i.test(url)) return null
+  const title = typeof record.title === 'string' && record.title.trim()
+    ? record.title.trim()
+    : typeof record.name === 'string' && record.name.trim() ? record.name.trim() : url
+  return { title, url }
+}
+
+/**
+ * Tab-list import (Arc / Dia style JSON). Accepts a bare array, or an object
+ * with `tabs` / `items` / `bookmarks`, or a nested `{ tabs: { items: [...] } }`
+ * shape; anything without an http(s) URL is skipped.
+ */
+export function parseTabsJson(text: string): ImportedBookmark[] {
+  if (!text.trim()) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return []
+  }
+  const collect = (value: unknown, depth = 0): ImportedBookmark[] => {
+    if (depth > 4) return []
+    if (Array.isArray(value)) return value.flatMap(item => tabFrom(item) ? [tabFrom(item)!] : collect(item, depth + 1))
+    if (!value || typeof value !== 'object') return []
+    const record = value as Record<string, unknown>
+    for (const key of ['tabs', 'items', 'bookmarks', 'entries']) {
+      if (key in record) {
+        const found = collect(record[key], depth + 1)
+        if (found.length) return found
+      }
+    }
+    return []
+  }
+  return collect(parsed)
+}

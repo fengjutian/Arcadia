@@ -1216,14 +1216,34 @@ fn browser_toolbar_panel(
     payload: String,
 ) -> Result<(), String> {
     validate_browser_label(&label)?;
-    if !matches!(kind.as_str(), "downloads" | "bookmarks" | "resources") {
+    if !matches!(
+        kind.as_str(),
+        "downloads" | "bookmarks" | "resources" | "space"
+    ) {
         return Err("unsupported toolbar panel".into());
     }
-    let data: serde_json::Value = serde_json::from_str(&payload)
+    let mut data: serde_json::Value = serde_json::from_str(&payload)
         .map_err(|error| format!("invalid toolbar panel payload: {error}"))?;
     let engine = engine::page_engine(&app);
     if !open {
-        engine.eval(&label, "window.__arcadiaToolbarMenu?.close(false)")?;
+        engine.eval(
+            &label,
+            "window.__arcadiaToolbarMenu?.close(false); window.__arcadiaSpaceMenu?.close(false)",
+        )?;
+        return Ok(());
+    }
+    if kind == "space" {
+        // The Space menu is drawn inside the page: the native child WebView
+        // paints above the host document, so a host menu anchored next to the
+        // rail is cut in half by the page. See `browser::space_menu_script`.
+        if let Some(object) = data.as_object_mut() {
+            object.insert(
+                "tabLabel".into(),
+                serde_json::Value::String(label.clone()),
+            );
+        }
+        let script = browser::space_menu_script(&data)?;
+        engine.eval(&label, &script)?;
         return Ok(());
     }
     let kind_js = serde_json::to_string(&kind).map_err(|error| error.to_string())?;

@@ -1561,21 +1561,7 @@ body[data-theme='dark'] {
 // A native child WebView (including Edge's print preview) owns its scrolling.
 // Prevent the empty React host beneath it from exposing a second scrollbar.
 .web-surface--native {
-  position: relative;
   overflow: hidden;
-}
-
-// Still frame of the page, painted while a host overlay (Space menu, tab menu,
-// dialog) hides the native WebView. Without it the content area would go blank
-// the moment the menu opens; with it the page appears to stay put underneath.
-.web-surface__still {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  pointer-events: none;
-  user-select: none;
 }
 
 body[data-theme-kind='image'] {
@@ -3905,6 +3891,32 @@ body.little-arc-window #root { width: 100vw; height: 100vh; }
   }
 }
 
+.site-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid #e2e9e4;
+    border-radius: 10px;
+    background: #fafcfb;
+  }
+
+  &__main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+
+    b { font-size: 13px; }
+    small { overflow: hidden; color: #748078; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  }
+}
+
 .bookmark-import-preview {
   display: flex;
   flex-direction: column;
@@ -3930,4 +3942,17 @@ body.little-arc-window #root { width: 100vw; height: 100vh; }
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.space-route-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 24%, #d8ded9);
+  background: color-mix(in srgb, var(--accent-soft) 42%, #fafbf9);
+  color: #1d2421;
+  font-size: 13px;
+
+  span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

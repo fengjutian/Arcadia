@@ -185,6 +185,182 @@ const PAGE_TOAST_CLOSE_TEMPLATE: &str = r#"(() => {
   if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
 })()"#;
 
+/// Slot filled with the JSON config of the in-page Space menu.
+pub const SPACE_MENU_CONFIG_SLOT: &str = "__ARCADIA_SPACE_MENU_CONFIG__";
+
+/// Maximum number of rows accepted from the frontend. The real menu is well
+/// under this; the cap only keeps a runaway payload from freezing the page.
+const SPACE_MENU_MAX_ROWS: usize = 120;
+
+/// Validates the Space-menu payload and returns the script that paints it
+/// inside the page.
+///
+/// The Space switch sits in the left rail, but the page is a native child
+/// WebView that always paints above the host document: a host menu anchored
+/// there is cut in half by the page. Hiding or resizing the page to make room
+/// is worse (blank or reflowing content), so the menu is drawn inside the page
+/// instead, in a closed shadow root, exactly like the page toast and the
+/// toolbar panels. The page keeps running underneath and nothing moves.
+pub fn space_menu_script(config: &serde_json::Value) -> Result<String, String> {
+    let object = config
+        .as_object()
+        .ok_or_else(|| "space menu config must be an object".to_string())?;
+    let items = object
+        .get("items")
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| "space menu items must be an array".to_string())?;
+    if items.len() > SPACE_MENU_MAX_ROWS {
+        return Err("space menu has too many rows".into());
+    }
+    for item in items {
+        let row = item
+            .as_object()
+            .ok_or_else(|| "space menu row must be an object".to_string())?;
+        for field in ["key", "label", "type"] {
+            if let Some(value) = row.get(field) {
+                if !value.is_string() && !value.is_null() {
+                    return Err(format!("space menu row field {field} must be a string"));
+                }
+            }
+        }
+    }
+    for field in ["x", "y"] {
+        if let Some(value) = object.get(field) {
+            let Some(number) = value.as_f64() else {
+                return Err(format!("space menu {field} must be a number"));
+            };
+            if !number.is_finite() {
+                return Err(format!("space menu {field} must be finite"));
+            }
+        }
+    }
+    Ok(SPACE_MENU_TEMPLATE.replace(SPACE_MENU_CONFIG_SLOT, &config.to_string()))
+}
+
+const SPACE_MENU_TEMPLATE: &str = r#"(() => {
+  const config = __ARCADIA_SPACE_MENU_CONFIG__;
+  const dark = config.theme === 'dark';
+  const x = Math.max(0, Number(config.x) || 0);
+  const y = Math.max(0, Number(config.y) || 0);
+  window.__arcadiaSpaceMenu?.close?.(false);
+
+  const emit = action => {
+    try {
+      window.__TAURI_INTERNALS__?.invoke('browser_emit_event', {
+        event: 'browser://toolbar-menu-action',
+        payload: { version: 1, tabLabel: config.tabLabel, action, value: null },
+      }).catch(() => undefined);
+    } catch (_) { /* the host may already be gone */ }
+  };
+
+  const host = document.createElement('div');
+  host.setAttribute('data-arcadia-space-menu', '');
+  host.style.cssText = 'all:initial;position:fixed;left:' + x + 'px;top:' + y + 'px;z-index:2147483647;';
+  const shadow = host.attachShadow({ mode: 'closed' });
+  const style = document.createElement('style');
+  style.textContent = [
+    ':host{all:initial}',
+    '*{box-sizing:border-box}',
+    '.menu{width:236px;max-height:min(76vh,620px);overflow:auto;padding:5px;border:1px solid #d8ded9;border-radius:10px;background:#fff;color:#252c28;box-shadow:0 12px 32px rgba(25,40,31,.18);font:13px/1.4 system-ui,"Microsoft YaHei",sans-serif;animation:arcadia-space-menu-in .12s ease-out}',
+    '@keyframes arcadia-space-menu-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}',
+    'button{all:unset;display:flex;align-items:center;gap:7px;width:100%;padding:8px 10px;border-radius:7px;cursor:pointer;color:inherit;font:inherit}',
+    'button:hover{background:#eef5ef}',
+    'button:disabled{color:#a9b3ac;cursor:default;background:transparent}',
+    '.head{padding:7px 10px 4px;color:#6b7a70;font-size:11px;font-weight:700;letter-spacing:.4px}',
+    '.sep{height:1px;margin:5px 6px;background:#eef1ef}',
+    '.check{flex:0 0 11px;color:#3c8a5c;font-size:11px;line-height:1}',
+    '.dot{flex:0 0 10px;width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.12)}',
+    '.label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.menu.dark{border-color:#46534c;background:#202823;color:#e1e9e4;box-shadow:0 12px 32px rgba(0,0,0,.4)}',
+    '.dark button:hover{background:#2d3b33}',
+    '.dark .head{color:#8ea095}',
+    '.dark .sep{background:#33403a}',
+    '.dark button:disabled{color:#5e6b64}',
+  ].join('');
+  const menu = document.createElement('div');
+  menu.className = dark ? 'menu dark' : 'menu';
+  menu.setAttribute('role', 'menu');
+  shadow.append(style, menu);
+
+  const close = notify => {
+    document.removeEventListener('pointerdown', outside, true);
+    document.removeEventListener('keydown', keydown, true);
+    host.remove();
+    if (window.__arcadiaSpaceMenu && window.__arcadiaSpaceMenu.host === host) delete window.__arcadiaSpaceMenu;
+    if (notify !== false) emit('__dismiss__');
+  };
+  const outside = event => { if (!event.composedPath().includes(host)) close(); };
+  const keydown = event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      event.stopPropagation();
+      const rows = [...menu.querySelectorAll('button:not(:disabled)')];
+      if (!rows.length) return;
+      const index = rows.indexOf(shadow.activeElement);
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      rows[(index + step + rows.length) % rows.length].focus();
+    }
+  };
+  // Keep the page from reacting to clicks, wheel or key presses aimed at the
+  // menu; the host still sees them through its own capture listeners.
+  for (const type of ['pointerdown', 'mousedown', 'click', 'wheel', 'keydown']) {
+    host.addEventListener(type, event => event.stopPropagation());
+  }
+
+  for (const item of Array.isArray(config.items) ? config.items : []) {
+    if (!item || typeof item !== 'object') continue;
+    if (item.type === 'divider') {
+      const sep = document.createElement('div');
+      sep.className = 'sep';
+      menu.append(sep);
+      continue;
+    }
+    if (item.type === 'section') {
+      const head = document.createElement('div');
+      head.className = 'head';
+      head.textContent = String(item.label ?? '');
+      menu.append(head);
+      continue;
+    }
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.setAttribute('role', 'menuitem');
+    row.disabled = Boolean(item.disabled);
+    if (item.checked) {
+      const check = document.createElement('span');
+      check.className = 'check';
+      check.textContent = '✓';
+      row.append(check);
+    }
+    if (item.swatch) {
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = String(item.swatch);
+      row.append(dot);
+    }
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = String(item.label ?? '');
+    row.append(label);
+    if (item.key) {
+      row.addEventListener('click', () => {
+        emit('space:' + item.key);
+        close(false);
+      });
+    }
+    menu.append(row);
+  }
+
+  document.documentElement.append(host);
+  window.__arcadiaSpaceMenu = { host, close };
+  setTimeout(() => {
+    if (!host.isConnected) return;
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', keydown, true);
+  }, 0);
+})()"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;

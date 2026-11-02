@@ -3,7 +3,7 @@ import { t } from '../../i18n'
 import { Button, Input, Modal, Space, Switch, Typography } from '../../components/ui'
 import { addBookmark, removeBookmark } from '../../services/bookmarks'
 import { saveWorkspace } from '../../services/workspaces'
-import { importToSpacePayload, parseBookmarksHtml, planBookmarkImport, type BookmarkImportPlan } from './bookmarksImport'
+import { importToSpacePayload, parseBookmarksHtml, parseTabsJson, planBookmarkImport, type BookmarkImportPlan } from './bookmarksImport'
 
 /**
  * Import a Netscape bookmark file exported by Arc / Chrome / Edge.
@@ -19,6 +19,7 @@ export function BookmarkImportDialog({ open, onClose, existingUrls, onImported }
   onImported: () => void
 }) {
   const [plan, setPlan] = useState<BookmarkImportPlan | null>(null)
+  const [mode, setMode] = useState<'bookmarks' | 'tabs'>('bookmarks')
   const [fileName, setFileName] = useState('')
   const [asSpace, setAsSpace] = useState(false)
   const [spaceName, setSpaceName] = useState('')
@@ -27,6 +28,7 @@ export function BookmarkImportDialog({ open, onClose, existingUrls, onImported }
 
   function reset() {
     setPlan(null)
+    setMode('bookmarks')
     setFileName('')
     setAsSpace(false)
     setSpaceName('')
@@ -39,12 +41,16 @@ export function BookmarkImportDialog({ open, onClose, existingUrls, onImported }
     setError('')
     setFileName(file.name)
     try {
-      const html = await file.text()
-      const parsed = parseBookmarksHtml(html)
-      const next = planBookmarkImport(parsed, existingUrls)
-      setPlan(next)
-      if (!spaceName) setSpaceName(file.name.replace(/\.html?$/i, ''))
-      if (parsed.length === 0) setError(t("没有从文件中读到书签，请确认是浏览器导出的 HTML 文件。"))
+      const text = await file.text()
+      const wantsTabs = /\.json$/i.test(file.name) || /^[\[{]/.test(text.trim())
+      const parsed = wantsTabs ? parseTabsJson(text) : parseBookmarksHtml(text)
+      setMode(wantsTabs ? 'tabs' : 'bookmarks')
+      setPlan(planBookmarkImport(parsed, existingUrls))
+      setAsSpace(wantsTabs || asSpace)
+      if (!spaceName) setSpaceName(file.name.replace(/\.(html?|json)$/i, ''))
+      if (parsed.length === 0) {
+        setError(wantsTabs ? t("没有从文件中读到标签，请确认是标签清单 JSON。") : t("没有从文件中读到书签，请确认是浏览器导出的 HTML 文件。"))
+      }
     } catch {
       setPlan(null)
       setError(t("读取文件失败"))
@@ -57,20 +63,23 @@ export function BookmarkImportDialog({ open, onClose, existingUrls, onImported }
     setError('')
     const written: string[] = []
     try {
-      for (const bookmark of plan.unique) {
-        const id = crypto.randomUUID()
-        await addBookmark({
-          id,
-          url: bookmark.url,
-          title: bookmark.title,
-          folder: bookmark.folder ?? null,
-        })
-        written.push(id)
+      // A tab-list file only builds a Space; bookmark HTML also writes rows.
+      if (mode === 'bookmarks') {
+        for (const bookmark of plan.unique) {
+          const id = crypto.randomUUID()
+          await addBookmark({
+            id,
+            url: bookmark.url,
+            title: bookmark.title,
+            folder: bookmark.folder ?? null,
+          })
+          written.push(id)
+        }
       }
-      if (asSpace) {
+      if (asSpace || mode === 'tabs') {
         await saveWorkspace({
           name: (spaceName.trim() || t("导入的书签")).slice(0, 80),
-          description: t("从书签文件导入"),
+          description: mode === 'tabs' ? t("从标签清单导入") : t("从书签文件导入"),
           payload: importToSpacePayload(plan.unique),
         })
       }
@@ -98,17 +107,21 @@ export function BookmarkImportDialog({ open, onClose, existingUrls, onImported }
   >
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        {t("支持 Arc / Chrome / Edge 等浏览器导出的书签 HTML。导入前会先显示新增与重复数量。")}
+        {mode === 'tabs'
+          ? t("支持标签清单 JSON（Arc / Dia）。导入后会生成一个 Space；服务端不读取任何密码数据。")
+          : t("支持 Arc / Chrome / Edge 等浏览器导出的书签 HTML。导入前会先显示新增与重复数量。")}
       </Typography.Paragraph>
       <input
         type="file"
-        accept=".html,.htm,text/html"
+        accept=".html,.htm,.json,text/html,application/json"
         aria-label={t("选择书签文件")}
         onChange={event => { void pick(event.target.files?.[0] ?? null); event.target.value = '' }}
       />
       {fileName && <Typography.Text type="secondary">{fileName}</Typography.Text>}
       {plan && <Typography.Text>
-        {t("新增 {value0} 条 · 重复 {value1} 条 · 跳过 {value2} 条", { value0: plan.unique.length, value1: plan.duplicates.length, value2: plan.skipped })}
+        {mode === 'tabs'
+          ? t("新增 {value0} 个标签 · 重复 {value1} 个 · 跳过 {value2} 个", { value0: plan.unique.length, value1: plan.duplicates.length, value2: plan.skipped })
+          : t("新增 {value0} 条 · 重复 {value1} 条 · 跳过 {value2} 条", { value0: plan.unique.length, value1: plan.duplicates.length, value2: plan.skipped })}
       </Typography.Text>}
       {plan && plan.unique.length > 0 && <div className="bookmark-import-preview">
         {plan.unique.slice(0, 8).map(bookmark => <div key={bookmark.url} className="bookmark-import-preview__row">
@@ -118,10 +131,10 @@ export function BookmarkImportDialog({ open, onClose, existingUrls, onImported }
         {plan.unique.length > 8 && <Typography.Text type="secondary">{t("还有 {value0} 条", { value0: plan.unique.length - 8 })}</Typography.Text>}
       </div>}
       <label className="bookmark-import-space">
-        <Switch checked={asSpace} onChange={setAsSpace}/>
+        <Switch checked={asSpace || mode === 'tabs'} disabled={mode === 'tabs'} onChange={setAsSpace}/>
         <span>{t("同时保存为一个 Space")}</span>
       </label>
-      {asSpace && <Input value={spaceName} onChange={event => setSpaceName(event.target.value)} placeholder={t("Space 名称")} maxLength={80}/>}
+      {(asSpace || mode === 'tabs') && <Input value={spaceName} onChange={event => setSpaceName(event.target.value)} placeholder={t("Space 名称")} maxLength={80}/>}
       {error && <Typography.Text type="danger">{error}</Typography.Text>}
     </Space>
   </Modal>

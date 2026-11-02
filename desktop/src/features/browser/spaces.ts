@@ -1,3 +1,5 @@
+import { t } from '../../i18n'
+
 /**
  * Space switching on top of the existing `workspaces` table.
  *
@@ -11,21 +13,35 @@ export const SPACE_RESTORE_EVENT = 'arcadia-space-restore'
 export const SPACE_SAVE_EVENT = 'arcadia-space-save'
 export const SPACE_CHANGED_EVENT = 'arcadia-space-changed'
 export const SPACE_SCOPE_EVENT = 'arcadia-space-scope-changed'
+/**
+ * Space-menu hand-off between the shell (rail button, `AppLayout`) and the
+ * browser route. The page is a native child WebView that paints above the host
+ * document, so the menu is drawn inside the page by Rust; these events carry
+ * the rows in and the chosen key back out.
+ */
+export const SPACE_MENU_OPEN_EVENT = 'arcadia-space-menu-open'
+export const SPACE_MENU_ACTION_EVENT = 'arcadia-space-menu-action'
+export const SPACE_MENU_FALLBACK_EVENT = 'arcadia-space-menu-fallback'
+/** Whether a native page currently covers the content area (`detail: boolean`). */
+export const SPACE_SURFACE_EVENT = 'arcadia-space-native-surface'
 export const SPACE_STORAGE_KEY = 'arcadia.space.current.v1'
 export const SPACE_SCOPE_STORAGE_KEY = 'arcadia.space.scope.v1'
 export const SPACE_IDENTITY_STORAGE_KEY = 'arcadia.space.identity.v1'
 
 export interface SpaceIdentity {
   color?: string
+  icon?: string
 }
 
+export const SPACE_ICONS = ['🌱', '🔬', '📚', '🧭', '🎨', '💼'] as const
+
 export const SPACE_COLORS = [
-  { value: '#3c8a5c', label: '绿色' },
-  { value: '#3b6fd4', label: '蓝色' },
-  { value: '#8a5cd6', label: '紫色' },
-  { value: '#d4823b', label: '橙色' },
-  { value: '#d14b6a', label: '红色' },
-  { value: '#6b7280', label: '灰色' },
+  { value: '#3c8a5c', label: t('绿色') },
+  { value: '#3b6fd4', label: t('蓝色') },
+  { value: '#8a5cd6', label: t('紫色') },
+  { value: '#d4823b', label: t('橙色') },
+  { value: '#d14b6a', label: t('红色') },
+  { value: '#6b7280', label: t('灰色') },
 ] as const
 
 export interface CurrentSpace {
@@ -139,11 +155,15 @@ export function readSpaceIdentities(): Record<string, SpaceIdentity> {
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
     const known = new Set<string>(SPACE_COLORS.map(color => color.value))
+    const knownIcons = new Set<string>(SPACE_ICONS)
     const identities: Record<string, SpaceIdentity> = {}
     for (const [spaceId, value] of Object.entries(parsed as Record<string, unknown>)) {
       if (!value || typeof value !== 'object') continue
-      const color = (value as Record<string, unknown>).color
-      if (typeof color === 'string' && known.has(color)) identities[spaceId] = { color }
+      const record = value as Record<string, unknown>
+      const identity: SpaceIdentity = {}
+      if (typeof record.color === 'string' && known.has(record.color)) identity.color = record.color
+      if (typeof record.icon === 'string' && knownIcons.has(record.icon)) identity.icon = record.icon
+      if (identity.color || identity.icon) identities[spaceId] = identity
     }
     return identities
   } catch {
@@ -155,7 +175,10 @@ export function writeSpaceIdentity(spaceId: string, identity: SpaceIdentity | nu
   if (typeof localStorage === 'undefined' || !spaceId) return
   try {
     const identities = readSpaceIdentities()
-    if (identity?.color && SPACE_COLORS.some(color => color.value === identity.color)) identities[spaceId] = { color: identity.color }
+    const next: SpaceIdentity = {}
+    if (identity?.color && SPACE_COLORS.some(color => color.value === identity.color)) next.color = identity.color
+    if (identity?.icon && SPACE_ICONS.some(icon => icon === identity.icon)) next.icon = identity.icon
+    if (next.color || next.icon) identities[spaceId] = next
     else delete identities[spaceId]
     localStorage.setItem(SPACE_IDENTITY_STORAGE_KEY, JSON.stringify(identities))
   } catch { /* storage full: identity stays per-session */ }
@@ -164,4 +187,9 @@ export function writeSpaceIdentity(spaceId: string, identity: SpaceIdentity | nu
 export function spaceColorFor(spaceId: string | null | undefined): string | null {
   if (!spaceId) return null
   return readSpaceIdentities()[spaceId]?.color ?? null
+}
+
+export function spaceIconFor(spaceId: string | null | undefined): string | null {
+  if (!spaceId) return null
+  return readSpaceIdentities()[spaceId]?.icon ?? null
 }

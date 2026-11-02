@@ -5,6 +5,7 @@ import {
   normalizeRouteHost,
   readSiteRoutes,
   removeSiteRoute,
+  setSiteRouteEnabled,
   upsertSiteRoute,
   writeSiteRoutes,
 } from './siteRoutes'
@@ -14,7 +15,7 @@ beforeEach(() => localStorage.clear())
 describe('route storage', () => {
   it('normalises hosts and round-trips rules', () => {
     const routes = upsertSiteRoute([], 'https://www.docs.example.com/a', { collectionId: 'c1' })
-    expect(routes).toEqual([expect.objectContaining({ host: 'docs.example.com', collectionId: 'c1', autoReader: false })])
+    expect(routes).toEqual([expect.objectContaining({ host: 'docs.example.com', collectionId: 'c1', autoReader: false, enabled: true })])
     writeSiteRoutes(routes)
     expect(readSiteRoutes()).toEqual(routes)
   })
@@ -39,9 +40,9 @@ describe('route storage', () => {
 
 describe('matchSiteRoute', () => {
   const routes = [
-    { host: 'example.com', collectionId: 'root', autoReader: false, updatedAt: 1 },
-    { host: 'docs.example.com', collectionId: 'docs', autoReader: true, updatedAt: 2 },
-    { host: 'other.com', collectionId: null, autoReader: false, updatedAt: 3 },
+    { host: 'example.com', collectionId: 'root', autoReader: false, spaceId: null, enabled: true, updatedAt: 1 },
+    { host: 'docs.example.com', collectionId: 'docs', autoReader: true, spaceId: 'space-1', enabled: true, updatedAt: 2 },
+    { host: 'other.com', collectionId: null, autoReader: false, spaceId: null, enabled: true, updatedAt: 3 },
   ]
 
   it('prefers the longest matching suffix', () => {
@@ -54,5 +55,17 @@ describe('matchSiteRoute', () => {
     expect(matchSiteRoute(routes, 'https://notexample.com')).toBeNull()
     expect(matchSiteRoute(routes, 'https://example.org')).toBeNull()
     expect(matchSiteRoute(routes, 'not a url')).toBeNull()
+  })
+
+  it('skips paused rules and falls back to the parent rule', () => {
+    const paused = setSiteRouteEnabled(routes, 'docs.example.com', false)
+    expect(matchSiteRoute(paused, 'https://docs.example.com/page')?.collectionId).toBe('root')
+    const allPaused = setSiteRouteEnabled(paused, 'example.com', false)
+    expect(matchSiteRoute(allPaused, 'https://docs.example.com/page')).toBeNull()
+  })
+
+  it('carries the target space for routing', () => {
+    expect(matchSiteRoute(routes, 'https://docs.example.com/page')?.spaceId).toBe('space-1')
+    expect(matchSiteRoute(routes, 'https://example.com')?.spaceId).toBeNull()
   })
 })

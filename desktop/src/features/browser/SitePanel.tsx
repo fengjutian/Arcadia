@@ -22,6 +22,7 @@ export function SitePanel({
   url,
   adBlockEnabled,
   blockedAds,
+  onToggleAdBlock,
   blockedBy,
   permissionRule,
   onChangePermission,
@@ -41,6 +42,7 @@ export function SitePanel({
   url: string
   adBlockEnabled: boolean
   blockedAds: number
+  onToggleAdBlock: (enabled: boolean) => void
   blockedBy: string | null
   permissionRule: SitePermissionRule | null
   onChangePermission: (kind: SitePermissionKind, value: SitePermissionValue) => void
@@ -74,6 +76,7 @@ export function SitePanel({
         </div>
         <div className="site-panel__row">
           <span>{adBlockEnabled ? t("广告过滤已开启，本标签已过滤 {value0} 项", { value0: blockedAds }) : t("广告过滤已关闭")}</span>
+          <Switch checked={adBlockEnabled} onChange={onToggleAdBlock}/>
         </div>
       </section>
 

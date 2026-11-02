@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { importToSpacePayload, parseBookmarksHtml, planBookmarkImport } from './bookmarksImport'
+import { importToSpacePayload, parseBookmarksHtml, parseTabsJson, planBookmarkImport } from './bookmarksImport'
 
 const NESTED = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
 <DL><p>
@@ -57,5 +57,18 @@ describe('planBookmarkImport', () => {
     expect(payload.tabs.map(tab => tab.id)).toEqual(['import-1', 'import-2'])
     expect(payload.activeTabId).toBe('import-1')
     expect(payload.tabs.every(tab => tab.private === false)).toBe(true)
+  })
+})
+
+describe('parseTabsJson', () => {
+  it('reads a bare array and object wrappers', () => {
+    expect(parseTabsJson('[{"url":"https://a.com","title":"A"}]')).toEqual([{ url: 'https://a.com', title: 'A' }])
+    expect(parseTabsJson('{"tabs":[{"url":"https://b.com","name":"B"}]}')).toEqual([{ url: 'https://b.com', title: 'B' }])
+    expect(parseTabsJson('{"tabs":{"items":["https://c.com"]}}')).toEqual([{ url: 'https://c.com', title: 'https://c.com' }])
+  })
+
+  it('skips invalid entries and corrupt files', () => {
+    expect(parseTabsJson('not json')).toEqual([])
+    expect(parseTabsJson('{"tabs":[{"url":"javascript:1"},{"title":"missing url"}]}')).toEqual([])
   })
 })

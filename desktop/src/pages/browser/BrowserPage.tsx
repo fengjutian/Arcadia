@@ -6,7 +6,7 @@ import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue, saveClip, listReadingQueue, removeFromReadingQueue, addToCollection, listCollections } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeAdBlocking, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -37,10 +37,10 @@ import { listen } from '@tauri-apps/api/event'
 import { renderSearchTemplate, resolveNavigationInput } from '../../features/browser/navigation'
 import { useDownloads } from '../../features/downloads/useDownloads'
 import { useDownloadQueue } from '../../features/downloads/useDownloadQueue'
-import { saveWorkspace, snapshotTabsToPayload, getWorkspace, type WorkspaceRecord } from '../../services/workspaces'
+import { saveWorkspace, snapshotTabsToPayload, getWorkspace, listWorkspaces, type WorkspaceRecord } from '../../services/workspaces'
 import { restoreTabsFromWorkspace } from '../../features/browser/restoreWorkspace'
 import { WORKSPACE_RESTORE_EVENT } from '../../features/browser/workspaces'
-import { SPACE_CHANGED_EVENT, SPACE_RESTORE_EVENT, SPACE_SAVE_EVENT, autoSpaceName, writeCurrentSpace } from '../../features/browser/spaces'
+import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_RESTORE_EVENT, SPACE_SAVE_EVENT, SPACE_SURFACE_EVENT, autoSpaceName, dispatchSpaceRestore, readCurrentSpace, writeCurrentSpace } from '../../features/browser/spaces'
 import { useTabRuntime } from '../../features/browser/useTabRuntime'
 import { buildAddressSuggestions } from '../../features/browser/addressSuggestions'
 import { DownloadSummary } from '../../features/downloads/DownloadCenter'
@@ -68,6 +68,10 @@ import { loadPageNotes, persistPageNote, removePageNote } from '../../features/n
 import { isPrivateTab, makePrivateTab, stripPrivateTabs } from '../../features/browser/privateTabs'
 import { readSitePermissions, writeSitePermissions, normalizeOrigin, setKind, type SitePermissionKind, type SitePermissionValue } from '../../features/browser/sitePermissions'
 import { SitePanel } from '../../features/browser/SitePanel'
+import { SiteRulesDialog } from '../../features/browser/SiteRulesDialog'
+import { DocumentSplitPane } from '../../features/documents/DocumentSplitPane'
+import { listDocuments } from '../../api'
+import type { Document as KnowledgeDocument } from '../../types'
 import { SPLIT_MIN_WIDTH, splitBounds } from '../../features/browser/splitView'
 import { shouldRecordHistory } from '../../features/history/historyRecording'
 import { LockOutlined } from '../../components/ui/icons'
@@ -80,7 +84,7 @@ import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRES
 import { evaluateUrlSafety, highestLevel, type SafetyIssue, type SafetyLevel } from '../../features/browser/urlSafety'
 import { ADVANCED_SETTINGS_EVENT, readAdvancedSettings, type AdvancedSettings } from '../../features/settings/advanced'
 import { cleanTrackingParameters, isTrackingCleanerEnabled, TRACKING_CLEANER_EVENT } from '../../features/plugins/trackingCleaner'
-import { AD_BLOCKER_EVENT, isAdBlockerEnabled } from '../../features/plugins/adBlocker'
+import { AD_BLOCKER_EVENT, isAdBlockerEnabled, setAdBlockerEnabled } from '../../features/plugins/adBlocker'
 import { newTab, tabGroupColor } from '../../features/browser/browserUtils'
 import { classifyNavigationError, diagnoseNavigationError, safeFileName } from '../../features/browser/navigationErrors'
 import { addBlockedSite, findBlockingEntry, hostFromUrl, loadSiteBlacklist, removeBlockedSite, subscribeSiteBlacklist } from '../../features/privacy/siteBlacklist'
@@ -95,7 +99,7 @@ import { readDownloadSettings } from '../../features/settings/downloadSettings'
 
 const SESSION_KEY = 'browser.tabs'
 const SESSION_DEBOUNCE_MS = 500
-type ToolbarOverlay = 'downloads' | 'bookmarks' | 'resources' | 'menu' | 'tab-menu'
+type ToolbarOverlay = 'downloads' | 'bookmarks' | 'resources' | 'menu' | 'tab-menu' | 'space'
 
 // Native child WebViews are always composited above the React window on
 // Windows. Keep enough room for toolbar popovers instead of hiding the whole
@@ -147,6 +151,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [siteRoutes, setSiteRoutes] = useState<SiteRoute[]>(readSiteRoutes)
   const siteRoutesRef = useRef<SiteRoute[]>(siteRoutes)
   const [routeCollections, setRouteCollections] = useState<Array<{ id: string; name: string }>>([])
+  const [spaceOptions, setSpaceOptions] = useState<Array<{ id: string; name: string }>>([])
+  const [dismissedSpaceRoute, setDismissedSpaceRoute] = useState('')
   const autoReaderAttemptsRef = useRef<Set<string>>(new Set())
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
@@ -195,10 +201,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [comparison, setComparison] = useState<ComparisonSession | null>(null)
   const [toolbarOverlay, setToolbarOverlay] = useState<ToolbarOverlay | null>(null)
   const [modalOverlayCount, setModalOverlayCount] = useState(0)
-  // Still frame of the page painted underneath a host overlay while the native
-  // WebView is hidden, so opening a menu does not blank the content area.
-  const [frozenFrame, setFrozenFrame] = useState<string | null>(null)
-  const frozenForRef = useRef<string | null>(null)
   const [sourceView, setSourceView] = useState<{ url: string; html: string } | null>(null)
   const [clearSiteDataOpen, setClearSiteDataOpen] = useState(false)
   const [passwordCandidate, setPasswordCandidate] = useState<(PasswordCandidate & { existingId?: string }) | null>(null)
@@ -230,7 +232,48 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const readerSiteStyle = useMemo(() => readerStyleFor(active.url), [active.url, readerArticle, readerStyleVersion])
   const [permissionVersion, setPermissionVersion] = useState(0)
   const [sitePanelOpen, setSitePanelOpen] = useState(false)
+  const [siteRulesOpen, setSiteRulesOpen] = useState(false)
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
+  const [splitDocument, setSplitDocument] = useState<KnowledgeDocument | null>(null)
+  const [documentPickerOpen, setDocumentPickerOpen] = useState(false)
+  const [pickerDocuments, setPickerDocuments] = useState<KnowledgeDocument[]>([])
+  const [pickerQuery, setPickerQuery] = useState('')
+
+  useEffect(() => {
+    if (!documentPickerOpen) return
+    let disposed = false
+    void listDocuments()
+      .then(items => { if (!disposed) setPickerDocuments(items.filter(item => item.status !== 'ARCHIVED')) })
+      .catch(() => { if (!disposed) setPickerDocuments([]) })
+    return () => { disposed = true }
+  }, [documentPickerOpen])
+
+  useEffect(() => {
+    if (!nativeMode || !splitDocument) return
+    const apply = () => {
+      const rect = bounds()
+      if (!rect) return
+      const panes = splitBounds(rect)
+      if (!panes) return
+      void resizeNativeTab(active.id, panes.left).catch(() => undefined)
+      void showNativeTab(active.id).catch(() => undefined)
+    }
+    apply()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply)
+    if (observer && surfaceRef.current) observer.observe(surfaceRef.current)
+    window.addEventListener('resize', apply)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', apply)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nativeMode, splitDocument, active.id])
+
+  function closeDocumentSplit() {
+    setSplitDocument(null)
+    const rect = bounds()
+    if (rect) void resizeNativeTab(active.id, rect).catch(() => undefined)
+  }
   const siteOrigin = useMemo(() => normalizeOrigin(active.url || ''), [active.url])
   const siteRule = useMemo(
     () => (siteOrigin ? readSitePermissions().find(rule => rule.origin === siteOrigin) ?? null : null),
@@ -239,12 +282,91 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   )
   const activeSiteRoute = useMemo(() => matchSiteRoute(siteRoutes, active.url), [siteRoutes, active.url])
   const nativeMode = hasNativeTab(active.id)
+  // A live native page covers the content area and paints above the host
+  // document; the shell needs to know so its Space menu is drawn in-page.
+  const nativePageOnScreen = nativeMode
+    && visible
+    && !(comparison && comparison.hostTabId === active.id)
+    && !readerArticle
+    && !active.crashed
+    && !active.error
+
+  useEffect(() => {
+    // `data-native-surface` lets the shell sync on mount even if it subscribes
+    // after this effect has already run.
+    document.body.dataset.nativeSurface = nativePageOnScreen ? '1' : '0'
+    window.dispatchEvent(new CustomEvent(SPACE_SURFACE_EVENT, { detail: nativePageOnScreen }))
+  }, [nativePageOnScreen])
+  useEffect(() => () => {
+    document.body.dataset.nativeSurface = '0'
+    window.dispatchEvent(new CustomEvent(SPACE_SURFACE_EVENT, { detail: false }))
+  }, [])
+
+  // The shell asks for the Space menu; draw it inside the page so the page
+  // stays visible and interactive underneath (a host menu would be cut in half
+  // by the native WebView).
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ rows?: unknown[]; x?: number; y?: number; theme?: string }>).detail
+      if (!detail) return
+      if (!nativePageOnScreen) {
+        window.dispatchEvent(new CustomEvent(SPACE_MENU_FALLBACK_EVENT))
+        return
+      }
+      if (toolbarOverlay === 'space') {
+        setToolbarOverlay(null)
+        void setNativeToolbarPanel(active.id, false, 'space', {})
+        return
+      }
+      const surface = surfaceRef.current?.getBoundingClientRect()
+      const x = Math.max(8, (detail.x ?? 0) - (surface?.left ?? 0))
+      const y = Math.max(8, (detail.y ?? 0) - (surface?.top ?? 0))
+      setToolbarOverlay('space')
+      void setNativeToolbarPanel(active.id, true, 'space', {
+        items: detail.rows ?? [],
+        x,
+        y,
+        theme: detail.theme === 'dark' ? 'dark' : 'light',
+      }).catch(error => {
+        diagnosticLog('browser.space-menu.open-failed', 'error', { tabId: active.id, error })
+        setToolbarOverlay(null)
+        window.dispatchEvent(new CustomEvent(SPACE_MENU_FALLBACK_EVENT))
+      })
+    }
+    window.addEventListener(SPACE_MENU_OPEN_EVENT, onOpen)
+    return () => window.removeEventListener(SPACE_MENU_OPEN_EVENT, onOpen)
+  }, [active.id, nativePageOnScreen, toolbarOverlay])
 
   useEffect(() => {
     setPasswordCandidate(null)
     setPasswordFillRequest(null)
     setMediaResources([])
+    // An in-page Space menu dies with the document on navigation; drop the
+    // overlay state too so the next click opens instead of toggling nothing.
+    setToolbarOverlay(current => current === 'space' ? null : current)
   }, [active.id, active.url])
+
+  // Leaving browser mode (or losing the native page) hides the page but leaves
+  // the injected menu in the document; close it so it is gone on return.
+  useEffect(() => {
+    if (nativePageOnScreen || toolbarOverlay !== 'space') return
+    setToolbarOverlay(null)
+    if (hasNativeTab(active.id)) void setNativeToolbarPanel(active.id, false, 'space', {})
+  }, [active.id, nativePageOnScreen, toolbarOverlay])
+
+  // A click anywhere in the host chrome is outside the page, so the in-page
+  // menu never sees it. Dismiss on those clicks, except on the rail button
+  // itself, which toggles the menu through its own handler.
+  useEffect(() => {
+    if (toolbarOverlay !== 'space') return
+    const onHostPointerDown = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest('.space-switch')) return
+      setToolbarOverlay(null)
+      if (hasNativeTab(active.id)) void setNativeToolbarPanel(active.id, false, 'space', {})
+    }
+    document.addEventListener('pointerdown', onHostPointerDown, true)
+    return () => document.removeEventListener('pointerdown', onHostPointerDown, true)
+  }, [active.id, toolbarOverlay])
 
   async function scanCurrentResources() {
     if (!hasNativeTab(active.id)) { messageApi.info(translate("资源探测需要桌面浏览器标签页"));return}
@@ -383,68 +505,20 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     setToolbarOverlay(current => current === kind ? null : current)
   }
 
-  // A still belongs to exactly one tab; drop it when the active tab changes so
-  // a leftover frame can never flash over another page.
-  useEffect(() => {
-    frozenForRef.current = null
-    setFrozenFrame(null)
-  }, [active.id])
-
-  // Read by the async capture below: an overlay that closed while the
-  // screenshot was in flight must not hide the page it already restored.
-  const overlayOpenRef = useRef(false)
-  overlayOpenRef.current = modalOverlayCount > 0 || toolbarOverlay === 'tab-menu' || toolbarOverlay === 'menu'
-
   useEffect(() => {
     let cancelled = false
-    if (!hasNativeTab(active.id)) {
-      frozenForRef.current = null
-      setFrozenFrame(null)
-      return
-    }
+    if (!hasNativeTab(active.id)) return
     // The native child WebView paints above the React surface, so any error
     // view (site block, crash, load failure) must hide it.
     if (!visible || readerArticle || active.error) {
-      frozenForRef.current = null
-      setFrozenFrame(null)
       void hideNativeTab(active.id)
       return
     }
+    // Host overlays (tab menu, legacy toolbar menu, selects, dialogs) cannot
+    // paint over the native page, so it has to be hidden while they are open.
+    // The Space menu is not here: it is drawn inside the page by Rust.
     if (modalOverlayCount > 0 || toolbarOverlay === 'tab-menu' || toolbarOverlay === 'menu') {
-      // A host overlay (Space menu, tab menu, select, dialog) cannot paint over
-      // the native page, so the WebView has to go away while it is open.
-      // Hiding it alone leaves the content area blank, which looks like the
-      // page was closed. Capture the visible page first and paint that still
-      // under the overlay instead: the menu then appears to float over an
-      // unchanged page, and the still is dropped as soon as the page returns.
-      const tabId = active.id
-      // A second overlay (select inside a dialog) must keep the still captured
-      // by the first: the page is already hidden, so capturing again would
-      // paint a blank frame over a perfectly good one.
-      if (frozenForRef.current === tabId) {
-        void hideNativeTab(tabId)
-        return
-      }
-      frozenForRef.current = tabId
-      void (async () => {
-        const frame = await Promise.race([
-          captureNativeScreenshot(tabId, false)
-            .then(data => `data:image/png;base64,${data}`)
-            .catch(() => null),
-          // Never keep the overlay waiting on a slow capture: fall back to
-          // hiding the page, which is the old behaviour.
-          new Promise<null>(resolve => window.setTimeout(() => resolve(null), 400)),
-        ])
-        if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId || !overlayOpenRef.current) return
-        if (frame) {
-          setFrozenFrame(frame)
-          // Let React paint the still before the WebView disappears, otherwise
-          // one frame of the blank host surface shows through.
-          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-          if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId || !overlayOpenRef.current) return
-        }
-        await hideNativeTab(tabId)
-      })()
+      void hideNativeTab(active.id)
       return
     }
     const next = bounds()
@@ -453,13 +527,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (next) await resizeNativeTab(active.id, inset > 0 ? { ...next, width: Math.max(1, next.width - inset) } : next)
       if (cancelled || activeTabIdRef.current !== active.id || !visibleRef.current) return
       await showNativeTab(active.id)
-      // Drop the still only after the native page is visible again; clearing it
-      // first would flash the blank host surface for a frame. Skip if an
-      // overlay reopened while the page was being restored.
-      if (!cancelled && !overlayOpenRef.current && frozenForRef.current === active.id) {
-        frozenForRef.current = null
-        setFrozenFrame(null)
-      }
     }            )()
     return () => { cancelled = true }
   }, [active.error, active.id, modalOverlayCount, readerArticle, toolbarOverlay, visible])
@@ -1647,6 +1714,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     void onNativeToolbarMenuAction(({ tabId, action, value }) => {
       if (disposed || tabId !== activeTabIdRef.current) return
       if (action === '__dismiss__') setToolbarOverlay(null)
+      else if (action.startsWith('space:')) {
+        // The in-page Space menu was drawn by Rust; the shell owns what each
+        // row means, so hand the key back instead of interpreting it here.
+        window.dispatchEvent(new CustomEvent(SPACE_MENU_ACTION_EVENT, { detail: { key: action.slice('space:'.length) } }))
+      }
       else if (action === 'bookmark-open' && value && bookmarkActions.bookmarks.some(item => item.url === value)) void navigate(value)
       else if (action === 'resource-scan') void scanCurrentResources()
       else if (action === 'resource-download' && value) {
@@ -1685,6 +1757,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     { key: 'screenshot-visible', label:translate("截取可视区域"),disabled:!nativeMode,onClick:()=>runBrowserMenuAction('screenshot-visible')},
     { key: 'screenshot-full', label:translate("截取整个网页"),disabled:!nativeMode,onClick:()=>runBrowserMenuAction('screenshot-full')},
     { key: 'site-panel', label: translate("站点面板"), disabled: !active.url, onClick: () => setSitePanelOpen(true) },
+    { key: 'site-rules', label: translate("站点规则"), onClick: () => setSiteRulesOpen(true) },
     { key: 'clear-site-data', label:translate("清除共享浏览数据"),disabled:!active.url||!nativeMode,onClick:()=>runBrowserMenuAction('clear-site-data')},
     currentBlock
       ? { key: 'site-unblock', label:translate("解除封杀此网站"),icon:<StopOutlined/>,onClick:()=>runBrowserMenuAction('site-unblock')}
@@ -1700,6 +1773,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
 
   useEffect(() => {
     void listCollections().then(items => setRouteCollections(items.map(item => ({ id: item.id, name: item.name })))).catch(() => setRouteCollections([]))
+    void listWorkspaces().then(items => setSpaceOptions(items.map(item => ({ id: item.id, name: item.name })))).catch(() => setSpaceOptions([]))
   }, [])
   const bookmarkBarPanel =(
     <div className="bookmark-bar-panel" role="menu">
@@ -1817,7 +1891,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   }, [active.id, nativeMode, nativePanelPayloads, toolbarOverlay])
 
   useEffect(() => {
-    if (!nativeMode || !toolbarOverlay || toolbarOverlay === 'menu' || toolbarOverlay === 'tab-menu') return
+    if (!nativeMode || !toolbarOverlay || toolbarOverlay === 'menu' || toolbarOverlay === 'tab-menu' || toolbarOverlay === 'space') return
     void setNativeToolbarPanel(active.id, true, toolbarOverlay, nativePanelPayloads[toolbarOverlay])
   }, [active.id, nativeMode, nativePanelPayloads, toolbarOverlay])
 
@@ -2295,6 +2369,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         : splitTabId
           ? { key: 'split-close', label: translate("取消分屏"), onClick: closeSplit }
           : { key: 'split-next', label: translate("与下一个标签并排"), disabled: !nativeMode || !tabs.some(item => item.id !== tab.id && !item.private && Boolean(item.url)), onClick: () => { const next = tabs.find(item => item.id !== tab.id && !item.private && Boolean(item.url)); if (next) openSplit(next.id) } },
+      ...(tab.id === active.id ? [{ key: 'split-document', label: translate("与文档并排"), disabled: !nativeMode, onClick: () => { setSplitTabId(null); setDocumentPickerOpen(true) } }] : []),
       { key: 'queue', label:translate("稍后读"),disabled:!tab.url||tab.private,onClick:()=>{void queueTabForLater(tab)}},
       { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
       { type: 'divider' },
@@ -2650,12 +2725,20 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     {active.private&&<div className="browser-private-bar"><LockOutlined/><strong>{translate("私密浏览")}</strong><span>{translate("不会保存历史记录、关闭记录与站点权限")}</span></div>}
     {findOpen&&<div className="browser-find"><Input autoFocus allowClear prefix={<SearchOutlined/>} value={findQuery} status={findStatus==='missing'?'error':undefined} placeholder={translate("在页面中查找")} onChange={event=>{setFindQuery(event.target.value);setFindStatus('idle')}} onPressEnter={event=>void runFind(event.shiftKey)}/><Typography.Text type={findStatus==='missing'?'danger':'secondary'}>{findStatus==='missing'?translate("未找到"):findStatus==='found'?translate("已定位"):''}</Typography.Text><Button type="text" aria-label={translate("上一个匹配项")} icon={<ArrowUpOutlined/>} onClick={()=>void runFind(true)}/><Button type="text" aria-label={translate("下一个匹配项")} icon={<ArrowDownOutlined/>} onClick={()=>void runFind(false)}/><Button type="text" aria-label={translate("关闭查找")} icon={<CloseOutlined/>} onClick={closeFind}/></div>}
     <PermissionPromptBar prompt={permissionPrompt} />
+    {activeSiteRoute?.spaceId && activeSiteRoute.spaceId !== readCurrentSpace()?.id && dismissedSpaceRoute !== activeSiteRoute.host && (
+      <div className="space-route-bar">
+        <span>{translate("此站点属于 Space「{value0}」", { value0: spaceOptions.find(space => space.id === activeSiteRoute.spaceId)?.name ?? activeSiteRoute.spaceId })}</span>
+        <Button size="small" type="primary" onClick={() => { dispatchSpaceRestore(activeSiteRoute.spaceId!); setDismissedSpaceRoute(activeSiteRoute.host) }}>{translate("切换 Space")}</Button>
+        <Button size="small" type="text" onClick={() => setDismissedSpaceRoute(activeSiteRoute.host)}>{translate("忽略")}</Button>
+      </div>
+    )}
     <SitePanel
       open={sitePanelOpen}
       onClose={() => setSitePanelOpen(false)}
       url={active.url}
       adBlockEnabled={adBlockerEnabled}
       blockedAds={blockedAdsByTab[active.id] ?? 0}
+      onToggleAdBlock={enabled => { setAdBlockerEnabled(enabled); void setNativeAdBlocking(enabled).catch(() => undefined) }}
       blockedBy={currentBlock?.host ?? null}
       permissionRule={siteRule}
       onChangePermission={changeSitePermission}
@@ -2670,6 +2753,24 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       onClearSiteData={() => runBrowserMenuAction('clear-site-data')}
       onUnblock={() => runBrowserMenuAction('site-unblock')}
     />
+    <SiteRulesDialog
+      open={siteRulesOpen}
+      onClose={() => setSiteRulesOpen(false)}
+      routes={siteRoutes}
+      collectionNames={new Map(routeCollections.map(collection => [collection.id, collection.name]))}
+      spaces={spaceOptions}
+      onChange={updateSiteRoutes}
+    />
+    <Modal open={documentPickerOpen} title={translate("选择文档")} onCancel={() => setDocumentPickerOpen(false)} footer={null}>
+      <Input value={pickerQuery} allowClear placeholder={translate("搜索文档")} onChange={event => setPickerQuery(event.target.value)}/>
+      <div className="document-picker-list">
+        {pickerDocuments
+          .filter(document => !pickerQuery.trim() || document.title.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
+          .slice(0, 30)
+          .map(document => <button key={document.id} type="button" onClick={() => { setSplitDocument(document); setDocumentPickerOpen(false) }}>{document.title}</button>)}
+        {pickerDocuments.filter(document => !pickerQuery.trim() || document.title.toLowerCase().includes(pickerQuery.trim().toLowerCase())).length === 0 && <Typography.Text type="secondary">{translate("没有可并排的文档")}</Typography.Text>}
+      </div>
+    </Modal>
     <CommandPalette
       open={commandOpen}
       onClose={() => setCommandOpen(false)}
@@ -2800,7 +2901,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:translate("当前环境暂时无法打开此网页。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
               : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison} onOpenLibrary={onOpenLibrary}/>}
-      {nativeMode && frozenFrame && <img className="web-surface__still" src={frozenFrame} alt="" aria-hidden="true"/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+      {splitDocument && <DocumentSplitPane document={splitDocument} onClose={closeDocumentSplit}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{

@@ -46,6 +46,18 @@ export function readLittleArcPayload(): { url: string } | null {
   }
 }
 
+const SENSITIVE_HOSTS = /(^|\.)(bank|banking|paypal|alipay|wallet|pay|mail|outlook|gmail|login|account|secure|gov)\b/i
+
+/** Sites where a capture likely includes account or payment data. */
+export function isSensitiveHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname
+    return SENSITIVE_HOSTS.test(host)
+  } catch {
+    return false
+  }
+}
+
 const tauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 let windowOperation: Promise<void> = Promise.resolve()

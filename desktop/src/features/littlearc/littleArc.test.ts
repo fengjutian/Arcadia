@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { LITTLE_ARC_STORAGE_KEY, isLittleArcWindow, readLittleArcPayload } from './littleArc'
+import { LITTLE_ARC_STORAGE_KEY, isLittleArcWindow, isSensitiveHost, readLittleArcPayload } from './littleArc'
 
 afterEach(() => {
   window.history.replaceState({}, '', '/')
@@ -23,5 +23,15 @@ describe('readLittleArcPayload', () => {
     expect(readLittleArcPayload()).toEqual({ url: 'https://example.com' })
     localStorage.setItem(LITTLE_ARC_STORAGE_KEY, '{oops')
     expect(readLittleArcPayload()).toBeNull()
+  })
+})
+
+describe('isSensitiveHost', () => {
+  it('flags banking, payment and webmail hosts', () => {
+    expect(isSensitiveHost('https://my.bank.example/login')).toBe(true)
+    expect(isSensitiveHost('https://paypal.com/checkout')).toBe(true)
+    expect(isSensitiveHost('https://mail.google.com')).toBe(true)
+    expect(isSensitiveHost('https://example.com/article')).toBe(false)
+    expect(isSensitiveHost('not a url')).toBe(false)
   })
 })

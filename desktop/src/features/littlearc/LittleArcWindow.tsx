@@ -1,10 +1,12 @@
 import { t } from '../../i18n'
 import { useEffect, useRef, useState } from 'react'
-import { Button, Input, Space, Typography } from '../../components/ui'
+import { Button, Input, Select, Space, Typography } from '../../components/ui'
+import { listCollections, type Collection } from '../../api'
 import {
   closeLittleArc,
   listenLittleArcOpen,
   listenLittleArcResult,
+  isSensitiveHost,
   readLittleArcPayload,
   requestLittleArcCapture,
   requestOpenInMain,
@@ -18,7 +20,13 @@ export function LittleArcWindow() {
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState('')
   const [savedTitle, setSavedTitle] = useState('')
+  const [collections, setCollections] = useState<Collection[]>([])
+  const [targetCollection, setTargetCollection] = useState('')
   const requestRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    void listCollections().then(setCollections).catch(() => setCollections([]))
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -51,7 +59,7 @@ export function LittleArcWindow() {
     setStatus('pending')
     setError('')
     try {
-      await requestLittleArcCapture({ url: trimmed, requestId })
+      await requestLittleArcCapture({ url: trimmed, requestId, collectionId: targetCollection || undefined })
     } catch (caught) {
       setStatus('error')
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -77,7 +85,15 @@ export function LittleArcWindow() {
     />
     {status === 'saved' && <Typography.Text type="success">{t("已保存：{value0}", { value0: savedTitle || url })}</Typography.Text>}
     {status === 'error' && <Typography.Text type="danger">{error}</Typography.Text>}
+    {isSensitiveHost(url) && <Typography.Text type="warning">{t("该站点可能包含账户或支付信息，确认后再保存。")}</Typography.Text>}
     {status === 'pending' && <Typography.Text type="secondary">{t("正在提取正文并保存\u2026")}</Typography.Text>}
+    <Select
+      size="small"
+      value={targetCollection || 'none'}
+      ariaLabel={t("目标集合")}
+      options={[{ value: 'none', label: t("不指定（使用站点规则）") }, ...collections.map(collection => ({ value: collection.id, label: collection.name }))]}
+      onChange={value => setTargetCollection(value === 'none' ? '' : String(value))}
+    />
     <Space>
       <Button type="primary" size="small" loading={status === 'pending'} onClick={() => void capture()}>{t("保存到知识库")}</Button>
       <Button size="small" onClick={() => void openInMain()}>{t("在主窗口打开")}</Button>

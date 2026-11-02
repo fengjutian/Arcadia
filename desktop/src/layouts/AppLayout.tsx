@@ -1,6 +1,6 @@
 import { t } from '../i18n'
-import { useEffect, useLayoutEffect, useMemo, useState, type PointerEvent, type ReactNode } from 'react'
-import { Avatar, Badge, Dropdown, Layout, Space, Tooltip, Typography } from '../components/ui'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { Avatar, Badge, Dropdown, Layout, Space, Tooltip, Typography, type MenuProps } from '../components/ui'
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui/icons'
 import { BookOpen, Boxes, Globe2, Layers, Minus, Search, Settings, Sparkles, Square, X } from 'lucide-react'
 import type { View } from '../types'
@@ -9,7 +9,8 @@ import { TopBarPortalProvider } from '../app/TopBarPortal'
 import { diagnosticLog } from '../shared/diagnostics'
 import { listWorkspaces, type WorkspaceSummary } from '../services/workspaces'
 import { listCollections, type Collection } from '../api'
-import { SPACE_CHANGED_EVENT, SPACE_SCOPE_EVENT, SPACE_COLORS, clearCurrentSpace, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, spaceColorFor, writeSpaceIdentity, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
+import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_SCOPE_EVENT, SPACE_SURFACE_EVENT, clearCurrentSpace, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, spaceColorFor, spaceIconFor, writeSpaceIdentity, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
+import { spaceMenuRows } from '../features/browser/spaceMenu'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label:t("浏览器")},{key:'library',icon:<BookOpen/>,label:t("知识库")},{key:'search',icon:<Search/>,label:t("搜索")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const
 
@@ -23,6 +24,12 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   const [collections, setCollections] = useState<Collection[]>([])
   const [currentSpace, setCurrentSpace] = useState<CurrentSpace | null>(() => readCurrentSpace())
   const [identityVersion, setIdentityVersion] = useState(0)
+  // True while the browser route has a native page on screen: the page WebView
+  // paints above this document, so the Space menu has to be drawn inside the
+  // page instead of as a host dropdown.
+  const [nativeSurface, setNativeSurface] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const spaceButtonRef = useRef<HTMLButtonElement>(null)
   const collapsed = true
 
   async function refreshSpaces() {
@@ -58,13 +65,14 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
     return collapsed ? <Tooltip key={item.key} title={item.label} placement="right" mouseEnterDelay={0.15}>{button}</Tooltip> : <span key={item.key}>{button}</span>
   }
 
-  const spaceItems = spaces.length
-    ? spaces.map(space => ({ key: space.id, label: `${space.name} · ${space.tabCount}`, onClick: () => dispatchSpaceRestore(space.id) }))
-    : [{ key: 'empty', label: t("还没有已保存的 Space"), disabled: true }]
   const activeScope = currentSpace ? readSpaceScopes()[currentSpace.id] ?? null : null
   const spaceColor = useMemo(
     () => (currentSpace ? spaceColorFor(currentSpace.id) : null),
     // `identityVersion` re-reads storage after a color change.
+    [currentSpace, identityVersion],
+  )
+  const spaceIcon = useMemo(
+    () => (currentSpace ? spaceIconFor(currentSpace.id) : null),
     [currentSpace, identityVersion],
   )
   function applyScope(collectionId: string | null) {
@@ -73,38 +81,91 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
     window.dispatchEvent(new CustomEvent(SPACE_SCOPE_EVENT, { detail: { collectionId } }))
     setCollections(current => [...current])
   }
-  const scopeItems = currentSpace
-    ? [
-        { key: 'scope:all', label: `${activeScope ? '' : '✓ '}${t("全部知识库")}`, onClick: () => applyScope(null) },
-        ...collections.map(collection => ({
-          key: `scope:${collection.id}`,
-          label: `${activeScope === collection.id ? '✓ ' : ''}${collection.name}`,
-          onClick: () => applyScope(collection.id),
-        })),
-      ]
-    : []
-  const spaceMenu = {
-    items: [
-      ...spaceItems,
-      { type: 'divider' as const },
-      { key: 'save', label: t("保存当前为 Space"), onClick: () => dispatchSpaceSave() },
-      { key: 'manage', label: t("管理 Space"), onClick: () => onViewChange('settings') },
-      ...(currentSpace ? [{ key: 'leave', label: t("不使用 Space"), onClick: () => clearCurrentSpace() }] : []),
-      ...(currentSpace ? [{ type: 'divider' as const }, { key: 'scope', label: t("知识范围"), children: scopeItems }] : []),
-      ...(currentSpace ? [{
-        key: 'space-color',
-        label: t("Space 颜色"),
-        children: [
-          { key: 'space-color:default', label: `${t("默认")}${spaceColor ? '' : ' ✓'}`, onClick: () => { writeSpaceIdentity(currentSpace.id, null); setIdentityVersion(version => version + 1) } },
-          ...SPACE_COLORS.map(color => ({
-            key: `space-color:${color.value}`,
-            label: `${color.value === '#3c8a5c' ? t("绿色") : color.value === '#3b6fd4' ? t("蓝色") : color.value === '#8a5cd6' ? t("紫色") : color.value === '#d4823b' ? t("橙色") : color.value === '#d14b6a' ? t("红色") : t("灰色")}${spaceColor === color.value ? ' ✓' : ''}`,
-            onClick: () => { writeSpaceIdentity(currentSpace.id, { color: color.value }); setIdentityVersion(version => version + 1) },
-          })),
-        ],
-      }] : []),
-    ],
+  function runSpaceMenuKey(key: string) {
+    if (key.startsWith('space:')) { dispatchSpaceRestore(key.slice('space:'.length)); return }
+    if (key.startsWith('scope:')) { applyScope(key === 'scope:all' ? null : key.slice('scope:'.length)); return }
+    if (key.startsWith('space-color:')) {
+      if (!currentSpace) return
+      const value = key.slice('space-color:'.length)
+      writeSpaceIdentity(currentSpace.id, { color: value === 'default' ? undefined : value, icon: spaceIcon ?? undefined })
+      setIdentityVersion(version => version + 1)
+      return
+    }
+    if (key.startsWith('space-icon:')) {
+      if (!currentSpace) return
+      const value = key.slice('space-icon:'.length)
+      writeSpaceIdentity(currentSpace.id, { color: spaceColor ?? undefined, icon: value === 'default' ? undefined : value })
+      setIdentityVersion(version => version + 1)
+      return
+    }
+    if (key === 'save') { dispatchSpaceSave(); return }
+    if (key === 'manage') { onViewChange('settings'); return }
+    if (key === 'leave') clearCurrentSpace()
   }
+  const runSpaceMenuKeyRef = useRef(runSpaceMenuKey)
+  runSpaceMenuKeyRef.current = runSpaceMenuKey
+
+  const menuRows = spaceMenuRows({ spaces, collections, currentSpace, scope: activeScope, color: spaceColor, icon: spaceIcon })
+  const dropdownItems: MenuProps['items'] = menuRows.map((row, index) => {
+    if (row.type === 'divider') return { type: 'divider' as const, key: `divider-${index}` }
+    if (row.type === 'section') return { key: `section-${index}`, label: row.label, disabled: true }
+    return {
+      key: row.key,
+      label: `${row.checked ? '✓ ' : ''}${row.label}`,
+      disabled: row.disabled,
+      icon: row.swatch ? <span className="space-color-swatch" style={{ background: row.swatch }}/> : undefined,
+      onClick: () => runSpaceMenuKey(row.key),
+    }
+  })
+
+  /**
+   * Refresh the Space/collection lists, then open the menu. With a native page
+   * on screen the rows are handed to the browser route, which asks Rust to draw
+   * them inside the page: the page keeps running underneath, nothing is hidden
+   * or moved. Everywhere else the ordinary dropdown is used.
+   */
+  async function openSpaceMenu() {
+    let nextSpaces = spaces
+    let nextCollections = collections
+    try { nextSpaces = await listWorkspaces() } catch { /* keep the cached list */ }
+    try { nextCollections = await listCollections() } catch { /* keep the cached list */ }
+    setSpaces(nextSpaces)
+    setCollections(nextCollections)
+    if (!nativeSurface) { setMenuOpen(true); return }
+    const scope = currentSpace ? readSpaceScopes()[currentSpace.id] ?? null : null
+    const rect = spaceButtonRef.current?.getBoundingClientRect()
+    window.dispatchEvent(new CustomEvent(SPACE_MENU_OPEN_EVENT, {
+      detail: {
+        rows: spaceMenuRows({ spaces: nextSpaces, collections: nextCollections, currentSpace, scope, color: spaceColor, icon: spaceIcon }),
+        x: rect ? rect.right + 4 : 24,
+        y: rect ? rect.bottom + 6 : 96,
+        theme: document.body.dataset.theme === 'dark' ? 'dark' : 'light',
+      },
+    }))
+  }
+
+  useEffect(() => {
+    // The browser route may have published its state before this effect ran
+    // (child effects run first), so adopt the current value before listening.
+    setNativeSurface(document.body.dataset.nativeSurface === '1')
+    const onSurface = (event: Event) => setNativeSurface(Boolean((event as CustomEvent<boolean>).detail))
+    const onAction = (event: Event) => {
+      const key = (event as CustomEvent<{ key?: string }>).detail?.key
+      if (key) runSpaceMenuKeyRef.current(key)
+    }
+    // The in-page menu can fail to attach (a page that cannot be scripted, a
+    // torn-down tab); fall back to the host dropdown rather than losing it.
+    const onFallback = () => { setNativeSurface(false); setMenuOpen(true) }
+    window.addEventListener(SPACE_SURFACE_EVENT, onSurface)
+    window.addEventListener(SPACE_MENU_ACTION_EVENT, onAction)
+    window.addEventListener(SPACE_MENU_FALLBACK_EVENT, onFallback)
+    return () => {
+      window.removeEventListener(SPACE_SURFACE_EVENT, onSurface)
+      window.removeEventListener(SPACE_MENU_ACTION_EVENT, onAction)
+      window.removeEventListener(SPACE_MENU_FALLBACK_EVENT, onFallback)
+    }
+  }, [])
+
   const spaceLabel = currentSpace ? t("Space：{value0}", { value0: currentSpace.name }) : t("切换 Space")
 
   return <TopBarPortalProvider target={topBarSlot}>
@@ -126,7 +187,9 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
         <div className="app-topbar__slot" ref={setTopBarSlot}/>
       </header>
       <Layout className="app-body">
-        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}><Dropdown menu={spaceMenu} trigger={['click']} placement="bottomLeft" onOpenChange={open => { if (open) { void refreshSpaces(); try { void listCollections().then(setCollections).catch(() => setCollections([])) } catch { setCollections([]) } } }}><button type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel} style={spaceColor ? { borderColor: spaceColor, color: spaceColor } : undefined}><Layers size={18} strokeWidth={1.6}/></button></Dropdown></Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
+        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}>{nativeSurface
+          ? <button ref={spaceButtonRef} type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel} style={spaceColor ? { borderColor: spaceColor, color: spaceColor } : undefined} onClick={() => void openSpaceMenu()}>{spaceIcon ?? <Layers size={18} strokeWidth={1.6}/>}</button>
+          : <Dropdown menu={{ items: dropdownItems }} open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (!open) setNativeSurface(document.body.dataset.nativeSurface === '1') }} placement="bottomLeft"><button ref={spaceButtonRef} type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel} style={spaceColor ? { borderColor: spaceColor, color: spaceColor } : undefined}>{spaceIcon ?? <Layers size={18} strokeWidth={1.6}/>}</button></Dropdown>}</Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
         <Layout.Content className="app-content">{children}</Layout.Content>
       </Layout>
     </Layout>

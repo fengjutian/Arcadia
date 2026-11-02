@@ -15,6 +15,10 @@ export interface SiteRoute {
   collectionId: string | null
   /** Open Reader as soon as a page from this host finishes loading. */
   autoReader: boolean
+  /** Space this host belongs to; the browser offers to switch when it differs. */
+  spaceId: string | null
+  /** Paused rules stay stored but never match. */
+  enabled: boolean
   updatedAt: number
 }
 
@@ -39,6 +43,8 @@ function normalizeRoute(raw: unknown): SiteRoute | null {
     host,
     collectionId: typeof record.collectionId === 'string' && record.collectionId ? record.collectionId : null,
     autoReader: record.autoReader === true,
+    spaceId: typeof record.spaceId === 'string' && record.spaceId ? record.spaceId : null,
+    enabled: record.enabled !== false,
     updatedAt: typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt) ? record.updatedAt : Date.now(),
   }
 }
@@ -67,7 +73,7 @@ export function writeSiteRoutes(routes: readonly SiteRoute[]): void {
 export function upsertSiteRoute(
   routes: readonly SiteRoute[],
   url: string,
-  patch: Partial<Pick<SiteRoute, 'collectionId' | 'autoReader'>>,
+  patch: Partial<Pick<SiteRoute, 'collectionId' | 'autoReader' | 'spaceId'>>,
 ): SiteRoute[] {
   const host = normalizeRouteHost(url)
   if (!host) return [...routes]
@@ -76,9 +82,15 @@ export function upsertSiteRoute(
     host,
     collectionId: patch.collectionId !== undefined ? patch.collectionId : existing?.collectionId ?? null,
     autoReader: patch.autoReader !== undefined ? patch.autoReader : existing?.autoReader ?? false,
+    spaceId: patch.spaceId !== undefined ? patch.spaceId : existing?.spaceId ?? null,
+    enabled: existing?.enabled ?? true,
     updatedAt: Date.now(),
   }
   return [...routes.filter(route => route.host !== host), next]
+}
+
+export function setSiteRouteEnabled(routes: readonly SiteRoute[], host: string, enabled: boolean): SiteRoute[] {
+  return routes.map(route => route.host === host ? { ...route, enabled, updatedAt: Date.now() } : route)
 }
 
 export function removeSiteRoute(routes: readonly SiteRoute[], url: string): SiteRoute[] {
@@ -95,6 +107,7 @@ export function matchSiteRoute(routes: readonly SiteRoute[], url: string): SiteR
   if (!host) return null
   let best: SiteRoute | null = null
   for (const route of routes) {
+    if (!route.enabled) continue
     if (host === route.host || host.endsWith(`.${route.host}`)) {
       if (!best || route.host.length > best.host.length) best = route
     }
