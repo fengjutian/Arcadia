@@ -48,6 +48,7 @@ Arcadia 是一款以浏览器为入口、以本地知识库为核心的桌面阅
 | `Ctrl/Cmd + T` | 新建标签页 |
 | `Ctrl/Cmd + W` | 关闭当前标签页 |
 | `Ctrl/Cmd + L` | 聚焦并选中地址栏 |
+| `Ctrl/Cmd + K` | 打开命令栏（标签 / 历史 / 收藏 / 知识库 / 动作） |
 | `Ctrl/Cmd + Tab` | 切换到下一个标签页 |
 | `Ctrl/Cmd + Shift + Tab` | 切换到上一个标签页 |
 | `Ctrl/Cmd + 1…9` | 切换到指定标签页，`9` 表示最后一个 |
@@ -285,6 +286,7 @@ npm run test:rust     # 247 个用例，见下方说明
 - [开发路线图](docs/roadmap.md)
 - [开发技术文档](docs/development-guide.md)
 - [WebView 原生能力矩阵](docs/browser-native-capability-matrix.md)
+- [主流浏览器借鉴分析](docs/browser-borrowing-analysis.md)
 - [网站封杀名单方案](docs/site-blacklist-plan.md)
 - [WASM 插件运行时方案](docs/wasm-plugin-runtime-plan.md)
 

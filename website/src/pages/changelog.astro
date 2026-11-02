@@ -1,0 +1,121 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site } from '../lib/site';
+import { latestRelease, releasedReleases, releases, type ChangeTag } from '../lib/changelog';
+
+const description = `Arcadia 更新日志：按版本记录新增功能、改进与修复，当前版本 ${latestRelease.version}（${latestRelease.dateLabel}）。`;
+const tagTone: Record<ChangeTag, string> = {
+  新增: 'border-[var(--acid)] text-[var(--acid)]',
+  改进: 'border-[var(--line)] text-[var(--ink)]',
+  修复: 'border-[var(--line)] text-[var(--ink)]',
+  说明: 'border-[var(--line)] text-[var(--muted)]',
+};
+const stats = [
+  { label: '当前版本', value: latestRelease.version, detail: '开发预览版' },
+  { label: '最近发布', value: latestRelease.dateLabel, detail: '按版本记录' },
+  { label: '已发布版本', value: String(releasedReleases.length), detail: '自 v0.1.0 起' },
+  { label: '发布渠道', value: 'GitHub', detail: 'Releases 与源码同步' },
+];
+---
+<BaseLayout title="更新日志" description={description}>
+  <section class="relative overflow-hidden border-b border-[var(--line)]">
+    <div class="grid-lines absolute inset-0 opacity-25 [mask-image:linear-gradient(to_bottom,black,transparent)]"></div>
+    <div class="shell relative grid gap-12 py-20 lg:grid-cols-[1.15fr_.85fr] lg:items-end lg:py-28">
+      <div>
+        <p class="eyebrow">Changelog · 更新日志</p>
+        <h1 class="display mt-7">更新<span class="text-[var(--acid)]">日志</span></h1>
+        <p class="muted mt-7 max-w-2xl text-lg">每个版本做了什么、改了什么、修了什么，都记在这里。按时间倒序排列，最新版本在最上方；未发布的主分支改动单独标注。</p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href={site.releases} target="_blank" rel="noreferrer" class="btn btn-primary">在 GitHub 查看发布</a>
+          <a href={site.releasesFeed} target="_blank" rel="noreferrer" class="btn">订阅 Atom</a>
+        </div>
+      </div>
+      <dl class="grid grid-cols-2 gap-px border border-[var(--line)] bg-[var(--line)]">
+        {stats.map((stat) => (
+          <div class="bg-[var(--bg)] p-4 sm:p-5">
+            <dt class="text-xs tracking-[.08em] muted">{stat.label}</dt>
+            <dd class="mt-3 text-2xl font-semibold tracking-tight text-[var(--acid)]">{stat.value}</dd>
+            <dd class="mt-1 text-xs muted">{stat.detail}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  </section>
+
+  <section class="border-b border-[var(--line)] bg-[var(--panel)]">
+    <nav class="shell grid gap-px bg-[var(--line)] sm:grid-cols-2 lg:grid-cols-4" aria-label="版本目录">
+      {releases.map((release) => (
+        <a href={`#${release.anchor}`} class="group flex flex-col justify-between gap-8 bg-[var(--bg)] p-5 transition hover:bg-[var(--subtle)]">
+          <span class="flex items-center justify-between gap-3 text-xs muted">
+            <time datetime={release.date}>{release.dateLabel}</time>
+            <span class:list={[release.status === 'latest' ? 'text-[var(--acid)]' : release.status === 'in-progress' ? 'text-[var(--ink)]' : '']}>{release.statusLabel}</span>
+          </span>
+          <span>
+            <span class="block text-xl font-semibold tracking-tight">{release.version}</span>
+            <span class="mt-1 block text-xs muted">{release.title}</span>
+          </span>
+        </a>
+      ))}
+    </nav>
+  </section>
+
+  <div class="shell py-16 md:py-24">
+    <div class="grid gap-16 md:gap-20">
+      {releases.map((release) => (
+        <article id={release.anchor} class="scroll-mt-24 grid gap-8 border-t border-[var(--line)] pt-10 lg:grid-cols-[260px_1fr] lg:gap-16">
+          <header class="lg:sticky lg:top-24 lg:self-start">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="text-sm font-bold tracking-[.08em] text-[var(--acid)]">{release.version}</span>
+              <span class:list={[
+                'border px-2 py-0.5 text-[11px] tracking-[.06em]',
+                release.status === 'latest'
+                  ? 'border-[var(--acid)] text-[var(--acid)]'
+                  : release.status === 'in-progress'
+                    ? 'border-[var(--ink)] text-[var(--ink)]'
+                    : 'border-[var(--line)] text-[var(--muted)]',
+              ]}>{release.statusLabel}</span>
+            </div>
+            <h2 class="mt-5 text-3xl font-semibold leading-tight tracking-[-.03em]">{release.title}</h2>
+            <time datetime={release.date} class="mt-3 block text-sm muted">{release.dateLabel}</time>
+            <p class="muted mt-5 border-l-2 border-[var(--line)] pl-4 text-sm leading-relaxed">{release.summary}</p>
+          </header>
+
+          <div class="grid gap-9">
+            {release.groups.map((group) => (
+              <section>
+                <h3 class="flex items-center gap-3">
+                  <span class:list={['border px-2 py-0.5 text-[11px] font-bold tracking-[.08em]', tagTone[group.tag]]}>{group.tag}</span>
+                  <span class="h-px flex-1 bg-[var(--line)]" aria-hidden="true"></span>
+                  <span class="text-xs muted">{group.items.length} 项</span>
+                </h3>
+                <ul class="mt-4 grid gap-3">
+                  {group.items.map((item) => (
+                    <li class="flex gap-3 text-sm leading-relaxed">
+                      <span class="mt-[.6em] h-1 w-1 shrink-0 bg-[var(--acid)]" aria-hidden="true"></span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        </article>
+      ))}
+    </div>
+  </div>
+
+  <section class="border-y border-[var(--line)] bg-[var(--panel)] py-16 md:py-20">
+    <div class="shell grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+      <div>
+        <p class="eyebrow">Full history</p>
+        <h2 class="section-title mt-6 max-w-3xl">日志记录变化，<br/>提交记录全过程。</h2>
+        <p class="muted mt-6 max-w-2xl">这里只记录面向使用者的变化。完整提交历史、构建产物与预发布版本在 GitHub 上维护；升级开发预览版前，建议先在应用内导出备份。</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a href={site.releases} target="_blank" rel="noreferrer" class="btn btn-primary">GitHub Releases</a>
+        <a href={site.repository} target="_blank" rel="noreferrer" class="btn">查看源码</a>
+        <a href="/download/" class="btn">下载开发预览版</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

@@ -75,13 +75,15 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 全部条目未开始。按性价比排序：`6.1`–`6.3` 不依赖布局收口，可在当前工作流结束后立即启动；`6.4` 起依赖布局收口。
+> 状态以各条目勾选为准：`6.1` 已部分落地，其余未开始。按性价比排序：`6.1`–`6.3` 不依赖布局收口，可在当前工作流结束后立即启动；`6.4` 起依赖布局收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
 
-- [ ] 借鉴：Arc 的 `⌘T` 命令栏把导航、切标签与动作执行合并在一个输入框，动作本身可被搜索（[Command Bar Actions](https://start.arc.net/command-bar-actions)）。
+- [~] 借鉴：Arc 的 `⌘T` 命令栏把导航、切标签与动作执行合并在一个输入框，动作本身可被搜索（[Command Bar Actions](https://start.arc.net/command-bar-actions)）。
 - 现状：`TabSearchPalette`、`BookmarkSearchPalette`、`HistorySearchPalette`、`BulkSummaryPalette` 是四个独立 Modal；地址栏只负责导航。
+- 已落地（2026-11-02）：`features/command/` 提供 `CommandPalette` 与 `commandModel`（前缀解析、评分、分组），`Ctrl/⌘ + K` 打开；覆盖标签页、历史、收藏、知识库与 8 个浏览器动作；`Tab` 循环范围，`@` / `/` / `?` / `>` 前缀直选；旧 palette 入口保留。测试 15 例（`commandModel.test.ts`）。
+- 待补：域名 + `Tab` 的站内搜索模板、用户自定义 `!` 快捷词、旧 palette 下线；三项完成后改标 `[x]`。
 - 做法：新增单一命令栏，前缀分域：`@` 标签、`/` 知识库、`?` 问 AI、`>` 动作；复用 `tabSearchIndex`、`historySearchIndex`、`bookmarkSearchIndex`；动作表映射现有高频 Tauri command。
 - 增补（借 Chrome / Firefox）：`Tab` 就地切换搜索域；域名 + Tab 触发站内搜索，模板复用 `searchEngine.ts`；允许用户自定义 `!` 快捷词。
 - 验收：`Ctrl/Cmd + K` 打开；四类结果同屏分组且键盘可达；动作有成功/失败反馈；旧 palette 入口保留一个版本周期后移除；新增纯函数与交互测试。
@@ -216,7 +218,7 @@
 3. 补齐搜索分页，缓解文档量增长后的列表端压力。
 4. 扩展插件宿主能力，覆盖知识库写入、AI 调用之外的常用能力。
 5. macOS / Linux 的隐私拦截与证书拦截等价实现（受平台接口限制，需先做可行性验证）。
-6. 启动 Iteration 6 的第一批：`6.1` 统一命令栏、`6.2` 标签归档、`6.3` 笔记落库。三者都不依赖布局收口，可并行推进。
+6. 启动 Iteration 6 的第二批：`6.2` 标签归档、`6.3` 笔记落库；`6.1` 收尾（站内搜索模板、自定义 `!` 快捷词、旧 palette 下线）随时可穿插。
 7. 布局收口完成后进入 `6.4` Space 化与 `6.5` 站点路由；`6.6`–`6.12` 按用户反馈再排序。
 
 ## 决策记录

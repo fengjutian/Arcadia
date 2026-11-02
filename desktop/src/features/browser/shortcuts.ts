@@ -57,9 +57,9 @@ export interface ShortcutDefinition {
   /** Hard-coded fallback used when the user has not overridden this action. */
   default: ShortcutBinding
   /**
-   * Extra default bindings (e.g. `openTabSearch` accepts Ctrl+K and Ctrl+Shift+A).
-   * Only used while the action is on its factory defaults; overridden actions
-   * drop every default to avoid binding collisions.
+   * Extra default bindings for actions that accept more than one key. Only used
+   * while the action is on its factory defaults; overridden actions drop every
+   * default to avoid binding collisions.
    */
   extras?: ShortcutBinding[]
   /** Short hint shown next to the row (e.g. "标签搜索"). */

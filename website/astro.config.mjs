@@ -7,5 +7,5 @@ export default defineConfig({
   site: 'https://arcadia-browser.netlify.app',
   output: 'static',
   integrations: [react(), sitemap()],
-  vite: { plugins: [tailwindcss()] },
+  vite: { plugins: [tailwindcss()], ssr: { external: ['yaml'] } },
 });

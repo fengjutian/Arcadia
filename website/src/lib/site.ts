@@ -4,6 +4,7 @@ export const site = {
   url: 'https://arcadia-browser.netlify.app',
   repository: 'https://github.com/fengjutian/browser',
   releases: 'https://github.com/fengjutian/browser/releases',
+  releasesFeed: 'https://github.com/fengjutian/browser/releases.atom',
 };
 
 export const capabilities = [
