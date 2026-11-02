@@ -3863,3 +3863,30 @@ body[data-theme='github'] {
 body[data-theme='dark'] .browser-private-bar,
 body[data-theme='dark'] .browser-private-mark { border-color: #59426f; background: #2a2033; color: #c9a9e7; }
 body[data-theme='dark'] .browser-private-bar span { color: #ae97c3; }
+
+.bookmark-import-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #e2e9e4;
+  border-radius: 10px;
+  background: #fafcfb;
+}
+
+.bookmark-import-preview__row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  span { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  small { overflow: hidden; color: #748078; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+.bookmark-import-space {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

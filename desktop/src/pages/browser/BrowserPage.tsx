@@ -195,7 +195,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   // Still frame of the page painted underneath a host overlay while the native
   // WebView is hidden, so opening a menu does not blank the content area.
   const [frozenFrame, setFrozenFrame] = useState<string | null>(null)
-  const freezeSessionRef = useRef(0)
+  const frozenForRef = useRef<string | null>(null)
   const [sourceView, setSourceView] = useState<{ url: string; html: string } | null>(null)
   const [clearSiteDataOpen, setClearSiteDataOpen] = useState(false)
   const [passwordCandidate, setPasswordCandidate] = useState<(PasswordCandidate & { existingId?: string }) | null>(null)
@@ -370,6 +370,18 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     setToolbarOverlay(current => current === kind ? null : current)
   }
 
+  // A still belongs to exactly one tab; drop it when the active tab changes so
+  // a leftover frame can never flash over another page.
+  useEffect(() => {
+    frozenForRef.current = null
+    setFrozenFrame(null)
+  }, [active.id])
+
+  // Read by the async capture below: an overlay that closed while the
+  // screenshot was in flight must not hide the page it already restored.
+  const overlayOpenRef = useRef(false)
+  overlayOpenRef.current = modalOverlayCount > 0 || toolbarOverlay === 'tab-menu' || toolbarOverlay === 'menu'
+
   useEffect(() => {
     let cancelled = false
     if (!hasNativeTab(active.id)) {
@@ -410,13 +422,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
           // hiding the page, which is the old behaviour.
           new Promise<null>(resolve => window.setTimeout(() => resolve(null), 400)),
         ])
-        if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId) return
+        if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId || !overlayOpenRef.current) return
         if (frame) {
           setFrozenFrame(frame)
           // Let React paint the still before the WebView disappears, otherwise
           // one frame of the blank host surface shows through.
           await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-          if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId) return
+          if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId || !overlayOpenRef.current) return
         }
         await hideNativeTab(tabId)
       })()
@@ -429,8 +441,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (cancelled || activeTabIdRef.current !== active.id || !visibleRef.current) return
       await showNativeTab(active.id)
       // Drop the still only after the native page is visible again; clearing it
-      // first would flash the blank host surface for a frame.
-      if (!cancelled && frozenForRef.current === active.id) {
+      // first would flash the blank host surface for a frame. Skip if an
+      // overlay reopened while the page was being restored.
+      if (!cancelled && !overlayOpenRef.current && frozenForRef.current === active.id) {
         frozenForRef.current = null
         setFrozenFrame(null)
       }

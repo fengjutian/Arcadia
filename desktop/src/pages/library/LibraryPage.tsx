@@ -40,6 +40,7 @@ import {
 import { formatQueuedAt, queueHost } from '../../features/reading-queue/readingQueue'
 import { documentInScope } from '../../features/browser/spaces'
 import { useSpaceCollectionFilter } from '../../features/browser/spaceScope'
+import { BookmarkImportDialog } from '../../features/import/BookmarkImportDialog'
 import { CLIP_KIND_LABEL, clipPreview, clipSourceHost, clipToMarkdown, clipsToMarkdown } from '../../features/clips/clips'
 import { trackDownload, type DownloadEntry } from '../../features/downloads/trackDownload'
 import { useDownloadCenter } from '../../features/downloads/useDownloadCenter'
@@ -76,6 +77,7 @@ function formatWhen(value: number) {
 export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [documents, setDocuments] = useState<Document[]>([])
   const spaceScope = useSpaceCollectionFilter()
+  const [bookmarkImportOpen, setBookmarkImportOpen] = useState(false)
   const [collections, setCollections] = useState<Collection[]>([])
   const [selected, setSelected] = useState<Document | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -619,7 +621,10 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         <h2>{t("收藏")}</h2>
         <p>{t("浏览器收藏的页面。可在这里打开、改名或删除。")}</p>
       </div>
-      <span className="library-result-count">{bookmarks.length} {t("条")}</span>
+      <div className="library-section-head__tools">
+        <Button onClick={() => setBookmarkImportOpen(true)}>{t("导入书签")}</Button>
+        <span className="library-result-count">{bookmarks.length} {t("条")}</span>
+      </div>
     </div>
     {bookmarks.length === 0
       ? <div className="library-empty-state library-empty-state--compact">
@@ -832,6 +837,12 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         <Input.TextArea placeholder={t("备注（可选）")} value={bookmarkDraft.note} autoSize={{ minRows: 2, maxRows: 4 }} onChange={event => setBookmarkDraft({ ...bookmarkDraft, note: event.target.value })}/>
       </div>
     </Modal>
+    <BookmarkImportDialog
+      open={bookmarkImportOpen}
+      onClose={() => setBookmarkImportOpen(false)}
+      existingUrls={new Set(bookmarks.map(bookmark => bookmark.url))}
+      onImported={() => { void listBookmarks().then(setBookmarks) }}
+    />
     <DocumentDetailDrawer document={selected} onClose={() => setSelected(null)} onDeleted={id => setDocuments(items => items.filter(item => item.id !== id))} onExported={onExported} onUpdated={handleDocumentUpdated}/>
   </section>
 }
