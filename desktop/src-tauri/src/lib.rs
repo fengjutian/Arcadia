@@ -832,6 +832,27 @@ async fn browser_set_muted(
     Ok(())
 }
 
+/// Apply user-authored, local-only CSS to the page. The stylesheet lives in a
+/// single tagged `<style>` element and never executes page-provided scripts.
+#[tauri::command]
+async fn browser_inject_css(
+    app: tauri::AppHandle,
+    label: String,
+    css: String,
+) -> Result<(), String> {
+    validate_browser_label(&label)?;
+    if css.len() > 20_000 {
+        return Err("css is too large".into());
+    }
+    let css = serde_json::to_string(&css).map_err(|error| error.to_string())?;
+    let script = format!(
+        "(() => {{ const id = 'arcadia-site-css'; let el = document.getElementById(id); if (!el) {{ el = document.createElement('style'); el.id = id; (document.head || document.documentElement).appendChild(el); }} el.textContent = {css}; }})()"
+    );
+    let engine = engine::page_engine(&app);
+    engine.eval(&label, &script)?;
+    Ok(())
+}
+
 #[tauri::command]
 fn browser_set_bounds(
     app: tauri::AppHandle,
@@ -2102,6 +2123,7 @@ pub fn run() {
             browser_create,
             browser_set_ad_blocking,
             browser_set_muted,
+            browser_inject_css,
             browser_set_bounds,
             browser_set_visible,
             browser_navigate,

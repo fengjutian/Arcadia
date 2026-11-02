@@ -5,6 +5,7 @@ import {
   clampReaderWidth,
   hideCssFor,
   isAutoReaderSite,
+  liveHideCssFor,
   normalizeHideSelectors,
   normalizeReaderHost,
   readReaderSiteStyles,
@@ -87,5 +88,11 @@ describe('reader hide selectors', () => {
     expect(hideCssFor({ hide: '.ad, #promo' })).toBe('.reader-document__body .ad, .reader-document__body #promo { display: none !important; }')
     writeReaderSiteStyle('example.com', { hide: '.ad' })
     expect(readerStyleFor('https://example.com')).toMatchObject({ hide: '.ad' })
+  })
+
+  it('only emits live CSS when the user opted in', () => {
+    expect(liveHideCssFor({ hide: '.ad' })).toBe('')
+    expect(liveHideCssFor({ hide: '.ad', hideLive: true })).toBe('.ad { display: none !important; }')
+    expect(liveHideCssFor({ hide: '.ad, #promo', hideLive: true })).toContain('#promo { display: none !important; }')
   })
 })

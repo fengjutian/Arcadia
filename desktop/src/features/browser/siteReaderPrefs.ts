@@ -18,6 +18,8 @@ export interface ReaderSiteStyle {
   theme?: 'light' | 'sepia' | 'dark'
   /** Comma-separated CSS selectors hidden inside the Reader body. */
   hide?: string
+  /** Apply the same selectors to the live page (local CSS only). */
+  hideLive?: boolean
 }
 
 export const READER_THEMES = [
@@ -94,6 +96,7 @@ function normalizeStyle(raw: unknown): ReaderSiteStyle | null {
     const hide = normalizeHideSelectors(record.hide)
     if (hide) style.hide = hide
   }
+  if (record.hideLive === true) style.hideLive = true
   return style.fontSize || style.width || style.theme || style.hide ? style : null
 }
 
@@ -114,6 +117,14 @@ export function hideCssFor(style: ReaderSiteStyle | null): string {
   const selectors = normalizeHideSelectors(style?.hide ?? '')
   if (!selectors) return ''
   return selectors.split(', ').map(selector => `.reader-document__body ${selector}`).join(', ') + ' { display: none !important; }'
+}
+
+/** Global CSS for the live page, only when the user opted in per site. */
+export function liveHideCssFor(style: ReaderSiteStyle | null): string {
+  if (!style?.hideLive) return ''
+  const selectors = normalizeHideSelectors(style.hide ?? '')
+  if (!selectors) return ''
+  return selectors.split(', ').map(selector => `${selector} { display: none !important; }`).join('\n')
 }
 
 export function readReaderSiteStyles(): Record<string, ReaderSiteStyle> {

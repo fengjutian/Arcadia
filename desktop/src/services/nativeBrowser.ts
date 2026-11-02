@@ -300,6 +300,8 @@ export async function setNativeAdBlocking(enabled: boolean): Promise<void> {
   await Promise.all(Array.from(labels.values(), label => invoke('browser_set_ad_blocking', { label, enabled })))
 }
 export async function setNativeMuted(tabId: string, muted: boolean): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_set_muted',{label,muted}) }
+/** Apply local-only CSS (user-authored) to the live page. */
+export async function injectSiteCss(tabId: string, css: string): Promise<void> { const label=labels.get(tabId);if(label)await invoke('browser_inject_css',{label,css}) }
 export async function captureNativePage(tabId: string): Promise<NativePageSnapshot> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<NativePageSnapshot>('browser_snapshot',{label}) }
 export async function scanNativeResources(tabId: string): Promise<NativeResourceCandidate[]> { const label=labels.get(tabId);if(!label)throw new Error('native webview is not available');return invoke<NativeResourceCandidate[]>('browser_resource_candidates',{label}) }
 export function hasNativeTab(tabId: string): boolean { return labels.has(tabId) }

@@ -1,12 +1,12 @@
 import { translate } from '../../i18n'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AutoComplete, Badge, Button, Dropdown, Input, message, Modal, Popover, Select, Space, Tabs, Tag, Tooltip, Typography, UI_MODAL_OVERLAY_EVENT, type InputRef, type MenuProps } from '../../components/ui'
+import { AutoComplete, Badge, Button, Dropdown, Input, message, Modal, Popover, Select, Space, Switch, Tabs, Tag, Tooltip, Typography, UI_MODAL_OVERLAY_EVENT, type InputRef, type MenuProps } from '../../components/ui'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, AudioMutedOutlined, BookOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, CloseOutlined, CopyOutlined, DownloadOutlined, FullscreenOutlined, LoadingOutlined, MoonOutlined, MoreOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SoundOutlined, StarFilled, StarOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined, WarningOutlined } from '../../components/ui/icons'
 import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue, saveClip, listReadingQueue, removeFromReadingQueue, addToCollection, listCollections } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeAdBlocking, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, injectSiteCss, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeAdBlocking, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -26,7 +26,7 @@ import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
 import { normalizeSleepHost, readSleepExceptions, toggleSleepException, writeSleepExceptions, isSleepExcluded } from '../../features/browser/sleepSettings'
-import { isAutoReaderSite, normalizeReaderHost, readReaderSites, toggleReaderSite, writeReaderSites, READER_FONT_SIZES, READER_WIDTHS, READER_THEMES, clampReaderFontSize, clampReaderWidth, readerStyleFor, writeReaderSiteStyle, normalizeHideSelectors } from '../../features/browser/siteReaderPrefs'
+import { isAutoReaderSite, normalizeReaderHost, readReaderSites, toggleReaderSite, writeReaderSites, READER_FONT_SIZES, READER_WIDTHS, READER_THEMES, clampReaderFontSize, clampReaderWidth, readerStyleFor, writeReaderSiteStyle, normalizeHideSelectors, liveHideCssFor } from '../../features/browser/siteReaderPrefs'
 import { matchSiteRoute, readSiteRoutes, upsertSiteRoute, writeSiteRoutes, type SiteRoute } from '../../features/browser/siteRoutes'
 import { emitLittleArcResult, listenLittleArcCapture, listenLittleArcOpenMain, openLittleArc } from '../../features/littlearc/littleArc'
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
@@ -240,6 +240,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [pickerQuery, setPickerQuery] = useState('')
   const [hideEditorOpen, setHideEditorOpen] = useState(false)
   const [hideDraft, setHideDraft] = useState('')
+  const [hideLiveDraft, setHideLiveDraft] = useState(false)
 
   useEffect(() => {
     if (!documentPickerOpen) return
@@ -1112,6 +1113,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         && (matchSiteRoute(siteRoutesRef.current, patch.url)?.autoReader || isAutoReaderSite(patch.url, readerSitesRef.current))) {
         autoReaderAttemptsRef.current.add(patch.url)
         void openReader()
+      }
+      // Local-only site CSS (user-authored) applied after each load.
+      if (typeof patch.url === 'string' && patch.loading === false && !patch.error) {
+        const css = liveHideCssFor(readerStyleFor(patch.url))
+        if (css) void injectSiteCss(active.id, css).catch(() => undefined)
       }
     },
     onReopen: () => {
@@ -2778,13 +2784,20 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       onCancel={() => setHideEditorOpen(false)}
       okText={translate("保存")}
       onOk={() => {
-        writeReaderSiteStyle(active.url, { ...readerSiteStyle, hide: normalizeHideSelectors(hideDraft) || undefined })
+        const nextStyle = { ...readerSiteStyle, hide: normalizeHideSelectors(hideDraft) || undefined, hideLive: hideLiveDraft && Boolean(normalizeHideSelectors(hideDraft)) }
+        writeReaderSiteStyle(active.url, nextStyle)
         setReaderStyleVersion(version => version + 1)
+        const liveCss = liveHideCssFor(nextStyle)
+        if (liveCss) void injectSiteCss(active.id, liveCss).catch(() => undefined)
         setHideEditorOpen(false)
       }}
     >
       <Typography.Paragraph type="secondary">{translate("只对阅读模式生效；只接受简单 CSS 选择器，不执行任何脚本。")}</Typography.Paragraph>
       <Input value={hideDraft} onChange={event => setHideDraft(event.target.value)} placeholder={translate("隐藏元素选择器（逗号分隔）")}/>
+      <label className="reader-hide-live">
+        <Switch checked={hideLiveDraft} onChange={setHideLiveDraft}/>
+        <span>{translate("同时应用到网页（仅本地 CSS）")}</span>
+      </label>
     </Modal>
     <CommandPalette
       open={commandOpen}
@@ -2901,7 +2914,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             <Select<number> size="small" value={readerSiteStyle?.width ?? 760} options={READER_WIDTHS.map(width => ({ label: String(width), value: width }))} onChange={value => { writeReaderSiteStyle(active.url, { ...readerSiteStyle, width: clampReaderWidth(Number(value)) }); setReaderStyleVersion(version => version + 1) }}/>
             <span>{translate("阅读主题")}</span>
             <Select size="small" value={readerSiteStyle?.theme ?? 'light'} options={READER_THEMES.map(theme => ({ label: theme.value === 'light' ? translate("浅色") : theme.value === 'sepia' ? translate("护眼") : translate("深色"), value: theme.value }))} onChange={value => { writeReaderSiteStyle(active.url, { ...readerSiteStyle, theme: value as 'light' | 'sepia' | 'dark' }); setReaderStyleVersion(version => version + 1) }}/>
-            <Button size="small" type="text" onClick={() => { setHideDraft(readerSiteStyle?.hide ?? ''); setHideEditorOpen(true) }}>{translate("隐藏元素")}</Button>
+            <Button size="small" type="text" onClick={() => { setHideDraft(readerSiteStyle?.hide ?? ''); setHideLiveDraft(readerSiteStyle?.hideLive === true); setHideEditorOpen(true) }}>{translate("隐藏元素")}</Button>
             <Button size="small" type="text" onClick={() => { writeReaderSiteStyle(active.url, null); setReaderStyleVersion(version => version + 1) }}>{translate("重置")}</Button>
           </div>
           <ReaderArticleView article={readerArticle} style={readerSiteStyle}/>
