@@ -17,7 +17,7 @@ describe('theme preference', () => {
   })
 
   it('persists the extended color themes', () => {
-    for (const theme of ['system', 'ocean', 'cyan', 'mint', 'amber', 'coral', 'rose', 'violet'] as const) {
+    for (const theme of ['system', 'ocean', 'cyan', 'midnight', 'mint', 'amber', 'coral', 'rose', 'violet'] as const) {
       writeThemePreference(theme)
       expect(readThemePreference()).toBe(theme)
     }

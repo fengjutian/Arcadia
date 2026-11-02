@@ -193,6 +193,8 @@ export const settings: Messages = {
   '启动增强': 'Startup boost',
   '浅色': 'Light',
   '青蓝': 'Cyan Blue',
+  '夜蓝': 'Midnight Blue',
+  '沉静深邃的午夜蓝界面': 'Deep, quiet midnight blue',
   '轻盈舒缓的薄荷绿色': 'Light, soothing mint green',
   '清除': 'Clear',
   '清空全部广告拦截统计？': 'Clear all ad blocking stats?',
