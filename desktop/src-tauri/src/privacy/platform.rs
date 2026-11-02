@@ -347,7 +347,10 @@ mod win {
                     )
                 }
             } else {
-                Err(windows::core::Error::from_win32())
+                // windows-core 0.62 dropped `Error::from_win32()`; use E_FAIL directly.
+                Err(windows::core::Error::from_hresult(windows::core::HRESULT(
+                    0x8000_4005u32 as i32,
+                )))
             };
             if filter_ok.is_err() {
                 cap_for_closure
@@ -381,7 +384,10 @@ mod win {
                         .map(|()| token)
                 }
             } else {
-                Err(windows::core::Error::from_win32())
+                // windows-core 0.62 dropped `Error::from_win32()`; use E_FAIL directly.
+                Err(windows::core::Error::from_hresult(windows::core::HRESULT(
+                    0x8000_4005u32 as i32,
+                )))
             };
             match token_registered {
                 Ok(token) => {

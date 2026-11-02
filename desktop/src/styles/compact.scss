@@ -4088,3 +4088,35 @@ body[data-theme='dark'] .split-document-pane {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.split-pane-head {
+  position: absolute;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid #dfe8e3;
+  background: #f6f9f6;
+  color: #4c5a51;
+  font-size: 12px;
+}
+
+.split-pane-head span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-star.is-depositing {
+  animation: star-deposit .9s ease-out;
+}
+
+@keyframes star-deposit {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(60, 138, 92, .35); }
+  35% { transform: scale(1.25); box-shadow: 0 0 0 6px rgba(60, 138, 92, .18); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(60, 138, 92, 0); }
+}
