@@ -1266,6 +1266,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
 
   async function resumeTab(tab: BrowserTab) {
     if (!tab.url) return
+    const wasSuspended = Boolean(tab.suspended)
     const nextBounds = bounds()
     if (!nextBounds) return
     if (hasNativeTab(tab.id) && isNativeTabSuspended(tab.id)) {
@@ -1273,7 +1274,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (resumed) {
         await resizeNativeTab(tab.id, nextBounds)
         if (visibleRef.current && activeTabIdRef.current === tab.id) await showNativeTab(tab.id)
-        setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, loading: false, error: undefined } : item))
+        setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, suspendedReason: undefined, loading: false, error: undefined } : item))
+        if (wasSuspended) messageApi.info(translate("已唤醒，滚动位置已恢复"), 2)
         await enforceLiveTabLimit(tab.id)
         return
       }
@@ -1281,13 +1283,14 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     } else if (hasNativeTab(tab.id)) {
       return
     }
-    setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, loading: true, error: undefined } : item))
+    setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, suspendedReason: undefined, loading: true, error: undefined } : item))
     try {
       tabRuntime.enqueueScroll(tab.id, { x: tab.scrollX ?? 0, y: tab.scrollY ?? 0 })
       const opened = await ensureNativeTab(tab.id, tab.url, nextBounds, { private: tab.private })
       if (!opened) throw new Error(translate("网页浏览仅在 Tauri 桌面应用中可用。"))
       if (visibleRef.current && activeTabIdRef.current === tab.id) await showNativeTab(tab.id)
-      setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, error: undefined } : item))
+      setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, suspendedReason: undefined, error: undefined } : item))
+      if (wasSuspended) messageApi.info(translate("已唤醒，滚动位置已恢复"), 2)
       await enforceLiveTabLimit(tab.id)
     } catch (error) {
       setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: classifyNavigationError(error) } : item))
@@ -1312,8 +1315,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       }
       const retained = await suspendNativeTab(tab.id).catch(() => false)
       if (!retained) await closeNativeTab(tab.id)
-      setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: true, loading: false } : item))
-      messageApi.info(translate("标签页已休眠，点击可恢复"), 2)
+      setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: true, suspendedReason: 'manual', loading: false } : item))
+      messageApi.info(retained
+        ? translate("标签页已休眠，点击可恢复")
+        : translate("当前平台不支持挂起，已释放该标签页，点击时会重新加载"), 3)
     } catch (error) {
       messageApi.error(translate("休眠失败：{value0}", { value0: String(error) }))
     }
@@ -2355,7 +2360,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
                 onDrop={onTabDrop(index)}
                 onDragEnd={onTabDragEnd}
                 className={`browser-tab-title${isDragging ? ' is-dragging' : ''}${isDropTarget ? ' is-drop-target' : ''}${tab.private ? ' browser-tab-title--private' : ''}`}
-              >{tab.crashed ? <WarningOutlined aria-label={translate("标签页崩溃")} className="browser-tab-crash"/>:tab.loading?<span className="browser-tab-loading" role="status" aria-label={translate("正在加载")}/>:tab.suspended?<Tooltip title={translate("已休眠，点击可恢复")} mouseEnterDelay={0.4}><MoonOutlined aria-label={translate("已休眠")} className="browser-tab-sleep"/></Tooltip>:tab.private?<LockOutlined/>:<TabFavicon key={tab.favicon??tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted?<Tooltip title={translate("已静音")} mouseEnterDelay={0.6}><AudioMutedOutlined aria-label={translate("已静音")} className="browser-tab-audio"/></Tooltip>:tab.audible?<Tooltip title={translate("正在播放音频")} mouseEnterDelay={0.6}><SoundOutlined aria-label={translate("正在播放音频")} className="browser-tab-audio"/></Tooltip>:null}<span>{tab.title}</span></span>
+              >{tab.crashed ? <WarningOutlined aria-label={translate("标签页崩溃")} className="browser-tab-crash"/>:tab.loading?<span className="browser-tab-loading" role="status" aria-label={translate("正在加载")}/>:tab.suspended?<Tooltip title={translate(sleepReasonLabel(tab.suspendedReason))} mouseEnterDelay={0.4}><MoonOutlined aria-label={translate("已休眠")} className="browser-tab-sleep"/></Tooltip>:tab.private?<LockOutlined/>:<TabFavicon key={tab.favicon??tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted?<Tooltip title={translate("已静音")} mouseEnterDelay={0.6}><AudioMutedOutlined aria-label={translate("已静音")} className="browser-tab-audio"/></Tooltip>:tab.audible?<Tooltip title={translate("正在播放音频")} mouseEnterDelay={0.6}><SoundOutlined aria-label={translate("正在播放音频")} className="browser-tab-audio"/></Tooltip>:null}<span>{tab.title}</span></span>
               </Tooltip>
             </Dropdown>,
             style: group.groupId ?( { '--tab-group-color': groupColor } as CSSProperties) : undefined,
