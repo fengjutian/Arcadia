@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentRun } from '../../api'
-import { runResearchAgent, type AgentDeps, type AgentOptions } from './agentLoop'
+import { runResearchAgent, type AgentDeps, type AgentOptions, type McpApprovalRequest } from './agentLoop'
 
 /** Shape of the argument passed to `updateAgentRunStatus`, for assertions. */
 interface StatusUpdate {
@@ -128,6 +128,84 @@ describe('runResearchAgent', () => {
     expect(callTool).toHaveBeenCalledTimes(1)
     expect(callTool.mock.calls[0]?.[1]).toBe('search_web')
     expect(result.steps.some(step => step.kind === 'mcp_tool' && step.summary.includes('search_web'))).toBe(true)
+  })
+
+  it('parses the tools envelope returned by the backend and fills the schema field', async () => {
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({ hits: 1 }))
+    const d = deps({
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() {
+        return {
+          tools: [{
+            name: 'search_web',
+            description: 'search the web',
+            inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+          }],
+        }
+      },
+      callMcpTool: callTool,
+    })
+    const result = await runResearchAgent(d, 'web search q', { ...options, approveToolCalls: true })
+
+    expect(callTool).toHaveBeenCalledWith('s1', 'search_web', { query: 'web search q' }, true)
+    expect(result.steps.some(step => step.kind === 'mcp_tool' && step.summary.includes('search_web'))).toBe(true)
+  })
+
+  it('asks the user through requestApproval before calling a tool', async () => {
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({}))
+    const approve = vi.fn(async (_request: McpApprovalRequest) => true)
+    const d = deps({
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'search_web' }] } },
+      callMcpTool: callTool,
+    })
+    await runResearchAgent(d, 'q', { ...options, requestApproval: approve })
+
+    expect(approve).toHaveBeenCalledTimes(1)
+    expect(approve.mock.calls[0]?.[0]).toMatchObject({ serverId: 's1', serverName: 'srv', toolName: 'search_web' })
+    expect(callTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the tool when the user denies approval', async () => {
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({}))
+    const approve = vi.fn(async () => false)
+    const d = deps({
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'search_web' }] } },
+      callMcpTool: callTool,
+    })
+    const result = await runResearchAgent(d, 'q', { ...options, requestApproval: approve })
+
+    expect(callTool).not.toHaveBeenCalled()
+    expect(result.steps.some(step => step.kind === 'mcp_tool' && step.summary.includes('未获授权'))).toBe(true)
+  })
+
+  it('auto-runs R0 tools without asking for approval', async () => {
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({}))
+    const approve = vi.fn(async (_request: McpApprovalRequest) => false)
+    const d = deps({
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'get_status', arcadiaRisk: 'R0' }] } },
+      callMcpTool: callTool,
+    })
+    await runResearchAgent(d, 'q', { ...options, requestApproval: approve })
+
+    expect(approve).not.toHaveBeenCalled()
+    expect(callTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('reuses a remembered R1 grant without asking again', async () => {
+    const callTool = vi.fn(async (_id: string, _name: string, _args: Record<string, unknown>, _ok: boolean) => ({}))
+    const approve = vi.fn(async (_request: McpApprovalRequest) => false)
+    const d = deps({
+      async listMcpServers() { return [{ id: 's1', name: 'srv', enabled: true }] },
+      async listMcpTools() { return { tools: [{ name: 'read_doc', arcadiaRisk: 'R1', arcadiaGranted: true }] } },
+      callMcpTool: callTool,
+    })
+    await runResearchAgent(d, 'q', { ...options, requestApproval: approve })
+
+    expect(approve).not.toHaveBeenCalled()
+    expect(callTool).toHaveBeenCalledTimes(1)
   })
 
   it('isolates a failing MCP server instead of aborting the run', async () => {

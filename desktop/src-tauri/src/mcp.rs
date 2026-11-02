@@ -17,6 +17,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, CONTENT_TYPE};
 use rusqlite::params;
 use serde::Serialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
@@ -287,6 +288,140 @@ fn initialize_params() -> Value {
             "version": env!("CARGO_PKG_VERSION"),
         },
     })
+}
+
+// ---------------------------------------------------------------------------
+// risk grading
+// ---------------------------------------------------------------------------
+
+/// R0 metadata, R1 read-only data, R2 write/exfiltration, R3 destructive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum McpRisk {
+    R0,
+    R1,
+    R2,
+    R3,
+}
+
+impl McpRisk {
+    fn as_str(self) -> &'static str {
+        match self {
+            McpRisk::R0 => "R0",
+            McpRisk::R1 => "R1",
+            McpRisk::R2 => "R2",
+            McpRisk::R3 => "R3",
+        }
+    }
+}
+
+const DESTRUCTIVE_VERBS: &[&str] = &[
+    "delete", "remove", "drop", "destroy", "purge", "wipe", "uninstall", "terminate", "kill",
+    "pay", "transfer", "execute", "exec", "shell", "command", "run",
+];
+const WRITE_VERBS: &[&str] = &[
+    "create", "update", "write", "save", "edit", "publish", "post", "send", "upload", "insert",
+    "append", "set", "put", "patch", "add", "commit", "push",
+];
+const READ_VERBS: &[&str] = &[
+    "get", "list", "search", "read", "fetch", "query", "find", "lookup", "describe", "status",
+    "info", "ping", "health", "version", "export", "download",
+];
+const METADATA_VERBS: &[&str] = &["ping", "list", "status", "info", "health", "version", "describe"];
+
+/// Tool names and MCP annotations are the only inputs here; descriptions are
+/// self-reported by the server and are deliberately ignored.
+fn classify_tool(tool: &Value) -> McpRisk {
+    let annotations = tool.get("annotations");
+    let destructive = annotations
+        .and_then(|value| value.get("destructiveHint"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let read_only = annotations
+        .and_then(|value| value.get("readOnlyHint"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let name = tool
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let tokens: Vec<&str> = name
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect();
+    let has = |verbs: &[&str]| {
+        tokens
+            .iter()
+            .any(|token| verbs.iter().any(|verb| token.starts_with(verb)))
+    };
+
+    if destructive || has(DESTRUCTIVE_VERBS) {
+        return McpRisk::R3;
+    }
+    if read_only {
+        return if has(METADATA_VERBS) {
+            McpRisk::R0
+        } else {
+            McpRisk::R1
+        };
+    }
+    if has(WRITE_VERBS) {
+        return McpRisk::R2;
+    }
+    if has(READ_VERBS) {
+        return McpRisk::R1;
+    }
+    McpRisk::R2
+}
+
+fn schema_digest(tool: &Value) -> String {
+    let raw = serde_json::to_string(tool.get("inputSchema").unwrap_or(&Value::Null)).unwrap_or_default();
+    let digest = Sha256::digest(raw.as_bytes());
+    digest.iter().take(8).map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[derive(Clone)]
+struct CachedTool {
+    name: String,
+    risk: McpRisk,
+    digest: String,
+    granted: bool,
+}
+
+/// Injects the local risk grade (and whether a standing grant exists) into the
+/// raw `tools/list` payload consumed by the UI.
+fn enrich_tools(app: &tauri::AppHandle, server_id: &str, value: &mut Value) -> Vec<CachedTool> {
+    let grants = crate::local_store::mcp_grants_for(app, server_id);
+    let Some(tools) = value.get_mut("tools").and_then(Value::as_array_mut) else {
+        return Vec::new();
+    };
+    let mut cached = Vec::new();
+    for tool in tools.iter_mut() {
+        let name = tool
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let risk = classify_tool(tool);
+        let digest = schema_digest(tool);
+        let granted = grants
+            .iter()
+            .any(|grant| grant.tool_name == name && grant.schema_digest == digest);
+        if let Some(object) = tool.as_object_mut() {
+            object.insert("arcadiaRisk".into(), json!(risk.as_str()));
+            object.insert("arcadiaGranted".into(), json!(granted));
+        }
+        cached.push(CachedTool {
+            name,
+            risk,
+            digest,
+            granted,
+        });
+    }
+    cached
 }
 
 // ---------------------------------------------------------------------------
@@ -657,6 +792,7 @@ struct Session {
     fingerprint: String,
     transport: Transport,
     initialized: tokio::sync::Mutex<Option<Value>>,
+    tools: Mutex<Option<Vec<CachedTool>>>,
     runtime: Mutex<RuntimeState>,
 }
 
@@ -679,8 +815,19 @@ impl Session {
             fingerprint,
             transport,
             initialized: tokio::sync::Mutex::new(None),
+            tools: Mutex::new(None),
             runtime: Mutex::new(RuntimeState::default()),
         })
+    }
+
+    fn store_tools(&self, tools: Vec<CachedTool>) {
+        *lock(&self.tools) = Some(tools);
+    }
+
+    fn cached_tool(&self, name: &str) -> Option<CachedTool> {
+        lock(&self.tools)
+            .as_ref()
+            .and_then(|tools| tools.iter().find(|tool| tool.name == name).cloned())
     }
 
     fn is_http(&self) -> bool {
@@ -964,6 +1111,26 @@ impl McpHost {
         }
     }
 
+    async fn tool_meta(
+        &self,
+        app: &tauri::AppHandle,
+        session: &Session,
+        server_id: &str,
+        tool_name: &str,
+    ) -> Result<CachedTool, String> {
+        if let Some(tool) = session.cached_tool(tool_name) {
+            return Ok(tool);
+        }
+        // The workbench normally lists tools first; a direct Agent call may
+        // arrive without a cache, so fetch and grade them once.
+        let mut value = session.call("tools/list", json!({}), None).await?;
+        let cached = enrich_tools(app, server_id, &mut value);
+        session.store_tools(cached);
+        session.cached_tool(tool_name).ok_or_else(|| {
+            format!("MCP tool '{tool_name}' is not exposed by this server")
+        })
+    }
+
     /// Kills every stdio child. Called from the app exit hook so `npx` and
     /// similar wrappers never outlive the browser.
     pub fn shutdown_all(&self) {
@@ -983,9 +1150,19 @@ impl McpHost {
                 .collect()
         };
         for (server_id, session) in sessions {
+            if !self.contains(&server_id) {
+                continue;
+            }
             match session.ping(Duration::from_secs(8)).await {
-                Ok(_) => self.publish(app, &server_id, &session),
+                Ok(_) => {
+                    if self.contains(&server_id) {
+                        self.publish(app, &server_id, &session);
+                    }
+                }
                 Err(error) => {
+                    if !self.contains(&server_id) {
+                        continue;
+                    }
                     self.publish_error(app, &server_id, &error);
                     if !session.is_alive() {
                         self.remove(&server_id);
@@ -993,6 +1170,10 @@ impl McpHost {
                 }
             }
         }
+    }
+
+    fn contains(&self, server_id: &str) -> bool {
+        lock(&self.sessions).contains_key(server_id)
     }
 }
 
@@ -1018,11 +1199,12 @@ fn audit(
     method: &str,
     name: Option<&str>,
     approved: bool,
+    risk: Option<&str>,
     result: &Result<Value, String>,
 ) {
     if let Ok(db) = crate::local_store::connection(app) {
         let _ = db.execute(
-            "INSERT INTO mcp_audit_log(id,server_id,method,target_name,approved,success,error,created_at) VALUES(?,?,?,?,?,?,?,?)",
+            "INSERT INTO mcp_audit_log(id,server_id,method,target_name,approved,success,error,created_at,risk) VALUES(?,?,?,?,?,?,?,?,?)",
             params![
                 uuid::Uuid::new_v4().to_string(),
                 server_id,
@@ -1031,7 +1213,8 @@ fn audit(
                 approved as i64,
                 result.is_ok() as i64,
                 result.as_ref().err(),
-                chrono::Utc::now().to_rfc3339()
+                chrono::Utc::now().to_rfc3339(),
+                risk
             ],
         );
     }
@@ -1047,6 +1230,7 @@ pub struct McpAuditEntry {
     pub approved: bool,
     pub success: bool,
     pub error: Option<String>,
+    pub risk: Option<String>,
     pub created_at: String,
 }
 
@@ -1119,7 +1303,19 @@ pub async fn mcp_discover(app: tauri::AppHandle, server_id: String) -> Result<Va
 pub async fn mcp_list_tools(app: tauri::AppHandle, server_id: String) -> Result<Value, String> {
     let host = app.state::<McpHost>();
     let session = host.ready(&app, &server_id).await?;
-    session.call("tools/list", json!({}), None).await
+    let mut value = session.call("tools/list", json!({}), None).await?;
+    let cached = enrich_tools(&app, &server_id, &mut value);
+    session.store_tools(cached);
+    Ok(value)
+}
+
+#[tauri::command]
+pub fn mcp_revoke_tool_grant(
+    app: tauri::AppHandle,
+    server_id: String,
+    tool_name: String,
+) -> Result<(), String> {
+    crate::local_store::mcp_revoke_grant(&app, &server_id, &tool_name)
 }
 
 #[tauri::command]
@@ -1178,25 +1374,90 @@ pub async fn mcp_call_tool(
     arguments: Value,
     approved: bool,
 ) -> Result<Value, String> {
-    if !approved {
-        let result = Err("MCP tool call requires explicit approval".into());
-        audit(&app, &server_id, "tools/call", Some(&name), false, &result);
-        return result;
-    }
     let host = app.state::<McpHost>();
-    let result = match host.ready(&app, &server_id).await {
-        Ok(session) => {
-            session
-                .call(
-                    "tools/call",
-                    json!({"name": name, "arguments": arguments}),
-                    Some(&name),
-                )
-                .await
+    let session = match host.ready(&app, &server_id).await {
+        Ok(session) => session,
+        Err(error) => {
+            audit(
+                &app,
+                &server_id,
+                "tools/call",
+                Some(&name),
+                false,
+                None,
+                &Err(error.clone()),
+            );
+            return Err(error);
         }
-        Err(error) => Err(error),
     };
-    audit(&app, &server_id, "tools/call", Some(&name), true, &result);
+    let tool = match host
+        .tool_meta(&app, &session, &server_id, &name)
+        .await
+    {
+        Ok(tool) => tool,
+        Err(error) => {
+            audit(
+                &app,
+                &server_id,
+                "tools/call",
+                Some(&name),
+                false,
+                None,
+                &Err(error.clone()),
+            );
+            return Err(error);
+        }
+    };
+    let granted = tool.granted
+        || crate::local_store::mcp_grant_valid(&app, &server_id, &name, &tool.digest);
+    // R0 needs no approval; R3 can never rely on a standing grant.
+    let allowed = tool.risk == McpRisk::R0
+        || approved
+        || (tool.risk != McpRisk::R3 && granted);
+    if !allowed {
+        let error = format!(
+            "MCP tool '{}' requires explicit approval (risk {})",
+            name,
+            tool.risk.as_str()
+        );
+        audit(
+            &app,
+            &server_id,
+            "tools/call",
+            Some(&name),
+            false,
+            Some(tool.risk.as_str()),
+            &Err(error.clone()),
+        );
+        return Err(error);
+    }
+    let result = session
+        .call(
+            "tools/call",
+            json!({"name": name, "arguments": arguments}),
+            Some(&name),
+        )
+        .await;
+    if result.is_ok() && approved && tool.risk == McpRisk::R1 {
+        // First approval for an R1 read is remembered; schema changes
+        // invalidate it because the digest is part of the grant.
+        let _ = crate::local_store::mcp_save_grant(
+            &app,
+            &server_id,
+            &name,
+            tool.risk.as_str(),
+            &tool.digest,
+        );
+    }
+    audit(
+        &app,
+        &server_id,
+        "tools/call",
+        Some(&name),
+        approved || granted || tool.risk == McpRisk::R0,
+        Some(tool.risk.as_str()),
+        &result,
+    );
     result
 }
 
@@ -1245,7 +1506,7 @@ pub fn mcp_list_audit(
     let mut entries = Vec::new();
     if let Some(server_id) = server_id {
         let mut statement = db
-            .prepare("SELECT id,server_id,method,target_name,approved,success,error,created_at FROM mcp_audit_log WHERE server_id=?1 ORDER BY created_at DESC LIMIT ?2")
+            .prepare("SELECT id,server_id,method,target_name,approved,success,error,created_at,risk FROM mcp_audit_log WHERE server_id=?1 ORDER BY created_at DESC LIMIT ?2")
             .map_err(|error| error.to_string())?;
         let rows = statement
             .query_map(params![server_id, limit], row_audit)
@@ -1255,7 +1516,7 @@ pub fn mcp_list_audit(
         }
     } else {
         let mut statement = db
-            .prepare("SELECT id,server_id,method,target_name,approved,success,error,created_at FROM mcp_audit_log ORDER BY created_at DESC LIMIT ?1")
+            .prepare("SELECT id,server_id,method,target_name,approved,success,error,created_at,risk FROM mcp_audit_log ORDER BY created_at DESC LIMIT ?1")
             .map_err(|error| error.to_string())?;
         let rows = statement
             .query_map(params![limit], row_audit)
@@ -1277,6 +1538,7 @@ fn row_audit(row: &rusqlite::Row<'_>) -> rusqlite::Result<McpAuditEntry> {
         success: row.get::<_, i64>(5)? != 0,
         error: row.get(6)?,
         created_at: row.get(7)?,
+        risk: row.get(8)?,
     })
 }
 
@@ -1383,6 +1645,35 @@ mod tests {
         assert_eq!(failed.failure_count, 1);
     }
 
+    #[test]
+    fn classifies_tool_risk_from_name_and_annotations() {
+        assert_eq!(
+            classify_tool(&json!({"name": "delete_repo", "annotations": {"destructiveHint": true}})),
+            McpRisk::R3
+        );
+        assert_eq!(
+            classify_tool(&json!({"name": "list_issues", "annotations": {"readOnlyHint": true}})),
+            McpRisk::R0
+        );
+        assert_eq!(
+            classify_tool(&json!({"name": "search_web", "annotations": {"readOnlyHint": true}})),
+            McpRisk::R1
+        );
+        assert_eq!(classify_tool(&json!({"name": "send_email"})), McpRisk::R2);
+        assert_eq!(classify_tool(&json!({"name": "remove_file"})), McpRisk::R3);
+        // Unknown external tools are conservatively treated as writes.
+        assert_eq!(classify_tool(&json!({"name": "echo"})), McpRisk::R2);
+    }
+
+    #[test]
+    fn schema_digest_tracks_schema_changes() {
+        let first = json!({"inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}}});
+        let second = json!({"inputSchema": {"type": "object", "properties": {"q": {"type": "number"}}}});
+        assert_eq!(schema_digest(&first).len(), 16);
+        assert_eq!(schema_digest(&first), schema_digest(&first));
+        assert_ne!(schema_digest(&first), schema_digest(&second));
+    }
+
     /// Drives the real HTTP transport against a one-request-at-a-time mock so
     /// the initialize handshake, session id propagation and request dispatch
     /// are covered without a network dependency.
@@ -1465,6 +1756,7 @@ mod tests {
             fingerprint: "test".into(),
             transport: Transport::Http(transport),
             initialized: tokio::sync::Mutex::new(None),
+            tools: Mutex::new(None),
             runtime: Mutex::new(RuntimeState::default()),
         };
 

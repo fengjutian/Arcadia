@@ -829,6 +829,18 @@ const MIGRATIONS: &[(i64, &str)] = &[
         );
         CREATE INDEX idx_extra_embeddings_model ON extra_embeddings(model);",
     ),
+    (
+        36,
+        "CREATE TABLE mcp_tool_grants (
+            server_id TEXT NOT NULL,
+            tool_name TEXT NOT NULL,
+            risk TEXT NOT NULL,
+            schema_digest TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(server_id, tool_name)
+        );
+        ALTER TABLE mcp_audit_log ADD COLUMN risk TEXT;",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1689,6 +1701,113 @@ fn mask_secret_map(
         .collect()
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolGrant {
+    pub server_id: String,
+    pub tool_name: String,
+    pub risk: String,
+    pub schema_digest: String,
+    pub created_at: String,
+}
+
+fn grant_is_valid(
+    database: &Connection,
+    server_id: &str,
+    tool_name: &str,
+    schema_digest: &str,
+) -> bool {
+    database
+        .query_row(
+            "SELECT 1 FROM mcp_tool_grants WHERE server_id=?1 AND tool_name=?2 AND schema_digest=?3",
+            params![server_id, tool_name, schema_digest],
+            |_| Ok(()),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .is_some()
+}
+
+pub fn mcp_grant_valid(
+    app: &tauri::AppHandle,
+    server_id: &str,
+    tool_name: &str,
+    schema_digest: &str,
+) -> bool {
+    connection(app)
+        .map(|database| grant_is_valid(&database, server_id, tool_name, schema_digest))
+        .unwrap_or(false)
+}
+
+fn save_tool_grant(
+    database: &Connection,
+    server_id: &str,
+    tool_name: &str,
+    risk: &str,
+    schema_digest: &str,
+) -> Result<(), String> {
+    database
+        .execute(
+            "INSERT INTO mcp_tool_grants(server_id,tool_name,risk,schema_digest,created_at)
+             VALUES(?1,?2,?3,?4,?5)
+             ON CONFLICT(server_id,tool_name) DO UPDATE SET risk=excluded.risk, schema_digest=excluded.schema_digest, created_at=excluded.created_at",
+            params![server_id, tool_name, risk, schema_digest, chrono::Utc::now().to_rfc3339()],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+pub fn mcp_save_grant(
+    app: &tauri::AppHandle,
+    server_id: &str,
+    tool_name: &str,
+    risk: &str,
+    schema_digest: &str,
+) -> Result<(), String> {
+    let database = connection(app)?;
+    save_tool_grant(&database, server_id, tool_name, risk, schema_digest)
+}
+
+pub fn mcp_grants_for(app: &tauri::AppHandle, server_id: &str) -> Vec<McpToolGrant> {
+    let Ok(database) = connection(app) else {
+        return Vec::new();
+    };
+    let Ok(mut statement) = database.prepare(
+        "SELECT server_id,tool_name,risk,schema_digest,created_at FROM mcp_tool_grants WHERE server_id=?1",
+    ) else {
+        return Vec::new();
+    };
+    let rows = statement.query_map(params![server_id], |row| {
+        Ok(McpToolGrant {
+            server_id: row.get(0)?,
+            tool_name: row.get(1)?,
+            risk: row.get(2)?,
+            schema_digest: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    });
+    match rows {
+        Ok(rows) => rows.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+pub fn mcp_revoke_grant(
+    app: &tauri::AppHandle,
+    server_id: &str,
+    tool_name: &str,
+) -> Result<(), String> {
+    let database = connection(app)?;
+    database
+        .execute(
+            "DELETE FROM mcp_tool_grants WHERE server_id=?1 AND tool_name=?2",
+            params![server_id, tool_name],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServer {
@@ -1880,6 +1999,10 @@ pub fn local_delete_mcp_server(app: tauri::AppHandle, id: String) -> Result<bool
         .map_err(|e| e.to_string())?;
     if removed > 0 {
         let _ = keyring_delete(&mcp_secret_account(&id));
+        let _ = database.execute(
+            "DELETE FROM mcp_tool_grants WHERE server_id=?1",
+            params![id],
+        );
     }
     Ok(removed > 0)
 }
@@ -5327,6 +5450,19 @@ mod tests {
         let masked = mask_secret_map(&merged);
         assert_eq!(masked.get("TOKEN").map(String::as_str), Some(MCP_SECRET_MASK));
         assert_eq!(masked.len(), merged.len());
+    }
+
+    #[test]
+    fn mcp_tool_grant_requires_matching_schema_digest() {
+        let mut database = fresh();
+        run_migrations(&mut database).unwrap();
+        save_tool_grant(&database, "s1", "search", "R1", "digest-a").expect("grant");
+        assert!(grant_is_valid(&database, "s1", "search", "digest-a"));
+        assert!(!grant_is_valid(&database, "s1", "search", "digest-b"));
+        assert!(!grant_is_valid(&database, "s2", "search", "digest-a"));
+        save_tool_grant(&database, "s1", "search", "R1", "digest-b").expect("regrant");
+        assert!(grant_is_valid(&database, "s1", "search", "digest-b"));
+        assert!(!grant_is_valid(&database, "s1", "search", "digest-a"));
     }
 
     fn save_mcp_server_for_test(

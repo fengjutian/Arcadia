@@ -17,6 +17,7 @@
 .mcp-capabilities { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(230px, .65fr); gap: 18px; margin-top: 22px; }
 .mcp-tool-card { margin-bottom: 10px; .ui-card__body, .ant-card-body { padding: 14px; } }
 .mcp-tool-card__title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; p { margin: 4px 0 0; color: #78837c; font-size: 13px; line-height: 1.45; } }
+.mcp-tool-card__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 .mcp-placeholder { min-height: 90px; display: grid; place-items: center; padding: 16px; border: 1px dashed var(--accent-border, #dce4de); border-radius: 12px; color: #8b958f; font-size: 13px; }
 .mcp-resource { display: flex; align-items: flex-start; gap: 9px; padding: 11px; border-bottom: 1px solid var(--accent-border, #dce4de); color: var(--accent); span { min-width: 0; display: flex; flex-direction: column; gap: 3px; } small { overflow-wrap: anywhere; color: #78837c; } }
 .mcp-result { margin-top: 20px; pre { max-height: 300px; margin: 0; padding: 14px; overflow: auto; border-radius: 12px; background: #17231c; color: #dce9e0; font: 12px/1.6 ui-monospace, monospace; } }
@@ -35,5 +36,10 @@
 .mcp-audit__entry { padding: 10px 12px; border: 1px solid var(--accent-border, #dce4de); border-radius: 10px; p { margin: 6px 0 0; color: #b4453c; font-size: 12px; overflow-wrap: anywhere; } }
 .mcp-audit__head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; code { color: #4f5d55; font-size: 12px; } }
 .mcp-audit__time { margin-left: auto; color: #8b958f; font-size: 12px; }
+.mcp-approval p { margin: 0 0 10px; line-height: 1.6; }
+.mcp-approval__head { display: flex; align-items: flex-start; gap: 8px; }
+.mcp-approval__head p { flex: 1; }
+.mcp-approval__desc { color: #78837c; font-size: 13px; }
+.mcp-approval__warning { color: #b4453c; font-weight: 600; }
 body[data-theme='dark'] { .mcp-workspace { background: rgba(27, 36, 31, .96); } .mcp-server:hover, .mcp-server.is-selected { background: rgba(255,255,255,.06); } .mcp-result pre, .mcp-json { background: #101713; } .mcp-status { background: #4a5750; &.is-online { background: #4ec27f; } } }
 @media (max-width: 1050px) { .mcp-capabilities { grid-template-columns: 1fr; } }

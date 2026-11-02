@@ -474,6 +474,11 @@ export async function callMcpTool(serverId: string, name: string, args: Record<s
   return invoke('mcp_call_tool', { serverId, name, arguments: args, approved })
 }
 
+export async function revokeMcpToolGrant(serverId: string, toolName: string): Promise<void> {
+  if (!isTauri()) return
+  await invoke('mcp_revoke_tool_grant', { serverId, toolName })
+}
+
 export async function disconnectMcpServer(serverId: string): Promise<void> {
   if (!isTauri()) return
   await invoke('mcp_disconnect', { serverId })
@@ -507,6 +512,7 @@ export interface McpAuditEntry {
   approved: boolean
   success: boolean
   error?: string
+  risk?: string
   createdAt: string
 }
 

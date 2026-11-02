@@ -1565,12 +1565,15 @@ body[data-theme='dark'] {
 }
 
 body[data-theme-kind='image'] {
-  // Scrim strength for image themes. The wallpaper layer sits on top of the
-  // surface colour and is veiled by this translucent scrim: .1 leaves the photo
-  // at 90% strength while still unifying it with the theme's base tone. One
-  // token drives the browser chrome and the new-tab backdrop so the two never
-  // drift apart; raise it (toward 1) to fade the wallpaper out.
+  // Wallpaper strength for image themes. The photo is decoration, not content:
+  // `--app-theme-image-opacity` is the share of the page surface the wallpaper
+  // may claim on the new-tab backdrop (10% = the photo is veiled by the page
+  // colour, leaving it as a faint texture). The browser chrome needs a much
+  // stronger surface: inactive tabs are transparent pills with 12px labels, so
+  // a 90%-visible wallpaper makes every tab title unreadable. Keep the tab
+  // strip close to the chrome colour and let only a hint of the photo through.
   --app-theme-image-opacity: .1;
+  --app-theme-chrome-scrim: .82;
 
   .app-topbar,
   .new-tab {
@@ -1581,8 +1584,8 @@ body[data-theme-kind='image'] {
   .app-topbar {
     background-image:
       linear-gradient(
-        color-mix(in srgb, var(--chrome-bg, #e7ebe7) calc(var(--app-theme-image-opacity) * 100%), transparent),
-        color-mix(in srgb, var(--chrome-bg, #e7ebe7) calc(var(--app-theme-image-opacity) * 100%), transparent)
+        color-mix(in srgb, var(--chrome-bg, #e7ebe7) calc(var(--app-theme-chrome-scrim) * 100%), transparent),
+        color-mix(in srgb, var(--chrome-bg, #e7ebe7) calc(var(--app-theme-chrome-scrim) * 100%), transparent)
       ),
       var(--app-theme-image);
     background-position: center 18%;

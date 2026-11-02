@@ -1329,6 +1329,25 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
             aria-label={t("对话标题")}
           />
         </Modal>
+        <Modal
+          title={t("允许调用 MCP 工具？")}
+          open={mcpApproval !== null}
+          width={560}
+          okText={t("允许本次调用")}
+          cancelText={t("拒绝")}
+          onOk={() => settleMcpApproval(true)}
+          onCancel={() => settleMcpApproval(false)}
+        >
+          {mcpApproval && <div className="mcp-approval">
+            <div className="mcp-approval__head">
+              <p>{t("助手希望在 {value0} 上调用工具 {value1}。",{value0:mcpApproval.serverName,value1:mcpApproval.toolName})}</p>
+              {mcpApproval.risk && <Tag color={mcpApproval.risk === 'R3' ? 'red' : mcpApproval.risk === 'R2' ? 'orange' : mcpApproval.risk === 'R1' ? 'blue' : 'green'}>{mcpApproval.risk}</Tag>}
+            </div>
+            {mcpApproval.risk === 'R3' && <p className="mcp-approval__warning">{t("这是高风险操作，每次调用都需要确认。")}</p>}
+            {mcpApproval.description && <p className="mcp-approval__desc">{mcpApproval.description}</p>}
+            <pre className="mcp-json">{JSON.stringify(mcpApproval.arguments,null,2)}</pre>
+          </div>}
+        </Modal>
         <Drawer
           title={citedDocIds.size > 0 ?t("引用来源（{value0}）",{value0:citedDocIds.size}):t("知识库来源（{value0}）",{value0:documents.length})}
           placement="right"

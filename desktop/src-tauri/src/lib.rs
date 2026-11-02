@@ -2293,6 +2293,7 @@ pub fn run() {
             mcp::mcp_read_resource,
             mcp::mcp_get_prompt,
             mcp::mcp_call_tool,
+            mcp::mcp_revoke_tool_grant,
             mcp::mcp_disconnect,
             mcp::mcp_ping,
             mcp::mcp_server_status,

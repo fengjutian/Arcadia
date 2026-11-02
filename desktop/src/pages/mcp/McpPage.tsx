@@ -32,6 +32,7 @@ import {
   listMcpTools,
   pingMcpServer,
   readMcpResource,
+  revokeMcpToolGrant,
   saveMcpServer,
   type McpAuditEntry,
   type McpServer,
@@ -42,13 +43,33 @@ import { Alert, Button, Card, Drawer, Input, Modal, Popconfirm, Segmented, Spin,
 import { formatStringMap, parseArguments, parseStringMap } from '../../features/mcp/config'
 import { SkillHubPage } from '../skillhub/SkillHubPage'
 
-type McpTool = { name: string; description?: string; inputSchema?: unknown }
+type McpTool = { name: string; description?: string; inputSchema?: unknown; arcadiaRisk?: string; arcadiaGranted?: boolean }
 type McpResource = { uri?: string; name?: string; description?: string }
 type McpPrompt = { name: string; description?: string; arguments?: Array<{ name: string; description?: string; required?: boolean }> }
 
 type Viewer = { title: string; body: string; kind: 'resource' | 'prompt' }
 
 const EMPTY_STATUS: McpServerStatus = { serverId: '', connected: false, failureCount: 0 }
+
+function riskColor(risk?: string): string {
+  switch (risk) {
+    case 'R0': return 'green'
+    case 'R1': return 'blue'
+    case 'R2': return 'orange'
+    case 'R3': return 'red'
+    default: return 'default'
+  }
+}
+
+function riskLabel(risk?: string): string {
+  switch (risk) {
+    case 'R0': return t("R0 · 只读元数据")
+    case 'R1': return t("R1 · 只读数据")
+    case 'R2': return t("R2 · 写入或外发")
+    case 'R3': return t("R3 · 高风险")
+    default: return t("R2 · 写入或外发")
+  }
+}
 
 export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [messageApi, contextHolder] = message.useMessage()
@@ -170,11 +191,29 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
       parsed = JSON.parse(toolArgs[tool.name] || '{}') as Record<string, unknown>
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error()
     } catch { messageApi.error(t("工具参数必须是 JSON 对象"));return}
-    if (!window.confirm(t("允许本次调用工具 {value0}？\n\n{value1}",{value0:tool.name,value1:JSON.stringify(parsed,null,2)})))return
+    const risk = tool.arcadiaRisk ?? 'R2'
+    if (risk !== 'R0' && !tool.arcadiaGranted) {
+      const prompt = risk === 'R3'
+        ? t("高风险操作（R3）：每次调用都需要确认。\n\n允许本次调用工具 {value0}？\n\n{value1}",{value0:tool.name,value1:JSON.stringify(parsed,null,2)})
+        : t("允许本次调用工具 {value0}？\n\n{value1}",{value0:tool.name,value1:JSON.stringify(parsed,null,2)})
+      if (!window.confirm(prompt)) return
+    }
     setBusy(true)
-    try { setResult(await callMcpTool(selected.id, tool.name, parsed, true)) }
+    try {
+      setResult(await callMcpTool(selected.id, tool.name, parsed, true))
+      if (risk === 'R1') setTools(current => current.map(item => item.name === tool.name ? { ...item, arcadiaGranted: true } : item))
+    }
     catch (error) { messageApi.error(t("调用失败：{value0}",{value0:String(error)}))}
     finally { setBusy(false) }
+  }
+
+  async function revokeGrant(tool: McpTool) {
+    if (!selected) return
+    try {
+      await revokeMcpToolGrant(selected.id, tool.name)
+      setTools(current => current.map(item => item.name === tool.name ? { ...item, arcadiaGranted: false } : item))
+      messageApi.success(t("已撤销授权"))
+    } catch (error) { messageApi.error(String(error)) }
   }
 
   async function showResource(resource: McpResource) {
@@ -353,7 +392,12 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
           {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("正在发现服务能力…")}</span></div>:<div className="mcp-capabilities">
             <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("工具")}</span><Tag>{tools.length}</Tag></div>
               {tools.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回工具") : t("连接 Server 后显示工具")}</div>:tools.map(tool=><Card key={tool.name} className="mcp-tool-card">
-                <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("无描述")}</p></div><Button icon={<Play size={14}/>} disabled={busy} onClick={()=>void invoke(tool)}>{t("审核并调用")}</Button></div>
+                <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("无描述")}</p></div><div className="mcp-tool-card__actions">
+                  <Tag color={riskColor(tool.arcadiaRisk)} title={riskLabel(tool.arcadiaRisk)}>{tool.arcadiaRisk ?? 'R2'}</Tag>
+                  {tool.arcadiaGranted && <Tag color="cyan">{t("已记住授权")}</Tag>}
+                  {tool.arcadiaGranted && <Button size="small" onClick={()=>void revokeGrant(tool)}>{t("撤销授权")}</Button>}
+                  <Button icon={<Play size={14}/>} disabled={busy} onClick={()=>void invoke(tool)}>{t("审核并调用")}</Button>
+                </div></div>
                 <Input.TextArea value={toolArgs[tool.name] ?? '{}'} onChange={event => setToolArgs(current => ({...current,[tool.name]:event.target.value}))} autoSize={{minRows:2,maxRows:8}}/>
               </Card>)}
             </section>
@@ -403,6 +447,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
         : <div className="mcp-audit">{auditEntries.map(entry => <div className="mcp-audit__entry" key={entry.id}>
             <div className="mcp-audit__head">
               <Tag color={entry.success ? 'green' : 'red'}>{entry.success ? t("成功") : t("失败")}</Tag>
+              {entry.risk && <Tag color={riskColor(entry.risk)}>{entry.risk}</Tag>}
               <b>{entry.method}</b>
               {entry.targetName && <code>{entry.targetName}</code>}
               <span className="mcp-audit__time">{new Date(entry.createdAt).toLocaleString()}</span>

@@ -74,6 +74,8 @@ export interface McpToolCandidate {
   name: string
   description?: string
   inputSchema?: unknown
+  risk?: string
+  granted?: boolean
 }
 
 export interface McpApprovalRequest {
@@ -81,6 +83,7 @@ export interface McpApprovalRequest {
   serverName: string
   toolName: string
   description?: string
+  risk?: string
   arguments: Record<string, unknown>
 }
 
@@ -168,15 +171,20 @@ export async function runResearchAgent(
       const tool = chooseTool(candidates, question)
       if (tool) {
         const args = buildToolArguments(tool, question)
-        const approved = options.requestApproval
-          ? await options.requestApproval({
-              serverId: tool.serverId,
-              serverName: tool.serverName,
-              toolName: tool.name,
-              description: tool.description,
-              arguments: args,
-            })
-          : options.approveToolCalls === true
+        const risk = tool.risk ?? 'R2'
+        const autoApproved = risk === 'R0' || tool.granted === true
+        const approved = autoApproved
+          ? true
+          : options.requestApproval
+            ? await options.requestApproval({
+                serverId: tool.serverId,
+                serverName: tool.serverName,
+                toolName: tool.name,
+                description: tool.description,
+                risk,
+                arguments: args,
+              })
+            : options.approveToolCalls === true
         if (approved) {
           toolCalls += 1
           try {
@@ -295,6 +303,8 @@ async function collectMcpTools(
           name: tool.name,
           description: typeof tool.description === 'string' ? tool.description : undefined,
           inputSchema: tool.inputSchema,
+          risk: typeof tool.arcadiaRisk === 'string' ? tool.arcadiaRisk : undefined,
+          granted: tool.arcadiaGranted === true,
         })
         if (tools.length >= maxTools) return { tools }
       }
@@ -305,11 +315,13 @@ async function collectMcpTools(
   return { tools, error }
 }
 
-function toolsFromResponse(response: unknown): Array<{ name?: unknown; description?: unknown; inputSchema?: unknown }> {
-  if (Array.isArray(response)) return response as Array<{ name?: unknown; description?: unknown; inputSchema?: unknown }>
+type RawMcpTool = { name?: unknown; description?: unknown; inputSchema?: unknown; arcadiaRisk?: unknown; arcadiaGranted?: unknown }
+
+function toolsFromResponse(response: unknown): RawMcpTool[] {
+  if (Array.isArray(response)) return response as RawMcpTool[]
   if (response && typeof response === 'object') {
     const nested = (response as { tools?: unknown }).tools
-    if (Array.isArray(nested)) return nested as Array<{ name?: unknown; description?: unknown; inputSchema?: unknown }>
+    if (Array.isArray(nested)) return nested as RawMcpTool[]
   }
   return []
 }
