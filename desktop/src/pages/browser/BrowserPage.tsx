@@ -40,7 +40,7 @@ import { useDownloadQueue } from '../../features/downloads/useDownloadQueue'
 import { saveWorkspace, snapshotTabsToPayload, getWorkspace, listWorkspaces, type WorkspaceRecord } from '../../services/workspaces'
 import { restoreTabsFromWorkspace } from '../../features/browser/restoreWorkspace'
 import { WORKSPACE_RESTORE_EVENT } from '../../features/browser/workspaces'
-import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_RESTORE_EVENT, SPACE_SAVE_EVENT, SPACE_SURFACE_EVENT, autoSpaceName, dispatchSpaceRestore, hasAutoSavedSnapshot, readCurrentSpace, rememberAutoSavedSnapshot, tabSnapshotSignature, writeCurrentSpace } from '../../features/browser/spaces'
+import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_RESTORE_EVENT, SPACE_SAVE_EVENT, SPACE_SURFACE_EVENT, autoSpaceName, autoSavedSnapshotId, dispatchSpaceRestore, readCurrentSpace, rememberAutoSavedSnapshot, tabSnapshotSignature, writeCurrentSpace } from '../../features/browser/spaces'
 import { useTabRuntime } from '../../features/browser/useTabRuntime'
 import { buildAddressSuggestions } from '../../features/browser/addressSuggestions'
 import { DownloadSummary } from '../../features/downloads/DownloadCenter'
@@ -1265,6 +1265,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         if (readAdvancedSettings().developerToolsEnabled && hasNativeTab(activeTabIdRef.current)) void openNativeDevtools(activeTabIdRef.current)
         return
       }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'l') {
+        event.preventDefault()
+        const current = tabsRef.current.find(tab => tab.id === activeTabIdRef.current)
+        void openLittleArc(/^https?:/i.test(current?.url ?? '') ? current!.url : '')
+        return
+      }
       const action = interpretShortcut(event, readShortcutOverrides())
       if (!action) return
       event.preventDefault()
@@ -1378,8 +1384,19 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       const payload = snapshotTabsToPayload(current)
       const signature = tabSnapshotSignature(payload)
       // Never store the same tab set twice: this is what filled the Space menu
-      // with rows like "自动保存 11-02 16:16" repeated a dozen times.
-      if (current.length > 0 && !hasAutoSavedSnapshot(signature)) {
+      // with rows like "自动保存 11-02 16:16" repeated a dozen times. The index
+      // is only trusted while the workspace it points at still exists, so
+      // deleting an auto-save in Settings re-arms the safety snapshot.
+      const knownId = autoSavedSnapshotId(signature)
+      let alreadySaved = false
+      if (knownId) {
+        try {
+          alreadySaved = (await listWorkspaces()).some(item => item.id === knownId)
+        } catch {
+          alreadySaved = false
+        }
+      }
+      if (current.length > 0 && !alreadySaved) {
         try {
           const saved = await saveWorkspace({
             name: autoSpaceName(new Date()),

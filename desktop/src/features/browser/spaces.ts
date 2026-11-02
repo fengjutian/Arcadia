@@ -246,6 +246,12 @@ export function hasAutoSavedSnapshot(signature: string): boolean {
   return Boolean(readAutoSaveIndex()[signature])
 }
 
+/** Workspace id that already holds this tab set, if any. */
+export function autoSavedSnapshotId(signature: string): string | null {
+  if (!signature) return null
+  return readAutoSaveIndex()[signature] ?? null
+}
+
 export function rememberAutoSavedSnapshot(signature: string, workspaceId: string): void {
   if (typeof localStorage === 'undefined' || !signature || !workspaceId) return
   try {
