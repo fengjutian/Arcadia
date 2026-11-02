@@ -1,3 +1,5 @@
+import { t } from '../../i18n'
+
 export type TypographyFontId = 'source-han-serif' | 'source-han-sans' | 'lxgw-wenkai' | 'system'
 
 export interface TypographySettings {
@@ -33,30 +35,30 @@ export const DEFAULT_TYPOGRAPHY_SETTINGS: TypographySettings = {
 export const TYPOGRAPHY_FONTS: TypographyFontOption[] = [
   {
     id: 'source-han-serif',
-    label: '思源宋体',
+    label: t('思源宋体'),
     latin: 'Source Han Serif / Noto Serif SC',
     license: 'SIL OFL 1.1',
     stack: "'Source Han Serif SC', 'Source Han Serif CN', 'Noto Serif SC', 'Noto Serif CJK SC', 'Songti SC', STSong, SimSun, serif",
   },
   {
     id: 'source-han-sans',
-    label: '思源黑体',
+    label: t('思源黑体'),
     latin: 'Source Han Sans / Noto Sans SC',
     license: 'SIL OFL 1.1',
     stack: "'Source Han Sans SC', 'Source Han Sans CN', 'Noto Sans SC', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif",
   },
   {
     id: 'lxgw-wenkai',
-    label: '霞鹜文楷',
+    label: t('霞鹜文楷'),
     latin: 'LXGW WenKai',
     license: 'SIL OFL 1.1',
     stack: "'LXGW WenKai', 'LXGW WenKai Screen', 'LXGW WenKai Lite', 'Kaiti SC', KaiTi, STKaiti, serif",
   },
   {
     id: 'system',
-    label: '系统默认',
+    label: t('系统默认'),
     latin: 'System UI',
-    license: '系统字体',
+    license: t('系统字体'),
     stack: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
   },
 ]

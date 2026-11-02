@@ -60,6 +60,8 @@ Arcadia 是一款以浏览器为入口、以本地知识库为核心的桌面阅
 
 桌面端：Tauri 2、Rust、React 19、TypeScript、Vite 6、SCSS。
 
+界面语言：内置简体中文与英文，可在 **设置 → 通用 → 语言** 切换，详见 [国际化方案](docs/internationalization.md)。
+
 UI 组件：`desktop/src/components/ui/` 是自建组件层，对外 API 对齐 Ant Design 的用法，底层由 `@base-ui/react` 提供交互原语，图标统一使用 `lucide-react`。项目**不依赖** `antd` 包。
 
 内容处理：`@mozilla/readability`、Turndown、`react-markdown` + `remark-gfm`。
@@ -285,6 +287,7 @@ npm run test:rust     # 247 个用例，见下方说明
 - [系统架构](docs/architecture.md)
 - [开发路线图](docs/roadmap.md)
 - [开发技术文档](docs/development-guide.md)
+- [国际化方案](docs/internationalization.md)
 - [WebView 原生能力矩阵](docs/browser-native-capability-matrix.md)
 - [主流浏览器借鉴分析](docs/browser-borrowing-analysis.md)
 - [网站封杀名单方案](docs/site-blacklist-plan.md)

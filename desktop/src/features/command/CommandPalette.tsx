@@ -173,7 +173,7 @@ export function CommandPalette({
 
 
 
-           )                                    =>( {id:`document:${hit.id}`,kind:'document'as const,title:hit.title||hit.url,subtitle:hit.url,meta:hit.wordCount>0?t("{value0} 字",{value0:hit.wordCount}):undefined,run:()=>onNavigate(hit.url),})))
+           )                                    =>( {id:`document:${hit.id}`,kind:'document'as const,title:hit.title||hit.url,subtitle:hit.url,meta:hit.wordCount>0?t("{value0} 字",{value0:hit.wordCount,count:hit.wordCount}):undefined,run:()=>onNavigate(hit.url),})))
         })
         .catch(() => { if (!cancelled) setDocuments([]) })
     }, 160)

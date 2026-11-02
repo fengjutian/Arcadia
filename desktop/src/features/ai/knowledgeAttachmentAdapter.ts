@@ -4,6 +4,7 @@ import {
   type CompleteAttachment,
   type PendingAttachment,
 } from '@assistant-ui/react'
+import { t } from '../../i18n'
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024
 const MAX_TEXT_CHARS = 100_000
@@ -56,7 +57,7 @@ export class KnowledgeAttachmentAdapter implements AttachmentAdapter {
   ].join(',')
 
   public async add({ file }: { file: File }): Promise<PendingAttachment> {
-    if (file.size > MAX_FILE_BYTES) throw new Error(`附件不能超过 ${MAX_FILE_BYTES / 1024 / 1024} MB`)
+    if (file.size > MAX_FILE_BYTES) throw new Error(t('附件不能超过 {value0} MB', { value0: MAX_FILE_BYTES / 1024 / 1024 }))
     return {
       id: generateId(),
       type: 'document',
@@ -69,7 +70,7 @@ export class KnowledgeAttachmentAdapter implements AttachmentAdapter {
 
   public async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
     const text = (await extractText(attachment.file)).trim().slice(0, MAX_TEXT_CHARS)
-    if (!text) throw new Error(`无法从 ${attachment.name} 中提取文本`)
+    if (!text) throw new Error(t('无法从 {value0} 中提取文本', { value0: attachment.name }))
     return {
       ...attachment,
       status: { type: 'complete' },

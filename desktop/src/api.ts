@@ -674,6 +674,44 @@ export async function clearArchivedTabs(): Promise<void> {
   if (isTauri()) await invoke('local_clear_archived_tabs')
 }
 
+export type NoteColor = 'yellow' | 'green' | 'blue' | 'pink'
+
+/** A highlight + comment captured from a page, persisted in SQLite. */
+export interface PageNote {
+  id: string
+  url: string
+  title: string
+  quote: string
+  comment: string
+  color: NoteColor
+  prefix?: string | null
+  suffix?: string | null
+  documentId?: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export async function listPageNotes(): Promise<PageNote[]> {
+  return isTauri() ? invoke('local_list_page_notes') : []
+}
+
+export async function savePageNote(note: PageNote): Promise<void> {
+  if (isTauri()) await invoke('local_save_page_note', { note })
+}
+
+export async function deletePageNote(id: string): Promise<void> {
+  if (isTauri()) await invoke('local_delete_page_note', { id })
+}
+
+export async function clearPageNotes(): Promise<void> {
+  if (isTauri()) await invoke('local_clear_page_notes')
+}
+
+/** True inside the Tauri shell; false in the browser-only preview build. */
+export function isDesktopRuntime(): boolean {
+  return isTauri()
+}
+
 export async function listSitePermissions(): Promise<SitePermissionRule[]> {
   if (!isTauri()) return []
   const rows = await invoke<{ origin: string; permissionKind: keyof Omit<SitePermissionRule, 'origin'>; decision: 'allow' | 'deny' | 'ask' }[]>('local_list_site_permissions')

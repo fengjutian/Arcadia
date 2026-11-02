@@ -17,7 +17,8 @@ import { loadBingDailyImage, readBingDailyRefresh, readCachedBingDailyImage, wri
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS, writeSearchEngineConfig } from '../../features/browser/searchEngine'
 import { isSearchTemplateValid } from '../../features/browser/navigation'
 import { HISTORY_CHANGE_EVENT, type HistoryEntry } from '../../features/history/dedupeHistory'
-import { buildVisitStats, buildVisitTrend, filterVisitsByRange, type VisitTimeRange } from '../../features/history/visitStats'
+import { buildVisitStats, buildVisitTrend, CATEGORY_COLORS, CATEGORY_LABELS, filterVisitsByRange, type SiteCategory, type VisitTimeRange } from '../../features/history/visitStats'
+import { LanguageSettingsPanel } from '../../features/settings/LanguageSettingsPanel'
 import { DEFAULT_ADVANCED_SETTINGS, readAdvancedSettings, writeAdvancedSettings, type AdvancedSettings } from '../../features/settings/advanced'
 import { DEFAULT_TYPOGRAPHY_SETTINGS, FONT_SIZE_MAX, FONT_SIZE_MIN, TYPOGRAPHY_FONTS, readTypographySettings, typographyFont, writeTypographySettings, type TypographySettings } from '../../features/settings/typography'
 import { isTrackingCleanerEnabled, setTrackingCleanerEnabled } from '../../features/plugins/trackingCleaner'
@@ -180,7 +181,7 @@ function GeneralSettings() {
   const selectedImageUrl = imageTheme === 'bing' && bingImage ? bingImage.url : selectedImage.url
   const selectedImageLabel = imageTheme === 'bing' ?( bingImage?.title ??t("Bing 每日一图")):selectedImage.label
 
-  return <Card title={t("外观")} className="settings-card theme-settings">
+  return <><Card title={t("外观")} className="settings-card theme-settings">
     <div className="theme-settings__heading">
       <div>
         <Typography.Title level={5}>{t("主题")}</Typography.Title>
@@ -264,6 +265,8 @@ function GeneralSettings() {
       </div>
     </div>
   </Card>
+  <LanguageSettingsPanel/>
+  </>
 }
 
 const SHORTCUTS_EVENT = 'arcadia-shortcuts-change'
@@ -1207,7 +1210,6 @@ function PrivacySettings() {
     </div>}
   </div>
 
-  const categoryColors: Record<string, string> = { '开发技术':'#1677ff', '视频娱乐':'#9254de', '社交社区':'#13a8a8', '搜索工具':'#52c41a', '购物':'#fa8c16', '其他':'#8c8c8c' }
   const maxSiteVisits = Math.max(1, ...visitStats.sites.map(item => item.count))
   const maxTrendVisits = Math.max(1, ...visitTrend.map(item => item.count))
   const statisticsContent = <div className="privacy-section visit-statistics">
@@ -1238,8 +1240,8 @@ function PrivacySettings() {
         <Typography.Title level={5}>{t("网站类型分布")}</Typography.Title>
         <Typography.Paragraph type="secondary">{t("依据域名在本地归类，不会上传浏览记录。")}</Typography.Paragraph>
         <div className="visit-category-chart">{visitStats.categories.map(item => <div className="visit-category" key={item.key}>
-          <span className="visit-category__name"><i style={{background:categoryColors[item.label] ?? '#8c8c8c'}}/>{item.label}</span>
-          <span className="visit-category__track"><i style={{width:`${item.percentage}%`,background:categoryColors[item.label] ?? '#8c8c8c'}}/></span>
+          <span className="visit-category__name"><i style={{background:CATEGORY_COLORS[item.label as SiteCategory] ?? '#8c8c8c'}}/>{CATEGORY_LABELS[item.label as SiteCategory] ?? item.label}</span>
+          <span className="visit-category__track"><i style={{width:`${item.percentage}%`,background:CATEGORY_COLORS[item.label as SiteCategory] ?? '#8c8c8c'}}/></span>
           <b>{item.count} {t("次")}</b><small>{item.percentage.toFixed(1)}%</small>
         </div>)}</div>
       </section>

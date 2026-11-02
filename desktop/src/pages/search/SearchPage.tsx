@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { formatNumber, getLocale, t } from '../../i18n'
 import { AutoComplete, Button, Input, message, Modal, Popconfirm, Select, Spin, Tag, Typography, type InputRef } from '../../components/ui'
 import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, InboxOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -496,7 +496,11 @@ function formatDuration(seconds: number): string {
 }
 
 function formatWordCount(count: number): string {
-  return count >= 10000 ?t("{value0} 万字",{value0:(count/10000).toFixed(1)}):t("{value0} 字",{value0:count.toLocaleString('zh-CN')})
+  if (count >= 10000) {
+    const value = getLocale() === 'en-US' ? count / 1000 : count / 10000
+    return t('{value0} 万字', { value0: formatNumber(value, { maximumFractionDigits: 1 }), count })
+  }
+  return t('{value0} 字', { value0: formatNumber(count), count })
 }
 
 function formatSavedAt(value: string): string {

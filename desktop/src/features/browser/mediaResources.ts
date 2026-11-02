@@ -1,3 +1,5 @@
+import { t } from '../../i18n'
+
 export type MediaResourceKind = 'video' | 'audio' | 'hls' | 'dash' | 'subtitle' | 'document'
 
 export interface RawResourceCandidate {
@@ -63,5 +65,5 @@ export function normalizeMediaResources(raw: RawResourceCandidate[]): MediaResou
 }
 
 export const mediaKindLabel: Record<MediaResourceKind, string> = {
-  video: '视频', audio: '音频', hls: 'HLS', dash: 'DASH', subtitle: '字幕', document: '文档',
+  video: t('视频'), audio: t('音频'), hls: 'HLS', dash: 'DASH', subtitle: t('字幕'), document: t('文档'),
 }

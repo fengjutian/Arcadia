@@ -717,6 +717,49 @@ const MIGRATIONS: &[(i64, &str)] = &[
             INSERT INTO tab_archive_fts(rowid, title, url) VALUES (new.rowid, new.title, new.url);
         END;",
     ),
+    (
+        32,
+        "CREATE TABLE page_notes (
+            id TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            title TEXT NOT NULL,
+            quote TEXT NOT NULL,
+            comment TEXT NOT NULL DEFAULT '',
+            color TEXT NOT NULL DEFAULT 'yellow',
+            prefix TEXT,
+            suffix TEXT,
+            document_id TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_page_notes_url ON page_notes(url);
+        CREATE INDEX idx_page_notes_created_at ON page_notes(created_at DESC);
+        CREATE VIRTUAL TABLE page_notes_fts USING fts5(
+            quote,
+            comment,
+            title,
+            url,
+            content='page_notes',
+            content_rowid='rowid',
+            tokenize='unicode61'
+        );
+        INSERT INTO page_notes_fts(rowid, quote, comment, title, url)
+            SELECT rowid, quote, comment, title, url FROM page_notes;
+        CREATE TRIGGER page_notes_ai AFTER INSERT ON page_notes BEGIN
+            INSERT INTO page_notes_fts(rowid, quote, comment, title, url)
+                VALUES (new.rowid, new.quote, new.comment, new.title, new.url);
+        END;
+        CREATE TRIGGER page_notes_ad AFTER DELETE ON page_notes BEGIN
+            INSERT INTO page_notes_fts(page_notes_fts, rowid, quote, comment, title, url)
+                VALUES('delete', old.rowid, old.quote, old.comment, old.title, old.url);
+        END;
+        CREATE TRIGGER page_notes_au AFTER UPDATE ON page_notes BEGIN
+            INSERT INTO page_notes_fts(page_notes_fts, rowid, quote, comment, title, url)
+                VALUES('delete', old.rowid, old.quote, old.comment, old.title, old.url);
+            INSERT INTO page_notes_fts(rowid, quote, comment, title, url)
+                VALUES (new.rowid, new.quote, new.comment, new.title, new.url);
+        END;",
+    ),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3742,6 +3785,143 @@ pub fn local_clear_archived_tabs(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// A text highlight plus optional comment captured from a page. Notes are first
+/// class now: they live in SQLite (not localStorage), are mirrored into FTS5 so
+/// they can be searched, and survive backup/restore.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalPageNote {
+    id: String,
+    url: String,
+    title: String,
+    quote: String,
+    comment: String,
+    /// `yellow` | `green` | `blue` | `pink`.
+    color: String,
+    /// Text immediately before/after the quote, used to re-anchor highlights
+    /// after a page is edited (TextQuoteSelector).
+    prefix: Option<String>,
+    suffix: Option<String>,
+    document_id: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+fn validate_page_note(note: &LocalPageNote) -> Result<(), String> {
+    if note.id.trim().is_empty() || note.id.len() > 128 {
+        return Err("invalid note id".into());
+    }
+    if note.url.trim().is_empty() || note.url.len() > 8192 {
+        return Err("invalid note url".into());
+    }
+    if note.title.len() > 2048 {
+        return Err("note title is too long".into());
+    }
+    if note.quote.trim().is_empty() || note.quote.len() > 20_000 {
+        return Err("note quote must be between 1 and 20000 bytes".into());
+    }
+    if note.comment.len() > 20_000 {
+        return Err("note comment is too long".into());
+    }
+    if !matches!(note.color.as_str(), "yellow" | "green" | "blue" | "pink") {
+        return Err("note color must be yellow, green, blue or pink".into());
+    }
+    if note.created_at <= 0 || note.updated_at <= 0 {
+        return Err("invalid note timestamps".into());
+    }
+    Ok(())
+}
+
+const PAGE_NOTE_COLUMNS: &str = "id,url,title,quote,comment,color,prefix,suffix,document_id,created_at,updated_at";
+
+fn page_note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalPageNote> {
+    Ok(LocalPageNote {
+        id: row.get(0)?,
+        url: row.get(1)?,
+        title: row.get(2)?,
+        quote: row.get(3)?,
+        comment: row.get(4)?,
+        color: row.get(5)?,
+        prefix: row.get(6)?,
+        suffix: row.get(7)?,
+        document_id: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+    })
+}
+
+fn insert_page_note(database: &Connection, note: &LocalPageNote) -> Result<(), String> {
+    // Same FTS-sync reasoning as the archive: delete + insert inside one
+    // transaction, never REPLACE / ON CONFLICT.
+    let transaction = database
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute("DELETE FROM page_notes WHERE id=?1", params![note.id])
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute(
+            "INSERT INTO page_notes(id,url,title,quote,comment,color,prefix,suffix,document_id,created_at,updated_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                note.id,
+                note.url,
+                note.title,
+                note.quote,
+                note.comment,
+                note.color,
+                note.prefix,
+                note.suffix,
+                note.document_id,
+                note.created_at,
+                note.updated_at
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn query_page_notes(database: &Connection, limit: i64) -> Result<Vec<LocalPageNote>, String> {
+    let mut statement = database
+        .prepare(&format!(
+            "SELECT {PAGE_NOTE_COLUMNS} FROM page_notes ORDER BY created_at DESC LIMIT ?1"
+        ))
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![limit.clamp(1, 5000)], page_note_from_row)
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_list_page_notes(app: tauri::AppHandle) -> Result<Vec<LocalPageNote>, String> {
+    query_page_notes(&connection(&app)?, 1000)
+}
+
+#[tauri::command]
+pub fn local_save_page_note(app: tauri::AppHandle, note: LocalPageNote) -> Result<(), String> {
+    validate_page_note(&note)?;
+    insert_page_note(&connection(&app)?, &note)
+}
+
+#[tauri::command]
+pub fn local_delete_page_note(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    connection(&app)?
+        .execute("DELETE FROM page_notes WHERE id=?", params![id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn local_clear_page_notes(app: tauri::AppHandle) -> Result<(), String> {
+    connection(&app)?
+        .execute("DELETE FROM page_notes", [])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn local_list_site_permissions(
     app: tauri::AppHandle,
@@ -5631,5 +5811,65 @@ mod tests {
             .unwrap();
         assert!(query_archived_tabs(&database, "borrowing", 10).unwrap().is_empty());
         assert!(query_archived_tabs(&database, "", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn page_notes_roundtrip_through_fts() {
+        let mut database = fresh();
+        run_migrations(&mut database).unwrap();
+        let note = LocalPageNote {
+            id: "note-1".into(),
+            url: "https://example.com/guide".into(),
+            title: "Embedding guide".into(),
+            quote: "cosine similarity".into(),
+            comment: "核心指标".into(),
+            color: "yellow".into(),
+            prefix: Some("uses ".into()),
+            suffix: Some(" to rank".into()),
+            document_id: None,
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_000_000_000,
+        };
+        insert_page_note(&database, &note).unwrap();
+
+        let listed = query_page_notes(&database, 10).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, "note-1");
+
+        let matched: i64 = database
+            .query_row(
+                "SELECT COUNT(*) FROM page_notes_fts WHERE page_notes_fts MATCH ?1",
+                params![build_fts5_query("cosine")],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(matched, 1, "quotes must be searchable");
+
+        let mut edited = note.clone();
+        edited.quote = "dot product".into();
+        edited.comment = "换一个说法".into();
+        edited.updated_at = 1_700_000_100_000;
+        insert_page_note(&database, &edited).unwrap();
+        let stale: i64 = database
+            .query_row(
+                "SELECT COUNT(*) FROM page_notes_fts WHERE page_notes_fts MATCH ?1",
+                params![build_fts5_query("cosine")],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stale, 0, "editing a note must retire the old FTS row");
+        assert_eq!(query_page_notes(&database, 10).unwrap().len(), 1, "editing must not duplicate");
+
+        database
+            .execute("DELETE FROM page_notes WHERE id=?1", params!["note-1"])
+            .unwrap();
+        let remaining: i64 = database
+            .query_row(
+                "SELECT COUNT(*) FROM page_notes_fts",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0, "deleting a note must clear its FTS row");
     }
 }

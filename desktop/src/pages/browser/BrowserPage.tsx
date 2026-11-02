@@ -56,7 +56,8 @@ import { useBookmarks } from '../../features/bookmarks/useBookmarks'
 import { BulkSummaryPalette } from '../../features/ai/BulkSummaryPalette'
 import type { BulkProgressEntry } from '../../features/ai/bulkSummary'
 import { NotesPanel } from '../../features/notes/NotesPanel'
-import { addNote as appendNoteEntry, readNotes as loadStoredNotes, removeNote as dropNoteEntry, updateNote as patchNoteEntry, writeNotes as persistNotes, type NoteEntry } from '../../features/notes/notes'
+import type { NoteEntry } from '../../features/notes/notes'
+import { loadPageNotes, persistPageNote, removePageNote } from '../../features/notes/noteStore'
 import { isPrivateTab, makePrivateTab, stripPrivateTabs } from '../../features/browser/privateTabs'
 import { readSitePermissions, writeSitePermissions } from '../../features/browser/sitePermissions'
 import { shouldRecordHistory } from '../../features/history/historyRecording'
@@ -141,7 +142,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [bulkSummaryOpen, setBulkSummaryOpen] = useState(false)
   const [bulkSummaryBusy, setBulkSummaryBusy] = useState(false)
   const [bulkSummaryProgress, setBulkSummaryProgress] = useState<BulkProgressEntry[]>([])
-  const [notes, setNotes] = useState<NoteEntry[]>(() => loadStoredNotes())
+  const [notes, setNotes] = useState<NoteEntry[]>([])
   const [notesOpen, setNotesOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
   const [findStatus, setFindStatus] = useState<'idle' | 'found' | 'missing'>('idle')
@@ -672,7 +673,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     return () => { disposed = true }
   }, [active.url])
   useEffect(() => { tabsRef.current = tabs }, [tabs])
-  useEffect(() => { persistNotes(notes) }, [notes])
+  useEffect(() => {
+    let disposed = false
+    void loadPageNotes()
+      .then(items => { if (!disposed) setNotes(items) })
+      .catch(() => { /* notes stay usable in memory if the store is unavailable */ })
+    return () => { disposed = true }
+  }, [])
   useEffect(() => { closedTabsRef.current = closedTabs }, [closedTabs])
   useEffect(() => { downloadsRef.current = downloads }, [downloads])
   useEffect(() => { historyRef.current = history }, [history])
@@ -1735,13 +1742,17 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   if (action === 'add-to-notes') {
     const text = request.selectionText?.trim()
     if (!text) { messageApi.info(translate("请先选中文本"));return}
-    const entry: Omit<NoteEntry, 'id' | 'createdAt'> = {
+    const entry: NoteEntry = {
+      id: crypto.randomUUID(),
       url: active.url ?? '',
       title: active.title ?? active.url ??translate("未命名页面"),
       text,
       comment: '',
+      createdAt: Date.now(),
+      color: 'yellow',
     }
-    setNotes(current => appendNoteEntry(current, entry))
+    setNotes(current => [entry, ...current])
+    void persistPageNote(entry).catch(error => messageApi.error(`笔记保存失败：${String(error)}`))
     setNotesOpen(true)
     messageApi.success(translate("已加入笔记"),2)
     return
@@ -2301,8 +2312,17 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       open={notesOpen}
       notes={notes}
       onToggle={() => setNotesOpen(value => !value)}
-      onRemove={id => setNotes(current => dropNoteEntry(current, id))}
-      onUpdate={(id, patch) => setNotes(current => patchNoteEntry(current, id, patch))}
+      onRemove={id => {
+        setNotes(current => current.filter(note => note.id !== id))
+        void removePageNote(id).catch(() => { /* already gone from the UI */ })
+      }}
+      onUpdate={(id, patch) => {
+        const target = notes.find(note => note.id === id)
+        if (!target) return
+        const next = { ...target, ...patch }
+        setNotes(current => current.map(note => note.id === id ? next : note))
+        void persistPageNote(next).catch(error => messageApi.error(`笔记保存失败：${String(error)}`))
+      }}
     />
     <Modal
       title={translate("保存工作区")}

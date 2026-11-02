@@ -1,4 +1,5 @@
 import type { ChatRequest } from '../../types'
+import { t } from '../../i18n'
 
 const SYSTEM_PROMPT = [
   'You are a precise translator.',
@@ -82,6 +83,6 @@ function simpleHash(input: string): string {
 }
 
 export const TRANSLATION_VIEW_LABEL: Record<TranslationView, string> = {
-  'translation-only': '仅译文',
-  bilingual: '中英对照',
+  'translation-only': t('仅译文'),
+  bilingual: t('中英对照'),
 }

@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatRequest } from '../../types'
+import { t } from '../../i18n'
 
 export type SummaryKind = 'one-sentence' | 'short' | 'detailed' | 'key-points'
 
@@ -74,9 +75,9 @@ function splitMarkdown(markdown: string, maxChars: number): string[] {
 
 export function summaryKindLabel(kind: SummaryKind): string {
   switch (kind) {
-    case 'one-sentence': return '一句话摘要'
-    case 'short': return '简短摘要'
-    case 'detailed': return '详细摘要'
-    case 'key-points': return '核心观点'
+    case 'one-sentence': return t('一句话摘要')
+    case 'short': return t('简短摘要')
+    case 'detailed': return t('详细摘要')
+    case 'key-points': return t('核心观点')
   }
 }

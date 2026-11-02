@@ -93,7 +93,11 @@ function readExisting(name) {
   if (!fs.existsSync(file)) return new Map()
   const source = fs.readFileSync(file, 'utf8')
   const values = new Map()
-  const objectLiteral = source.slice(source.indexOf('{'), source.lastIndexOf('}') + 1)
+  // Start at the object literal, not the first brace in the file (the
+  // `import type { Messages }` line also contains one).
+  const literalStart = source.indexOf('= {')
+  if (literalStart < 0) return values
+  const objectLiteral = source.slice(literalStart + 2, source.lastIndexOf('}') + 1)
   let ast
   try {
     ast = parser.parse(`const catalog = ${objectLiteral}`, { sourceType: 'module', plugins: ['typescript'] })

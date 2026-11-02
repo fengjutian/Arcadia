@@ -1,5 +1,6 @@
 import { aiChat, callMcpTool, discoverMcpServer, listMcpServers, listMcpTools, recordAgentRun, searchDocuments, updateAgentRunStatus, type AgentRun } from '../../api'
 import type { ChatRequest } from '../../types'
+import { t } from '../../i18n'
 
 /**
  * Controlled research agent.
@@ -131,7 +132,7 @@ export async function runResearchAgent(
     steps.push({
       index: steps.length + 1,
       kind: 'search',
-      summary: `检索到 ${sources.length} 条来源`,
+      summary: t('检索到 {value0} 条来源', { value0: sources.length }),
       detail: sources.slice(0, 5).map(item => item.title).join(' / '),
       at: now(),
     })
@@ -155,7 +156,7 @@ export async function runResearchAgent(
           steps.push({
             index: steps.length + 1,
             kind: 'mcp_tool',
-            summary: `调用 MCP 工具 ${toolName}`,
+            summary: t('调用 MCP 工具 {value0}', { value0: toolName }),
             detail: excerpt(JSON.stringify(result) ?? ''),
             at: now(),
           })
@@ -163,7 +164,7 @@ export async function runResearchAgent(
           steps.push({
             index: steps.length + 1,
             kind: 'mcp_tool',
-            summary: `发现 MCP 工具 ${toolName}，未获授权故跳过`,
+            summary: t('发现 MCP 工具 {value0}，未获授权故跳过', { value0: toolName }),
             at: now(),
           })
         }
@@ -172,7 +173,7 @@ export async function runResearchAgent(
         steps.push({
           index: steps.length + 1,
           kind: 'mcp_tool',
-          summary: 'MCP 不可用，已跳过',
+          summary: t('MCP 不可用，已跳过'),
           detail: error instanceof Error ? error.message : String(error),
           at: now(),
         })
@@ -181,7 +182,7 @@ export async function runResearchAgent(
     }
 
     if (steps.length >= maxSteps) {
-      stopped = { reason: 'max_steps', message: `已达到最大步骤数 ${maxSteps}` }
+      stopped = { reason: 'max_steps', message: t('已达到最大步骤数 {value0}', { value0: maxSteps }) }
     }
 
     const request: ChatRequest = {
@@ -202,13 +203,13 @@ export async function runResearchAgent(
     const response = await deps.aiChat(options.providerId, request)
     promptTokens += response.promptTokens ?? 0
     if (promptTokens > maxPromptTokens) {
-      stopped = { reason: 'token_budget', message: `超出 token 预算 ${maxPromptTokens}` }
+      stopped = { reason: 'token_budget', message: t('超出 token 预算 {value0}', { value0: maxPromptTokens }) }
     }
     if (toolCalls > maxToolCalls) {
-      stopped = { reason: 'max_tool_calls', message: `超出 MCP 工具调用上限 ${maxToolCalls}` }
+      stopped = { reason: 'max_tool_calls', message: t('超出 MCP 工具调用上限 {value0}', { value0: maxToolCalls }) }
     }
 
-    steps.push({ index: steps.length + 1, kind: 'answer', summary: '生成回答', at: now() })
+    steps.push({ index: steps.length + 1, kind: 'answer', summary: t('生成回答'), at: now() })
     const answer = response.content
     await deps.updateAgentRunStatus({
       id: run.id,

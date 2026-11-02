@@ -1,9 +1,29 @@
+import { t } from '../../i18n'
 import type { HistoryEntry } from './dedupeHistory'
 
 export type SiteCategory = '开发技术' | '视频娱乐' | '社交社区' | '搜索工具' | '购物' | '其他'
 export interface VisitStat { key: string; label: string; count: number; percentage: number }
 export type VisitTimeRange = 'today' | '7d' | '30d' | 'all'
 export interface VisitTrendPoint { key: string; label: string; count: number }
+
+/** Local category keys stay Chinese (they are persisted aggregate keys); only display labels are translated. */
+export const CATEGORY_LABELS: Record<SiteCategory, string> = {
+  '开发技术': t('开发技术'),
+  '视频娱乐': t('视频娱乐'),
+  '社交社区': t('社交社区'),
+  '搜索工具': t('搜索工具'),
+  '购物': t('购物'),
+  '其他': t('其他'),
+}
+
+export const CATEGORY_COLORS: Record<SiteCategory, string> = {
+  '开发技术': '#1677ff',
+  '视频娱乐': '#9254de',
+  '社交社区': '#13a8a8',
+  '搜索工具': '#52c41a',
+  '购物': '#fa8c16',
+  '其他': '#8c8c8c',
+}
 
 const CATEGORY_RULES: Array<[SiteCategory, RegExp]> = [
   ['开发技术', /(^|\.)(github|gitlab|juejin|csdn|stackoverflow|stackexchange|npmjs|mdn|developer\.mozilla)\./i],

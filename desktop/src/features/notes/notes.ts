@@ -12,6 +12,11 @@ export interface NoteEntry {
   text: string
   comment: string
   createdAt: number
+  /** Highlight colour; older localStorage entries have none and default to yellow. */
+  color?: 'yellow' | 'green' | 'blue' | 'pink'
+  /** Text surrounding the quote, kept so the highlight can be re-anchored. */
+  prefix?: string
+  suffix?: string
 }
 
 const STORAGE_KEY = 'arcadia.notes.v1'
