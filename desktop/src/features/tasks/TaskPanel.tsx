@@ -13,15 +13,15 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  PENDING:t("\u7B49\u5F85\u4E2D"),
-  PROCESSING:t("\u5904\u7406\u4E2D"),
-  COMPLETED:t("\u5DF2\u5B8C\u6210"),
-  FAILED:t("\u5931\u8D25"),
+  PENDING:t("等待中"),
+  PROCESSING:t("处理中"),
+  COMPLETED:t("已完成"),
+  FAILED:t("失败"),
 }
 
 const KIND_LABEL: Record<string, string> = {
-  'autotag.generate':t("\u81EA\u52A8\u6807\u7B7E"),
-  'embedding.index':t("\u5411\u91CF\u7D22\u5F15"),
+  'autotag.generate':t("自动标签"),
+  'embedding.index':t("向量索引"),
 }
 
 export function TaskPanel() {
@@ -33,10 +33,10 @@ export function TaskPanel() {
     setLoading(true)
     try {
       const recovered = await recoverStaleTasks(120)
-      if (recovered > 0) messageApi.info(t("\u56DE\u6536\u4E86 {value0} \u4E2A\u957F\u65F6\u95F4\u65E0\u54CD\u5E94\u7684\u4EFB\u52A1",{value0:recovered}))
+      if (recovered > 0) messageApi.info(t("回收了 {value0} 个长时间无响应的任务",{value0:recovered}))
       setTasks(await listRecentTasks(50))
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message :t("\u4EFB\u52A1\u961F\u5217\u52A0\u8F7D\u5931\u8D25"))
+      messageApi.error(error instanceof Error ? error.message :t("任务队列加载失败"))
     } finally {
       setLoading(false)
     }
@@ -47,10 +47,10 @@ export function TaskPanel() {
   async function retry(task: Task) {
     try {
       await retryTask(task.id)
-      messageApi.success(t("\u5DF2\u91CD\u65B0\u5165\u961F"))
+      messageApi.success(t("已重新入队"))
       await refresh()
     } catch {
-      messageApi.error(t("\u91CD\u8BD5\u5931\u8D25"))
+      messageApi.error(t("重试失败"))
     }
   }
 
@@ -58,7 +58,7 @@ export function TaskPanel() {
 
   const active = tasks.filter(task => task.status === 'PENDING' || task.status === 'PROCESSING').length
   const failed = tasks.filter(task => task.status === 'FAILED').length
-  const badge = active > 0 ?t("{value0} \u4E2A\u8FDB\u884C\u4E2D",{value0:active}):failed>0?t("{value0} \u4E2A\u5931\u8D25",{value0:failed}):t("\u5DF2\u5168\u90E8\u5B8C\u6210")
+  const badge = active > 0 ?t("{value0} 个进行中",{value0:active}):failed>0?t("{value0} 个失败",{value0:failed}):t("已全部完成")
   const badgeClass = active > 0 ? ' is-active' : failed > 0 ? ' is-error' : ''
 
   return <div className="task-panel">
@@ -67,12 +67,12 @@ export function TaskPanel() {
       <div className="task-panel__title">
         <span className={`task-panel__icon${loading ? ' is-spinning' : ''}`}><SyncOutlined/></span>
         <span>
-          <Typography.Title level={3}>{t("\u4EFB\u52A1\u961F\u5217")}</Typography.Title>
-          <Typography.Text type="secondary">{t("\u4FDD\u5B58\u540E\u7684\u89E3\u6790\u3001\u6807\u7B7E\u4E0E\u7D22\u5F15\u4EFB\u52A1")}</Typography.Text>
+          <Typography.Title level={3}>{t("任务队列")}</Typography.Title>
+          <Typography.Text type="secondary">{t("保存后的解析、标签与索引任务")}</Typography.Text>
         </span>
         <span className={`task-panel__badge${badgeClass}`}>{badge}</span>
       </div>
-      <Button type="text" size="small" icon={<ReloadOutlined/>} loading={loading} onClick={() => void refresh()}>{t("\u5237\u65B0")}</Button>
+      <Button type="text" size="small" icon={<ReloadOutlined/>} loading={loading} onClick={() => void refresh()}>{t("刷新")}</Button>
     </div>
     <Table<Task>
       size="small"
@@ -81,11 +81,11 @@ export function TaskPanel() {
       loading={loading}
       pagination={{ pageSize: 10, showSizeChanger: false }}
       columns={[
-        { title:t("\u7C7B\u578B"),dataIndex:'kind',width:150,render:(kind:string)=>KIND_LABEL[kind]??kind},
-        { title:t("\u72B6\u6001"),dataIndex:'status',width:104,render:(status:string)=><Tag color={STATUS_COLOR[status]??'default'}>{STATUS_LABEL[status]?? status}</Tag> },
-        { title:t("\u8FDB\u5EA6"),width:100,render:(_,task)=>`${task.attempts}/${task.maxAttempts}`},
-        { title:t("\u6700\u8FD1\u9519\u8BEF"),dataIndex:'lastError',ellipsis:true,render:(value?:string)=>value?<Tooltip title={value}><Typography.Text type="danger">{value}</Typography.Text></Tooltip>:<Typography.Text type="secondary">—</Typography.Text>},
-        { title:t("\u64CD\u4F5C"),width:90,render:(_,task)=>task.status==='FAILED'?<Button size="small"icon={<ReloadOutlined/>} onClick={() => void retry(task)}>{t("\u91CD\u8BD5")}</Button>:null},
+        { title:t("类型"),dataIndex:'kind',width:150,render:(kind:string)=>KIND_LABEL[kind]??kind},
+        { title:t("状态"),dataIndex:'status',width:104,render:(status:string)=><Tag color={STATUS_COLOR[status]??'default'}>{STATUS_LABEL[status]?? status}</Tag> },
+        { title:t("进度"),width:100,render:(_,task)=>`${task.attempts}/${task.maxAttempts}`},
+        { title:t("最近错误"),dataIndex:'lastError',ellipsis:true,render:(value?:string)=>value?<Tooltip title={value}><Typography.Text type="danger">{value}</Typography.Text></Tooltip>:<Typography.Text type="secondary">—</Typography.Text>},
+        { title:t("操作"),width:90,render:(_,task)=>task.status==='FAILED'?<Button size="small" icon={<ReloadOutlined/>} onClick={() => void retry(task)}>{t("重试")}</Button>:null},
       ]}
     />
   </div>

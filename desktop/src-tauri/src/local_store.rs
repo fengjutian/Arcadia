@@ -3624,20 +3624,19 @@ const ARCHIVED_TAB_COLUMNS: &str =
     "id,url,title,favicon,archived_at,visited_at,source,workspace_id";
 
 fn insert_archived_tab(database: &Connection, tab: &LocalArchivedTab) -> Result<(), String> {
-    // Upsert rather than INSERT OR REPLACE: REPLACE skips DELETE triggers, which
-    // would desynchronise the external-content FTS table.
-    database
+    // Delete + insert instead of upsert/REPLACE: REPLACE skips DELETE triggers and
+    // an ON CONFLICT update does not reliably rewrite the external-content FTS
+    // row, so an archived title could keep matching its old keywords.
+    let transaction = database
+        .unchecked_transaction()
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute("DELETE FROM tab_archive WHERE id=?1", params![tab.id])
+        .map_err(|error| error.to_string())?;
+    transaction
         .execute(
             "INSERT INTO tab_archive(id,url,title,favicon,archived_at,visited_at,source,workspace_id)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
-             ON CONFLICT(id) DO UPDATE SET
-                url=excluded.url,
-                title=excluded.title,
-                favicon=excluded.favicon,
-                archived_at=excluded.archived_at,
-                visited_at=excluded.visited_at,
-                source=excluded.source,
-                workspace_id=excluded.workspace_id",
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
             params![
                 tab.id,
                 tab.url,
@@ -3650,13 +3649,14 @@ fn insert_archived_tab(database: &Connection, tab: &LocalArchivedTab) -> Result<
             ],
         )
         .map_err(|error| error.to_string())?;
-    database
+    transaction
         .execute(
             "DELETE FROM tab_archive WHERE id NOT IN
              (SELECT id FROM tab_archive ORDER BY archived_at DESC LIMIT 2000)",
             [],
         )
         .map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())?;
     Ok(())
 }
 

@@ -2,10 +2,10 @@ import { t } from '../../i18n'
 import type { SuggestionItem } from './suggestionProvider'
 
 const SOURCE_LABELS: Record<SuggestionItem['source'], string> = {
-  'open-tab':t("\u5DF2\u6253\u5F00"),
-  history:t("\u5386\u53F2"),
-  bookmark:t("\u4E66\u7B7E"),
-  search:t("\u641C\u7D22"),
+  'open-tab':t("已打开"),
+  history:t("历史"),
+  bookmark:t("书签"),
+  search:t("搜索"),
 }
 
 export function renderSuggestion(item: SuggestionItem) {

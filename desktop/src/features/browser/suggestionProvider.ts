@@ -109,7 +109,7 @@ export function buildSuggestions(input: SuggestionInputs): SuggestionItem[] {
   if (q) {
     items.set(`__search__:${q}`, {
       url: asText(searchTemplate).replace('{query}', encodeURIComponent(q)),
-      title:translate("\u641C\u7D22 \"{value0}\"",{value0:q}),
+      title:translate("搜索 \"{value0}\"",{value0:q}),
       source: 'search',
       score: 10,
       searchTemplate: searchTemplate,

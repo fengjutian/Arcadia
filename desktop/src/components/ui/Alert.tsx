@@ -33,6 +33,6 @@ export function Alert({ type = 'info', message, description, showIcon, icon, act
       {description != null && <div className="ui-alert__description">{description}</div>}
     </div>
     {action != null && <div className="ui-alert__action">{action}</div>}
-    {closable && <button type="button" className="ui-alert__close" aria-label={t("\u5173\u95ED")}onClick={()=>{setVisible(false);onClose?.()}}><X size={15}/></button>}
+    {closable && <button type="button" className="ui-alert__close" aria-label={t("关闭")} onClick={()=>{setVisible(false);onClose?.()}}><X size={15}/></button>}
   </div>
 }

@@ -93,9 +93,9 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         listArchivedTabs().then(setArchived),
         downloadCenter.refresh(),
       ])
-      messageApi.success(t("\u77E5\u8BC6\u5E93\u5DF2\u5237\u65B0"))
+      messageApi.success(t("知识库已刷新"))
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message :t("\u5237\u65B0\u5931\u8D25"))
+      messageApi.error(error instanceof Error ? error.message :t("刷新失败"))
     } finally {
       setRefreshing(false)
     }
@@ -118,10 +118,10 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     setDocuments(items => items.map(item => item.id === document.id ? { ...item, starred: next } : item))
     try {
       await toggleStarred(document.id, next)
-      messageApi.success(next ?t("\u5DF2\u6536\u85CF"):t("\u5DF2\u53D6\u6D88\u6536\u85CF"))
+      messageApi.success(next ?t("已收藏"):t("已取消收藏"))
     } catch (error) {
       setDocuments(previous)
-      messageApi.error(error instanceof Error ? error.message :t("\u6536\u85CF\u72B6\u6001\u66F4\u65B0\u5931\u8D25"))
+      messageApi.error(error instanceof Error ? error.message :t("收藏状态更新失败"))
     }
   }
 
@@ -147,9 +147,9 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
       setNewName('')
       setCreating(false)
       await refreshCollections()
-      messageApi.success(t("\u96C6\u5408\u5DF2\u521B\u5EFA"))
+      messageApi.success(t("集合已创建"))
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message :t("\u521B\u5EFA\u96C6\u5408\u5931\u8D25"))
+      messageApi.error(error instanceof Error ? error.message :t("创建集合失败"))
     }
   }
 
@@ -157,38 +157,38 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     try {
       await deleteCollection(collection.id)
       await refreshCollections()
-      messageApi.success(t("\u96C6\u5408\u5DF2\u5220\u9664"))
+      messageApi.success(t("集合已删除"))
     } catch {
-      messageApi.error(t("\u5220\u9664\u96C6\u5408\u5931\u8D25"))
+      messageApi.error(t("删除集合失败"))
     }
   }
 
   async function importMarkdown(file: File) {
     if (!/\.(md|markdown|txt)$/i.test(file.name)) {
-      messageApi.error(t("\u8BF7\u9009\u62E9 .md\u3001.markdown \u6216 .txt \u6587\u4EF6"))
+      messageApi.error(t("请选择 .md、.markdown 或 .txt 文件"))
       return false
     }
     const markdown = await file.text()
     if (!markdown.trim()) {
-      messageApi.error(t("\u6587\u4EF6\u5185\u5BB9\u4E3A\u7A7A"))
+      messageApi.error(t("文件内容为空"))
       return false
     }
     setImporting(true)
     try {
-      const title = file.name.replace(/\.[^.]+$/, '') ||t("\u672A\u547D\u540D\u6587\u6863")
+      const title = file.name.replace(/\.[^.]+$/, '') ||t("未命名文档")
       const saved = await saveDocument({
         title,
         url: `file:///${encodeURIComponent(file.name)}`,
         markdown,
-        tags: [t("\u5BFC\u5165")],
+        tags: [t("导入")],
       })
-      if (!saved) throw new Error(t("\u672C\u5730\u6570\u636E\u670D\u52A1\u672A\u8FD4\u56DE\u6587\u6863"))
+      if (!saved) throw new Error(t("本地数据服务未返回文档"))
       setDocuments(items => [saved, ...items])
       setTab('documents')
       setAddOpen(false)
-      messageApi.success(t("\u5DF2\u5BFC\u5165\u300C{value0}\u300D",{value0:title}))
+      messageApi.success(t("已导入「{value0}」",{value0:title}))
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message :t("\u5BFC\u5165\u5931\u8D25"))
+      messageApi.error(error instanceof Error ? error.message :t("导入失败"))
     } finally {
       setImporting(false)
     }
@@ -214,9 +214,9 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     try {
       await deleteArchivedTab(id)
       setArchived(items => items.filter(item => item.id !== id))
-      messageApi.success(t("\u5DF2\u5220\u9664\u5F52\u6863"))
+      messageApi.success(t("已删除归档"))
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message :t("\u5220\u9664\u5F52\u6863\u5931\u8D25"))
+      messageApi.error(error instanceof Error ? error.message :t("删除归档失败"))
     }
   }
 
@@ -241,19 +241,19 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const documentsContent = <div className="library-module">
     <div className="library-section-head">
       <div>
-        <h2>{query ?t("\u641C\u7D22\u7ED3\u679C"):t("\u6700\u8FD1\u4FDD\u5B58")}</h2>
-        <p>{query ?t("\u6807\u9898\u3001\u6765\u6E90\u6216\u6807\u7B7E\u4E2D\u5305\u542B\u201C{value0}\u201D\u7684\u5185\u5BB9",{value0:query}):t("\u5DF2\u6C89\u6DC0\u5230\u672C\u5730\u77E5\u8BC6\u5E93\u7684\u5185\u5BB9\uFF0C\u6309\u4FDD\u5B58\u65F6\u95F4\u6392\u5217\u3002")}</p>
+        <h2>{query ?t("搜索结果"):t("最近保存")}</h2>
+        <p>{query ?t("标题、来源或标签中包含\u201C{value0}\u201D的内容",{value0:query}):t("已沉淀到本地知识库的内容，按保存时间排列。")}</p>
       </div>
       {documents.length > 0 && <div className="library-section-head__tools">
-        <span className="library-result-count">{visibleDocuments.length} {t("\u7BC7")}</span>
+        <span className="library-result-count">{visibleDocuments.length} {t("篇")}</span>
         <Segmented
           size="small"
           value={sort}
           onChange={value => setSort(value as SortMode)}
           options={[
-            { label:t("\u6700\u8FD1"),value:'recent'},
-            { label:t("\u6807\u9898"),value:'title'},
-            { label:t("\u5B57\u6570"),value:'words'},
+            { label:t("最近"),value:'recent'},
+            { label:t("标题"),value:'title'},
+            { label:t("字数"),value:'words'},
           ]}
         />
       </div>}
@@ -263,36 +263,36 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
       : unavailable
         ? <div className="library-empty-state">
             <span className="library-empty-state__icon"><BookOutlined/></span>
-            <h3>{t("\u672C\u5730\u6570\u636E\u5E93\u6682\u65F6\u4E0D\u53EF\u7528")}</h3>
-            <p>{t("\u8BFB\u53D6\u672C\u673A knowledge.db \u5931\u8D25\u3002\u5185\u5BB9\u90FD\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\uFF0C\u4E0D\u9700\u8981\u8FDE\u63A5\u4EFB\u4F55\u670D\u52A1\uFF1B\u53EF\u4EE5\u5148\u91CD\u8BD5\uFF0C\u82E5\u53CD\u590D\u5931\u8D25\u8BF7\u9644\u4E0A\u4E0B\u65B9\u7684\u9519\u8BEF\u4FE1\u606F\u3002")}</p>
+            <h3>{t("本地数据库暂时不可用")}</h3>
+            <p>{t("读取本机 knowledge.db 失败。内容都在这台机器上，不需要连接任何服务；可以先重试，若反复失败请附上下方的错误信息。")}</p>
             {loadError && <code className="library-empty-state__detail" title={loadError}>{loadError}</code>}
             <div className="library-empty-state__actions">
-              <Button type="primary" onClick={() => void reloadDocuments()}>{t("\u91CD\u8BD5")}</Button>
+              <Button type="primary" onClick={() => void reloadDocuments()}>{t("重试")}</Button>
             </div>
           </div>
         : documents.length === 0
           ? <div className="library-empty-state">
               <span className="library-empty-state__icon"><BookOutlined/></span>
-              <h3>{t("\u77E5\u8BC6\u5E93\u8FD8\u5F88\u5B89\u9759")}</h3>
-              <p>{t("\u6D4F\u89C8\u7F51\u9875\u65F6\u70B9\u51FB\u5DE5\u5177\u680F\u7684\u300C\u4FDD\u5B58\u5230\u77E5\u8BC6\u5E93\u300D\uFF0C\u6B63\u6587\u3001\u6807\u9898\u548C\u6765\u6E90\u4F1A\u81EA\u52A8\u5F52\u6863\u5230\u8FD9\u91CC\u3002")}</p>
+              <h3>{t("知识库还很安静")}</h3>
+              <p>{t("浏览网页时点击工具栏的「保存到知识库」，正文、标题和来源会自动归档到这里。")}</p>
               <div className="library-empty-state__actions">
-                <Button type="primary" icon={<PlusOutlined/>} onClick={() => setAddOpen(true)}>{t("\u6DFB\u52A0\u6587\u6863")}</Button>
-                {onOpenBrowser && <Button onClick={openBrowser}>{t("\u53BB\u6D4F\u89C8\u5668\u901B\u901B")}</Button>}
+                <Button type="primary" icon={<PlusOutlined/>} onClick={() => setAddOpen(true)}>{t("添加文档")}</Button>
+                {onOpenBrowser && <Button onClick={openBrowser}>{t("去浏览器逛逛")}</Button>}
               </div>
             </div>
           : visibleDocuments.length === 0
             ? <div className="library-no-results">
                 <SearchOutlined/>
-                <h3>{t("\u6CA1\u6709\u627E\u5230\u5339\u914D\u7684\u6587\u6863")}</h3>
-                <p>{t("\u6362\u4E2A\u5173\u952E\u8BCD\uFF0C\u6216\u8005\u6E05\u9664\u641C\u7D22\u67E5\u770B\u5168\u90E8\u5185\u5BB9\u3002")}</p>
-                <Button type="text" onClick={() => setQuery('')}>{t("\u6E05\u9664\u641C\u7D22")}</Button>
+                <h3>{t("没有找到匹配的文档")}</h3>
+                <p>{t("换个关键词，或者清除搜索查看全部内容。")}</p>
+                <Button type="text" onClick={() => setQuery('')}>{t("清除搜索")}</Button>
               </div>
             : <div className="library-document-grid">
                 {visibleDocuments.map(document => <DocumentCard key={document.id} document={document} onOpen={setSelected} onToggleStarred={toggleStar} onArchived={handleArchived} onDeleted={handleDeleted} onChanged={refreshCollections}/>)}
                 {!query && visibleDocuments.length < 3 && <button type="button" className="library-add-tile" onClick={() => setAddOpen(true)}>
                   <span className="library-add-tile__icon"><PlusOutlined/></span>
-                  <strong>{t("\u6DFB\u52A0\u4E0B\u4E00\u7BC7")}</strong>
-                  <small>{t("\u4ECE\u6D4F\u89C8\u5668\u4FDD\u5B58\uFF0C\u6216\u5BFC\u5165\u672C\u5730 Markdown")}</small>
+                  <strong>{t("添加下一篇")}</strong>
+                  <small>{t("从浏览器保存，或导入本地 Markdown")}</small>
                 </button>}
               </div>}
   </div>
@@ -300,29 +300,29 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const collectionContent = <div className="library-module">
     <div className="library-section-head">
       <div>
-        <h2>{t("\u96C6\u5408")}</h2>
-        <p>{t("\u6309\u4E3B\u9898\u6574\u7406\u4FDD\u5B58\u7684\u7F51\u9875\u548C\u7B14\u8BB0\u3002")}</p>
+        <h2>{t("集合")}</h2>
+        <p>{t("按主题整理保存的网页和笔记。")}</p>
       </div>
-      <Button icon={<PlusOutlined/>} onClick={() => setCreating(true)}>{t("\u65B0\u5EFA\u96C6\u5408")}</Button>
+      <Button icon={<PlusOutlined/>} onClick={() => setCreating(true)}>{t("新建集合")}</Button>
     </div>
     {collections.length === 0
       ? <div className="library-empty-state library-empty-state--compact">
           <span className="library-empty-state__icon"><FolderOpenOutlined/></span>
-          <h3>{t("\u8FD8\u6CA1\u6709\u96C6\u5408")}</h3>
-          <p>{t("\u628A\u540C\u4E00\u4E3B\u9898\u7684\u6587\u6863\u6536\u8FDB\u4E00\u4E2A\u96C6\u5408\uFF0C\u4E4B\u540E\u53EF\u4EE5\u6574\u7EC4\u68C0\u7D22\u4E0E\u56DE\u987E\u3002")}</p>
-          <Button icon={<PlusOutlined/>} onClick={() => setCreating(true)}>{t("\u65B0\u5EFA\u96C6\u5408")}</Button>
+          <h3>{t("还没有集合")}</h3>
+          <p>{t("把同一主题的文档收进一个集合，之后可以整组检索与回顾。")}</p>
+          <Button icon={<PlusOutlined/>} onClick={() => setCreating(true)}>{t("新建集合")}</Button>
         </div>
       : <div className="library-collection-grid">
           {collections.map(collection => <article className="library-collection" key={collection.id}>
             <div className="library-collection__head">
               <span className="library-collection__icon"><FolderOutlined/></span>
-              <Tag>{collection.documentCount} {t("\u7BC7")}</Tag>
+              <Tag>{collection.documentCount} {t("篇")}</Tag>
             </div>
             <h3>{collection.name}</h3>
-            <p>{collection.description ||t("\u8FD8\u6CA1\u6709\u6DFB\u52A0\u63CF\u8FF0\u3002")}</p>
+            <p>{collection.description ||t("还没有添加描述。")}</p>
             <div className="library-collection__footer">
-              <span>{new Date(collection.createdAt).toLocaleDateString('zh-CN')} {t("\u521B\u5EFA")}</span>
-              <Button danger type="text" size="small" icon={<DeleteOutlined/>} onClick={() => void removeCollection(collection)}>{t("\u5220\u9664")}</Button>
+              <span>{new Date(collection.createdAt).toLocaleDateString('zh-CN')} {t("创建")}</span>
+              <Button danger type="text" size="small" icon={<DeleteOutlined/>} onClick={() => void removeCollection(collection)}>{t("删除")}</Button>
             </div>
           </article>)}
         </div>}
@@ -331,16 +331,16 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const historyContent = <div className="library-module">
     <div className="library-section-head">
       <div>
-        <h2>{t("\u8FD1\u671F\u6D4F\u89C8")}</h2>
-        <p>{t("\u6700\u8FD1\u8BBF\u95EE\u8FC7\u7684\u7F51\u9875\uFF0C\u70B9\u51FB\u5373\u53EF\u5728\u6D4F\u89C8\u5668\u4E2D\u91CD\u65B0\u6253\u5F00\u3002")}</p>
+        <h2>{t("近期浏览")}</h2>
+        <p>{t("最近访问过的网页，点击即可在浏览器中重新打开。")}</p>
       </div>
-      <span className="library-result-count">{recentHistory.length} {t("\u6761")}</span>
+      <span className="library-result-count">{recentHistory.length} {t("条")}</span>
     </div>
     {recentHistory.length === 0
       ? <div className="library-empty-state library-empty-state--compact">
           <span className="library-empty-state__icon"><ClockCircleOutlined/></span>
-          <h3>{t("\u6682\u65E0\u6D4F\u89C8\u8BB0\u5F55")}</h3>
-          <p>{t("\u6D4F\u89C8\u8FC7\u7684\u9875\u9762\u4F1A\u6309\u65F6\u95F4\u5012\u5E8F\u51FA\u73B0\u5728\u8FD9\u91CC\u3002")}</p>
+          <h3>{t("暂无浏览记录")}</h3>
+          <p>{t("浏览过的页面会按时间倒序出现在这里。")}</p>
         </div>
       : <div className="library-activity-list">
           {recentHistory.map(item => <button key={item.url + item.visitedAt} type="button" className="library-activity" onClick={() => openHistoryEntry(item)}>
@@ -357,16 +357,16 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const archiveContent = <div className="library-module">
     <div className="library-section-head">
       <div>
-        <h2>{t("\u5F52\u6863")}</h2>
-        <p>{t("\u4ECE\u6807\u7B7E\u680F\u6536\u8D77\u4F46\u8FD8\u6CA1\u6709\u4FDD\u5B58\u7684\u9875\u9762\u3002\u53EF\u6309\u6807\u9898\u6216\u7F51\u5740\u627E\u56DE\uFF0C\u4E5F\u53EF\u4EE5\u968F\u65F6\u5220\u9664\u3002")}</p>
+        <h2>{t("归档")}</h2>
+        <p>{t("从标签栏收起但还没有保存的页面。可按标题或网址找回，也可以随时删除。")}</p>
       </div>
-      <span className="library-result-count">{archived.length} {t("\u6761")}</span>
+      <span className="library-result-count">{archived.length} {t("条")}</span>
     </div>
     {archived.length === 0
       ? <div className="library-empty-state library-empty-state--compact">
           <span className="library-empty-state__icon"><ClockCircleOutlined/></span>
-          <h3>{t("\u8FD8\u6CA1\u6709\u5F52\u6863")}</h3>
-          <p>{t("\u5728\u6807\u7B7E\u9875\u53F3\u952E\u9009\u62E9\u300C\u5F52\u6863\u6807\u7B7E\u9875\u300D\uFF0C\u6216\u4ECE\u547D\u4EE4\u680F\u6267\u884C\u5F52\u6863\u3002\u5F52\u6863\u4E0D\u4F1A\u5220\u9664\u9875\u9762\uFF0C\u53EA\u662F\u8BA9\u5B83\u79BB\u5F00\u6807\u7B7E\u680F\u3002")}</p>
+          <h3>{t("还没有归档")}</h3>
+          <p>{t("在标签页右键选择「归档标签页」，或从命令栏执行归档。归档不会删除页面，只是让它离开标签栏。")}</p>
         </div>
       : archiveSections.map(section => <section key={section.bucket} className="library-archive-group">
           <h3 className="library-archive-group__title">{section.label}<span>{section.items.length}</span></h3>
@@ -379,7 +379,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
               </span>
               <RightOutlined className="library-activity__arrow"/>
             </button>
-            <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("\u5220\u9664\u5F52\u6863")}onClick={()=>void removeArchived(item.id)}/>
+            <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("删除归档")} onClick={()=>void removeArchived(item.id)}/>
           </div>)}
         </section>)}
   </div>
@@ -387,13 +387,13 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const downloadContent = <div className="library-module">
     <div className="library-section-head">
       <div>
-        <h2>{t("\u4E0B\u8F7D\u8BB0\u5F55")}</h2>
-        <p>{t("\u6D4F\u89C8\u5668\u4E0B\u8F7D\u7684\u6587\u4EF6\u4E0E\u672C\u6B21\u4F1A\u8BDD\u5BFC\u51FA\u7684 Markdown\uFF0C\u91CD\u542F\u540E\u4ECD\u4F1A\u4FDD\u7559\u5DF2\u5B8C\u6210\u7684\u4E0B\u8F7D\u3002")}</p>
+        <h2>{t("下载记录")}</h2>
+        <p>{t("浏览器下载的文件与本次会话导出的 Markdown，重启后仍会保留已完成的下载。")}</p>
       </div>
-      <span className="library-result-count">{downloadCenter.records.length} {t("\u9879")}</span>
+      <span className="library-result-count">{downloadCenter.records.length} {t("项")}</span>
     </div>
     {downloads.length > 0 && <div className="library-export-list">
-      <div className="library-export-list__head"><span>{t("\u672C\u6B21\u4F1A\u8BDD\u5BFC\u51FA")}</span><small>{downloads.length} {t("\u4EFD")}</small></div>
+      <div className="library-export-list__head"><span>{t("本次会话导出")}</span><small>{downloads.length} {t("份")}</small></div>
       {downloads.map(entry => <div className="library-export-row" key={`${entry.documentId}-${entry.exportedAt}`}>
         <span className="library-export-row__icon"><FileTextOutlined/></span>
         <span className="library-export-row__title" title={entry.title}>{entry.title}</span>
@@ -409,14 +409,14 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
       <header className="library-header">
         <div className="library-header__copy">
           <span className="eyebrow">KNOWLEDGE BASE</span>
-          <h1>{t("\u4F60\u7684\u77E5\u8BC6\u5E93")}</h1>
-          <p>{t("\u4FDD\u5B58\u7684\u7F51\u9875\u4F1A\u5728\u8FD9\u91CC\u6C89\u6DC0\u3001\u7EC4\u7EC7\u5E76\u88AB\u91CD\u65B0\u53D1\u73B0\u3002")}</p>
+          <h1>{t("你的知识库")}</h1>
+          <p>{t("保存的网页会在这里沉淀、组织并被重新发现。")}</p>
         </div>
         <div className="library-header__actions">
           <Input
             className="library-search"
             prefix={<SearchOutlined/>}
-            placeholder={t("\u641C\u7D22\u6807\u9898\u3001\u6765\u6E90\u6216\u6807\u7B7E")}
+            placeholder={t("搜索标题、来源或标签")}
             value={query}
             allowClear
             onChange={event => {
@@ -424,15 +424,15 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
               if (event.target.value) setTab('documents')
             }}
           />
-          <Button className="library-add-button" type="primary" icon={<PlusOutlined/>} onClick={() => setAddOpen(true)}>{t("\u6DFB\u52A0\u6587\u6863")}</Button>
+          <Button className="library-add-button" type="primary" icon={<PlusOutlined/>} onClick={() => setAddOpen(true)}>{t("添加文档")}</Button>
         </div>
       </header>
 
       <div className="library-page__body">
-        <div className="library-overview" aria-label={t("\u77E5\u8BC6\u5E93\u6982\u89C8")}>
-          <OverviewMetric icon={<BookOutlined/>} label={t("\u5168\u90E8\u6587\u6863")}value={documents.length}hint={t("\u7F51\u9875\u4E0E\u7B14\u8BB0")}/>
-          <OverviewMetric icon={<StarOutlined/>} label={t("\u6536\u85CF")}value={starredCount}hint={t("\u503C\u5F97\u91CD\u8BFB")}/>
-          <OverviewMetric icon={<FolderOutlined/>} label={t("\u96C6\u5408")}value={collections.length}hint={t("\u4E3B\u9898\u5F52\u6863")}/>
+        <div className="library-overview" aria-label={t("知识库概览")}>
+          <OverviewMetric icon={<BookOutlined/>} label={t("全部文档")} value={documents.length} hint={t("网页与笔记")}/>
+          <OverviewMetric icon={<StarOutlined/>} label={t("收藏")} value={starredCount} hint={t("值得重读")}/>
+          <OverviewMetric icon={<FolderOutlined/>} label={t("集合")} value={collections.length} hint={t("主题归档")}/>
         </div>
 
         <Tabs
@@ -447,43 +447,43 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
               disabled={refreshing}
               onClick={() => void refreshLibrary()}
             >
-              {refreshing ?t("\u5237\u65B0\u4E2D"):t("\u5237\u65B0")}
+              {refreshing ?t("刷新中"):t("刷新")}
             </Button>
           }
           items={[
-            { key: 'documents', label: <TabLabel label={t("\u6700\u8FD1\u4FDD\u5B58")}count={documents.length}/>,children:documentsContent},
-            { key: 'collections', label: <TabLabel label={t("\u96C6\u5408")}count={collections.length}/>,children:collectionContent},
-            { key: 'history', label: <TabLabel label={t("\u8FD1\u671F\u6D4F\u89C8")}count={recentHistory.length}/>,children:historyContent},
-            { key: 'archive', label: <TabLabel label={t("\u5F52\u6863")}count={archived.length}/>,children:archiveContent},
-            { key: 'downloads', label: <TabLabel label={t("\u4E0B\u8F7D\u8BB0\u5F55")}count={downloadCenter.records.length}/>,children:downloadContent},
+            { key: 'documents', label: <TabLabel label={t("最近保存")} count={documents.length}/>,children:documentsContent},
+            { key: 'collections', label: <TabLabel label={t("集合")} count={collections.length}/>,children:collectionContent},
+            { key: 'history', label: <TabLabel label={t("近期浏览")} count={recentHistory.length}/>,children:historyContent},
+            { key: 'archive', label: <TabLabel label={t("归档")} count={archived.length}/>,children:archiveContent},
+            { key: 'downloads', label: <TabLabel label={t("下载记录")} count={downloadCenter.records.length}/>,children:downloadContent},
           ]}
         />
       </div>
     </div>
 
-    <Modal title={t("\u6DFB\u52A0\u6587\u6863")}open={addOpen}onCancel={()=>setAddOpen(false)}footer={null}width={580}className="library-add-modal">
-      <Typography.Paragraph className="library-add-intro">{t("\u628A\u7F51\u9875\u6216\u672C\u5730 Markdown \u6C89\u6DC0\u5230\u77E5\u8BC6\u5E93\uFF0C\u6240\u6709\u5185\u5BB9\u53EA\u4FDD\u5B58\u5728\u8FD9\u53F0\u8BBE\u5907\u4E0A\u3002")}</Typography.Paragraph>
+    <Modal title={t("添加文档")} open={addOpen} onCancel={()=>setAddOpen(false)} footer={null} width={580} className="library-add-modal">
+      <Typography.Paragraph className="library-add-intro">{t("把网页或本地 Markdown 沉淀到知识库，所有内容只保存在这台设备上。")}</Typography.Paragraph>
       <div className="library-add-actions">
         <button type="button" className="library-add-card" onClick={openBrowser}>
           <span className="library-add-card__icon"><GlobalOutlined/></span>
           <span className="library-add-card__body">
-            <strong>{t("\u4ECE\u6D4F\u89C8\u5668\u4FDD\u5B58")}</strong>
-            <small>{t("\u6D4F\u89C8\u7F51\u9875\u65F6\u70B9\u51FB\u5DE5\u5177\u680F\u7684\u300C\u4FDD\u5B58\u5230\u77E5\u8BC6\u5E93\u300D\uFF0C\u6B63\u6587\u3001\u6807\u9898\u548C\u6765\u6E90\u4F1A\u81EA\u52A8\u5F52\u6863\u3002")}</small>
+            <strong>{t("从浏览器保存")}</strong>
+            <small>{t("浏览网页时点击工具栏的「保存到知识库」，正文、标题和来源会自动归档。")}</small>
           </span>
           <RightOutlined className="library-add-card__arrow"/>
         </button>
         <div className="library-add-drop">
           <Upload.Dragger accept=".md,.markdown,.txt" disabled={importing} beforeUpload={importMarkdown}>
-            <strong>{importing ?t("\u6B63\u5728\u5BFC\u5165\u2026"):t("\u5BFC\u5165 Markdown \u6587\u4EF6")}</strong>
-            <small>{t("\u62D6\u5165\u6216\u70B9\u51FB\u9009\u62E9 .md / .markdown / .txt \u6587\u4EF6\uFF0C\u5BFC\u5165\u540E\u4F1A\u81EA\u52A8\u6392\u961F\u751F\u6210\u6807\u7B7E\u4E0E\u7D22\u5F15\u3002")}</small>
+            <strong>{importing ?t("正在导入\u2026"):t("导入 Markdown 文件")}</strong>
+            <small>{t("拖入或点击选择 .md / .markdown / .txt 文件，导入后会自动排队生成标签与索引。")}</small>
           </Upload.Dragger>
         </div>
       </div>
-      <div className="library-add-note"><UploadOutlined/> {t("\u5BFC\u5165\u4E0D\u4F1A\u4FEE\u6539\u539F\u6587\u4EF6\uFF0C\u4E5F\u4E0D\u4F1A\u628A\u5185\u5BB9\u4E0A\u4F20\u5230\u7F51\u7EDC\u3002")}</div>
+      <div className="library-add-note"><UploadOutlined/> {t("导入不会修改原文件，也不会把内容上传到网络。")}</div>
     </Modal>
 
-    <Modal title={t("\u65B0\u5EFA\u96C6\u5408")}open={creating}onCancel={()=>{setCreating(false);setNewName('')}}onOk={()=>void createNewCollection()}okText={t("\u521B\u5EFA")}cancelText={t("\u53D6\u6D88")}>
-      <Input autoFocus placeholder={t("\u96C6\u5408\u540D\u79F0")}value={newName}onChange={event=>setNewName(event.target.value)}onPressEnter={()=>void createNewCollection()}/>
+    <Modal title={t("新建集合")} open={creating} onCancel={()=>{setCreating(false);setNewName('')}} onOk={()=>void createNewCollection()} okText={t("创建")} cancelText={t("取消")}>
+      <Input autoFocus placeholder={t("集合名称")} value={newName} onChange={event=>setNewName(event.target.value)} onPressEnter={()=>void createNewCollection()}/>
     </Modal>
     <DocumentDetailDrawer document={selected} onClose={() => setSelected(null)} onDeleted={id => setDocuments(items => items.filter(item => item.id !== id))} onExported={onExported} onUpdated={handleDocumentUpdated}/>
   </section>

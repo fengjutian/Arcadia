@@ -13,7 +13,7 @@ export interface SearchableConversation {
 
 export function makeConversationTitle(turns: readonly SearchableConversationTurn[], maxLength = 32): string {
   const firstQuestion = turns.find(turn => turn.role === 'user')?.content.trim().replace(/\s+/g, ' ')
-  if (!firstQuestion) return t("\u672A\u547D\u540D\u5BF9\u8BDD")
+  if (!firstQuestion) return t("未命名对话")
   return firstQuestion.length > maxLength ? `${firstQuestion.slice(0, maxLength)}…` : firstQuestion
 }
 

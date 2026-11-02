@@ -32,9 +32,9 @@ export function fallbackTabTitle(url: string): string {
       const fileName = parsed.pathname.split('/').filter(Boolean).at(-1)
       if (fileName) return decodeURIComponent(fileName)
     }
-    return parsed.hostname ||t("\u65B0\u6807\u7B7E\u9875")
+    return parsed.hostname ||t("新标签页")
   } catch {
-    return t("\u65B0\u6807\u7B7E\u9875")
+    return t("新标签页")
   }
 }
 

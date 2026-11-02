@@ -49,7 +49,7 @@ export function BookmarkSearchPalette({ open, bookmarks, onClose, onOpen, onRemo
       else if (event.key === 'Delete' && current) { event.preventDefault(); onRemove(current); setHighlight(h => Math.max(0, Math.min(h, rows.length - 2))) }
       else if (event.key.toLowerCase() === 'e' && current &&( event.ctrlKey || event.metaKey)) {
         event.preventDefault()
-        const next = prompt(t("\u7F16\u8F91\u6807\u9898"),current.title)
+        const next = prompt(t("编辑标题"),current.title)
         if (next && next.trim()) void onUpdate(current, { title: next.trim() })
       }
     }
@@ -72,19 +72,19 @@ export function BookmarkSearchPalette({ open, bookmarks, onClose, onOpen, onRemo
         ref={inputRef}
         value={query}
         onChange={event => { setQuery(event.target.value); setHighlight(0) }}
-        placeholder={t("\u641C\u7D22\u6536\u85CF\u5939\uFF08\u6807\u9898/\u7F51\u5740/\u5907\u6CE8\uFF09")}
+        placeholder={t("搜索收藏夹（标题/网址/备注）")}
         size="large"
         prefix={<StarFilled />}
-        suffix={<Typography.Text type="secondary">{t("\u2191\u2193 \u9009\u62E9 \xB7 Enter \u6253\u5F00 \xB7 Del \u5220\u9664 \xB7 Ctrl+E \u7F16\u8F91")}</Typography.Text>}
+        suffix={<Typography.Text type="secondary">{t("\u2191\u2193 选择 \xB7 Enter 打开 \xB7 Del 删除 \xB7 Ctrl+E 编辑")}</Typography.Text>}
       />
       <div className="tab-search-palette__list">
         {rows.length === 0
-          ? <div className="tab-search-palette__empty">{t("\u6CA1\u6709\u5339\u914D\u7684\u6536\u85CF\u5939\u6761\u76EE")}</div>
+          ? <div className="tab-search-palette__empty">{t("没有匹配的收藏夹条目")}</div>
           : <List
               dataSource={rows}
               renderItem={(row, index) => <BookmarkRow item={row} active={highlight === index} onHover={() => setHighlight(index)} onOpen={() => { onOpen(row); onClose() }} onRemove={() => onRemove(row)} />}
             />}
-        {rows.length > 0 && <Typography.Text type="secondary" className="tab-search-palette__hint">{t("\u663E\u793A")} {rows.length} / {bookmarks.length} {t("\u6761\u6536\u85CF")}</Typography.Text>}
+        {rows.length > 0 && <Typography.Text type="secondary" className="tab-search-palette__hint">{t("显示")} {rows.length} / {bookmarks.length} {t("条收藏")}</Typography.Text>}
       </div>
     </div>
   </Modal>
@@ -103,7 +103,7 @@ function BookmarkRow({ item, active, onHover, onOpen, onRemove }: BookmarkRowPro
     className={`tab-search-row${active ? ' is-active' : ''}`}
     onMouseEnter={onHover}
     onClick={onOpen}
-    actions={[<Tooltip key="remove" title={t("\u4ECE\u6536\u85CF\u5939\u79FB\u9664")}><Button type="text"danger icon={<DeleteOutlined/>}aria-label={t("\u4ECE\u6536\u85CF\u5939\u79FB\u9664")}onClick={event=>{event.stopPropagation();onRemove()}}/></Tooltip>]}
+    actions={[<Tooltip key="remove" title={t("从收藏夹移除")}><Button type="text"danger icon={<DeleteOutlined/>} aria-label={t("从收藏夹移除")} onClick={event=>{event.stopPropagation();onRemove()}}/></Tooltip>]}
   >
     <List.Item.Meta
       avatar={<StarFilled style={{ color: '#d49a26' }} />}

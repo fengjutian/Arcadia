@@ -73,9 +73,9 @@ export function classifyShellOpenUrl(url: string | undefined | null): ShellOpenC
 /** Human-friendly label for the scheme, e.g. `vscode:` → "Visual Studio Code". */
 export function describeScheme(scheme: string | null): string {
   switch (scheme) {
-    case 'mailto:': return t("\u90AE\u4EF6\u5E94\u7528")
-    case 'tel:': return t("\u7535\u8BDD\u5E94\u7528")
-    case 'sms:': return t("\u77ED\u4FE1\u5E94\u7528")
+    case 'mailto:': return t("邮件应用")
+    case 'tel:': return t("电话应用")
+    case 'sms:': return t("短信应用")
     case 'vscode:': return 'Visual Studio Code'
     case 'vscode-insiders:': return 'VS Code Insiders'
     case 'slack:': return 'Slack'
@@ -90,6 +90,6 @@ export function describeScheme(scheme: string | null): string {
     case 'obsidian:': return 'Obsidian'
     case 'notion:': return 'Notion'
     case 'figma:': return 'Figma'
-    default: return scheme ?t("\u5916\u90E8\u5E94\u7528 ({value0})",{value0:scheme}):t("\u5916\u90E8\u5E94\u7528")
+    default: return scheme ?t("外部应用 ({value0})",{value0:scheme}):t("外部应用")
   }
 }

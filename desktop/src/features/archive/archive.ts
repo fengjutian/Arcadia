@@ -35,10 +35,10 @@ export interface ArchiveSection {
 }
 
 const BUCKET_LABEL: Record<ArchiveBucket, string> = {
-  today:t("\u4ECA\u5929"),
-  yesterday:t("\u6628\u5929"),
-  week:t("\u6700\u8FD1\u4E03\u5929"),
-  older:t("\u66F4\u65E9"),
+  today:t("今天"),
+  yesterday:t("昨天"),
+  week:t("最近七天"),
+  older:t("更早"),
 }
 
 const BUCKET_ORDER: readonly ArchiveBucket[] = ['today', 'yesterday', 'week', 'older']

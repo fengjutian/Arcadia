@@ -22,7 +22,7 @@ export async function loadDocuments(): Promise<DocumentLoadResult> {
     return { items: await listDocuments(), unavailable: false, error: null }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error ?? '')
-    console.error(t("[library] \u8BFB\u53D6\u672C\u5730\u77E5\u8BC6\u5E93\u5931\u8D25"),error)
-    return { items: [], unavailable: true, error: detail ||t("\u672A\u77E5\u9519\u8BEF")}
+    console.error(t("[library] 读取本地知识库失败"),error)
+    return { items: [], unavailable: true, error: detail ||t("未知错误")}
   }
 }

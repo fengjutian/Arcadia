@@ -72,21 +72,21 @@ export function TabSearchPalette({ open, tabs, activeId, onClose, onPick, onClos
         ref={inputRef}
         value={query}
         onChange={event => { setQuery(event.target.value); setHighlight(0) }}
-        placeholder={translate("\u641C\u7D22\u6807\u7B7E\u9875\uFF08\u6807\u9898\u6216\u7F51\u5740\uFF09")}
+        placeholder={translate("搜索标签页（标题或网址）")}
         size="large"
         prefix={<GlobalOutlined />}
-        suffix={<Typography.Text type="secondary">{translate("\u2191\u2193 \u9009\u62E9 \xB7 Enter \u8DF3\u8F6C \xB7 Ctrl+W \u5173\u95ED")}</Typography.Text>}
+        suffix={<Typography.Text type="secondary">{translate("\u2191\u2193 选择 \xB7 Enter 跳转 \xB7 Ctrl+W 关闭")}</Typography.Text>}
       />
       <div className="tab-search-palette__list" ref={listRef}>
         {rows.length === 0
-          ? <div className="tab-search-palette__empty">{translate("\u6CA1\u6709\u5339\u914D\u7684\u6807\u7B7E\u9875")}</div>
+          ? <div className="tab-search-palette__empty">{translate("没有匹配的标签页")}</div>
           : <List
               dataSource={rows}
               renderItem={(row, index) => <ListTabRow item={row} active={highlight === index} onHover={() => setHighlight(index)} onPick={() => { onPick(row.id); onClose() }} />}
             />}
-        {rows.length > 0 && current && <Typography.Text type="secondary" className="tab-search-palette__hint">{translate("\u547D\u4E2D")} 
-             <strong>{current.title || current.url}</strong>{' · '}{tabs.length} {translate("\u4E2A\u6807\u7B7E")} 
-          {activeId === current.id ?translate(" \xB7 \u5F53\u524D\u6D3B\u8DC3"):''}
+        {rows.length > 0 && current && <Typography.Text type="secondary" className="tab-search-palette__hint">{translate("命中")} 
+             <strong>{current.title || current.url}</strong>{' · '}{tabs.length} {translate("个标签")} 
+          {activeId === current.id ?translate(" \xB7 当前活跃"):''}
         </Typography.Text>}
       </div>
     </div>
@@ -110,8 +110,8 @@ function ListTabRow({ item, active, onHover, onPick }: ListTabRowProps) {
       avatar={item.tab.private ? <LockOutlined /> : <GlobalOutlined />}
       title={<>
         {highlight(item.title || item.url, item.titleHighlights)}
-        {item.tab.active && <Tag color="blue" style={{ marginLeft: 6 }}>{translate("\u5F53\u524D")}</Tag>}
-        {item.tab.pinned && <Tag color="gold" style={{ marginLeft: 6 }}>{translate("\u56FA\u5B9A")}</Tag>}
+        {item.tab.active && <Tag color="blue" style={{ marginLeft: 6 }}>{translate("当前")}</Tag>}
+        {item.tab.pinned && <Tag color="gold" style={{ marginLeft: 6 }}>{translate("固定")}</Tag>}
       </>}
       description={highlight(item.url, item.urlHighlights)}
     />

@@ -27,7 +27,7 @@ export interface LocalPdfText {
 }
 
 export async function extractLocalPdf(url: string): Promise<LocalPdfText> {
-  if (!isTauri()) throw new Error(t("\u672C\u5730 PDF \u6587\u672C\u63D0\u53D6\u4EC5\u53EF\u5728\u684C\u9762\u5E94\u7528\u4E2D\u4F7F\u7528"))
+  if (!isTauri()) throw new Error(t("本地 PDF 文本提取仅可在桌面应用中使用"))
   return invoke<LocalPdfText>('extract_local_pdf', { url })
 }
 

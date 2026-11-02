@@ -14,7 +14,7 @@ import { t } from '../../i18n'
  */
 import type { BrowserTab } from '../../types'
 
-export const PRIVATE_TAB_BADGE =t("\u79C1\u5BC6")
+export const PRIVATE_TAB_BADGE =t("私密")
 
 export function isPrivateTab(tab: Pick<BrowserTab, 'private'> | undefined | null): boolean {
   return !!tab?.private
@@ -24,7 +24,7 @@ export function makePrivateTab(id: string = crypto.randomUUID(), url: string = '
   return {
     id,
     url,
-    title: url ?t("\u6B63\u5728\u52A0\u8F7D\u2026"):t("\u65B0\u79C1\u5BC6\u7A97\u53E3"),
+    title: url ?t("正在加载\u2026"):t("新私密窗口"),
     loading: false,
     active: true,
     pinned: false,

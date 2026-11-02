@@ -152,8 +152,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       if (entry.status === 'downloading' && readDownloadSettings().showPanelOnStart) setToolbarOverlay('downloads')
     },
     onTerminal: entry => {
-      if (entry.status === 'completed') messageApi.success(translate("\u4E0B\u8F7D\u5B8C\u6210"))
-      else if (entry.status === 'failed') messageApi.error(translate("\u4E0B\u8F7D\u5931\u8D25"))
+      if (entry.status === 'completed') messageApi.success(translate("下载完成"))
+      else if (entry.status === 'failed') messageApi.error(translate("下载失败"))
     },
   })
   const downloadQueue = useDownloadQueue({ runningDownloads: downloads })
@@ -215,13 +215,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }, [active.id, active.url])
 
   async function scanCurrentResources() {
-    if (!hasNativeTab(active.id)) { messageApi.info(translate("\u8D44\u6E90\u63A2\u6D4B\u9700\u8981\u684C\u9762\u6D4F\u89C8\u5668\u6807\u7B7E\u9875"));return}
+    if (!hasNativeTab(active.id)) { messageApi.info(translate("资源探测需要桌面浏览器标签页"));return}
     setResourceScanBusy(true)
     try {
       const found = normalizeMediaResources(await scanNativeResources(active.id))
       setMediaResources(found)
-      messageApi.info(found.length ?translate("\u53D1\u73B0 {value0} \u4E2A\u5A92\u4F53\u6216\u6587\u6863\u8D44\u6E90",{value0:found.length}):translate("\u5F53\u524D\u9875\u9762\u6682\u672A\u53D1\u73B0\u53EF\u4E0B\u8F7D\u8D44\u6E90"))
-    } catch (error) { messageApi.error(translate("\u8D44\u6E90\u626B\u63CF\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))}
+      messageApi.info(found.length ?translate("发现 {value0} 个媒体或文档资源",{value0:found.length}):translate("当前页面暂未发现可下载资源"))
+    } catch (error) { messageApi.error(translate("资源扫描失败：{value0}",{value0:String(error)}))}
     finally { setResourceScanBusy(false) }
   }
 
@@ -230,8 +230,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       await startDownload({ id: crypto.randomUUID(), url: resource.url, fileName: resource.fileName,
         dangerType: classifyDownload({ fileName: resource.fileName }),
         sourceOrigin: new URL(active.url || resource.url).origin, sourceTabLabel: active.id })
-      messageApi.success(translate("\u8D44\u6E90\u5DF2\u52A0\u5165\u4E0B\u8F7D\u961F\u5217"))
-    } catch (error) { messageApi.error(translate("\u4E0B\u8F7D\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))}
+      messageApi.success(translate("资源已加入下载队列"))
+    } catch (error) { messageApi.error(translate("下载失败：{value0}",{value0:String(error)}))}
   }
 
   useEffect(() => {
@@ -311,7 +311,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         if (!cancelled) setAiArticle(article)
       })
       .catch(() => {
-        if (!cancelled) setAiContextError(translate("\u65E0\u6CD5\u63D0\u53D6\u6B63\u6587"))
+        if (!cancelled) setAiContextError(translate("无法提取正文"))
       })
       .finally(() => {
         if (!cancelled) setAiContextPending(false)
@@ -409,7 +409,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             loading: false,
             error: {
               kind: 'site-blocked',
-              message:translate("\u8BE5\u7F51\u7AD9\u5DF2\u88AB\u5C01\u6740\uFF08{value0}\uFF09",{value0:payload.ruleHost}),
+              message:translate("该网站已被封杀（{value0}）",{value0:payload.ruleHost}),
               host: payload.host,
               ruleHost: payload.ruleHost,
               entryId: payload.entryId,
@@ -441,8 +441,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             error: {
               kind: 'load-failed',
               message: failure.kind === 'renderer-unresponsive'
-                ?translate("\u9875\u9762\u6E32\u67D3\u8FDB\u7A0B\u65E0\u54CD\u5E94\uFF0C\u53EF\u70B9\u51FB\u201C\u91CD\u65B0\u6253\u5F00\u201D\u6062\u590D\u3002")
-                :translate("\u9875\u9762\u6E32\u67D3\u8FDB\u7A0B\u5DF2\u9000\u51FA\uFF0C\u53EF\u70B9\u51FB\u201C\u91CD\u65B0\u6253\u5F00\u201D\u6062\u590D\u3002"),
+                ?translate("页面渲染进程无响应，可点击\u201C重新打开\u201D恢复。")
+                :translate("页面渲染进程已退出，可点击\u201C重新打开\u201D恢复。"),
             },
           }
         : tab))
@@ -572,7 +572,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             try {
               const opened = await ensureNativeTab(tab.id, tab.url, nextBounds, { private: tab.private })
               if (!opened) {
-                setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: { kind: 'web-mode-required', message:translate("\u7F51\u9875\u6D4F\u89C8\u4EC5\u5728 Tauri \u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528\u3002")}}:item))
+                setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: { kind: 'web-mode-required', message:translate("网页浏览仅在 Tauri 桌面应用中可用。")}}:item))
                 return
               }
               if (tab.id === parsed.activeTabId && visibleRef.current) await showNativeTab(tab.id)
@@ -652,13 +652,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       .then(result => {
         if (disposed) return
         const markdown = result.truncated
-          ?translate("{value0}\n\n> PDF \u6587\u672C\u8F83\u957F\uFF0CAI \u4E0A\u4E0B\u6587\u5DF2\u622A\u65AD\u3002",{value0:result.text})
+          ?translate("{value0}\n\n> PDF 文本较长，AI 上下文已截断。",{value0:result.text})
           : result.text
         setPdfArticle({
           title: result.title,
           byline: '',
           excerpt: result.text.slice(0, 240),
-          siteName:translate("\u672C\u5730 PDF"),
+          siteName:translate("本地 PDF"),
           language: '',
           contentHtml: '',
           markdown,
@@ -748,8 +748,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       if (!engine) return []
       return [{ id: `compare-${crypto.randomUUID()}`, kind: 'web' as const, label: engine.label, engineId: engine.id, url: renderSearchTemplate(engine.template, query) }]
     })
-    if (includeAi) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'ai', label:translate("AI \u641C\u7D22")})
-    if (includeKnowledge) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'knowledge', label:translate("\u672C\u5730\u77E5\u8BC6\u5E93")})
+    if (includeAi) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'ai', label:translate("AI 搜索")})
+    if (includeKnowledge) sources.push({ id: `compare-${crypto.randomUUID()}`, kind: 'knowledge', label:translate("本地知识库")})
     if (sources.length === 0) return
     const next = { hostTabId: activeTabIdRef.current, query, sources, visibleIds: sources.slice(0, 3).map(source => source.id) }
     comparisonRef.current = next
@@ -844,7 +844,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           loading: false,
           error: {
             kind: 'site-blocked',
-            message:translate("\u8BE5\u7F51\u7AD9\u5DF2\u88AB\u5C01\u6740\uFF08{value0}\uFF09",{value0:blocked.host}),
+            message:translate("该网站已被封杀（{value0}）",{value0:blocked.host}),
             host: hostFromUrl(patch.url ?? '') ?? blocked.host,
             ruleHost: blocked.host,
             entryId: blocked.id,
@@ -1082,7 +1082,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       if (!detail?.id) return
       const workspace = await getWorkspace(detail.id)
       if (!workspace) {
-        messageApi.error(translate("\u5DE5\u4F5C\u533A\u4E0D\u5B58\u5728\u6216\u5DF2\u5220\u9664"))
+        messageApi.error(translate("工作区不存在或已删除"))
         return
       }
       await applyWorkspaceRestore(workspace)
@@ -1100,7 +1100,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     const url = active.url
     const host = hostFromUrl(url)
     if (!url || !host) {
-      messageApi.info(translate("\u5F53\u524D\u9875\u9762\u6CA1\u6709\u53EF\u5C01\u6740\u7684\u7F51\u7AD9"))
+      messageApi.info(translate("当前页面没有可封杀的网站"))
       return
     }
     setBlockPrompt({ url, host })
@@ -1120,7 +1120,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
             loading: false,
             error: {
               kind: 'site-blocked',
-              message:translate("\u8BE5\u7F51\u7AD9\u5DF2\u88AB\u5C01\u6740\uFF08{value0}\uFF09",{value0:entry.host}),
+              message:translate("该网站已被封杀（{value0}）",{value0:entry.host}),
               host: prompt.host,
               ruleHost: entry.host,
               entryId: entry.id,
@@ -1130,7 +1130,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       // The page is now blacklisted: close its WebView so no background work
       // or audio survives the block. Reopening happens via `openNativeTab`.
       void closeNativeTab(tabId)
-      messageApi.success(translate("\u5DF2\u5C01\u6740 {value0}\uFF0C\u53EF\u5728\u300C\u8BBE\u7F6E \u2192 \u9690\u79C1 \u2192 \u7F51\u7AD9\u5C01\u6740\u300D\u4E2D\u7BA1\u7406",{value0:entry.host}))
+      messageApi.success(translate("已封杀 {value0}，可在「设置 \u2192 隐私 \u2192 网站封杀」中管理",{value0:entry.host}))
     } catch (error) {
       messageApi.error(String(error))
     }
@@ -1143,7 +1143,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       setTabs(current => current.map(tab => tab.id === activeTabIdRef.current ? { ...tab, error: undefined, loading: true } : tab))
       if (url) await navigate(url)
     } catch (error) {
-      messageApi.error(translate("\u89E3\u9664\u5C01\u6740\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+      messageApi.error(translate("解除封杀失败：{value0}",{value0:String(error)}))
     }
   }
 
@@ -1166,7 +1166,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       window.open(url, '_blank', 'noopener,noreferrer')
       setTabs(current => current.map(tab => tab.id === tabId ? { ...newTab(tab.id), active: true } : tab))
       setAddress('')
-      messageApi.info(translate("\u7F51\u9875\u9884\u89C8\u6A21\u5F0F\u4E0B\u5DF2\u4F7F\u7528\u7CFB\u7EDF\u6D4F\u89C8\u5668\u6253\u5F00"))
+      messageApi.info(translate("网页预览模式下已使用系统浏览器打开"))
       return
     }
     // Private tabs deny sensitive permissions inside the native/JS guard and
@@ -1180,7 +1180,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     try {
       const opened = await openNativeTab(tabId, url, nextBounds, { private: active.private })
       if (!opened) {
-        setTabs(current => current.map(tab => tab.id === tabId ? { ...tab, loading: false, error: { kind: 'web-mode-required', message:translate("\u7F51\u9875\u6D4F\u89C8\u4EC5\u5728 Tauri \u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528\u3002")}}:tab))
+        setTabs(current => current.map(tab => tab.id === tabId ? { ...tab, loading: false, error: { kind: 'web-mode-required', message:translate("网页浏览仅在 Tauri 桌面应用中可用。")}}:tab))
         return
       }
       setTabs(current => current.map(tab => tab.id === tabId ? { ...tab, error: undefined } : tab))
@@ -1254,7 +1254,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     try {
       tabRuntime.enqueueScroll(tab.id, { x: tab.scrollX ?? 0, y: tab.scrollY ?? 0 })
       const opened = await ensureNativeTab(tab.id, tab.url, nextBounds, { private: tab.private })
-      if (!opened) throw new Error(translate("\u7F51\u9875\u6D4F\u89C8\u4EC5\u5728 Tauri \u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528\u3002"))
+      if (!opened) throw new Error(translate("网页浏览仅在 Tauri 桌面应用中可用。"))
       if (visibleRef.current && activeTabIdRef.current === tab.id) await showNativeTab(tab.id)
       setTabs(current => current.map(item => item.id === tab.id ? { ...item, suspended: false, error: undefined } : item))
       await enforceLiveTabLimit(tab.id)
@@ -1299,7 +1299,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       setIsWindowFullscreen(next)
     } catch (error) {
       diagnosticLog('window.fullscreen.failed', 'error', { error })
-      messageApi.error(translate("\u5207\u6362\u5168\u5C4F\u5931\u8D25"))
+      messageApi.error(translate("切换全屏失败"))
     }
   }
   function runBrowserMenuAction(action: string) {
@@ -1357,14 +1357,14 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       const data = await captureNativeScreenshot(active.id, fullPage, clip)
       const link = document.createElement('a')
       link.href = `data:image/png;base64,${data}`
-      const fileName = `${safeFileName(active.title ||translate("\u7F51\u9875"))}-${clip?translate("\u9009\u533A"):fullPage?translate("\u6574\u9875"):translate("\u53EF\u89C6\u533A\u57DF")}.png`
+      const fileName = `${safeFileName(active.title ||translate("网页"))}-${clip?translate("选区"):fullPage?translate("整页"):translate("可视区域")}.png`
       link.download = fileName
       document.body.appendChild(link); link.click(); link.remove()
       diagnosticLog('browser.screenshot.completed', 'info', { tabId: active.id, fullPage, clipped: Boolean(clip), encodedBytes: data.length })
-      messageApi.success(translate("\u622A\u56FE\u5DF2\u4FDD\u5B58\u5230\u7CFB\u7EDF\u4E0B\u8F7D\u6587\u4EF6\u5939\uFF1A{value0}",{value0:fileName}),5)
+      messageApi.success(translate("截图已保存到系统下载文件夹：{value0}",{value0:fileName}),5)
     } catch (error) {
       diagnosticLog('browser.screenshot.failed', 'error', { tabId: active.id, fullPage, clipped: Boolean(clip), error })
-      messageApi.error(translate("\u622A\u56FE\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+      messageApi.error(translate("截图失败：{value0}",{value0:String(error)}))
     } finally {
       if (hasNativeTab(active.id) && visibleRef.current && activeTabIdRef.current === active.id) {
         const nextBounds = bounds()
@@ -1396,35 +1396,35 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }, [active.id, bookmarkActions.bookmarks, mediaResources])
 
   const browserMenu: MenuProps['items'] = ([
-    { key: 'find', label:translate("\u5728\u9875\u9762\u4E2D\u67E5\u627E"),extra:'Ctrl+F',onClick:()=>runBrowserMenuAction('find')},
-    { key: 'tab-search', label:translate("\u641C\u7D22\u6807\u7B7E\u9875"),extra:'Ctrl+K',onClick:()=>runBrowserMenuAction('tab-search')},
-    { key: 'history-search', label:translate("\u6D4F\u89C8\u5386\u53F2\u8BB0\u5F55"),extra:'Ctrl+H',onClick:()=>runBrowserMenuAction('history-search')},
-    { key: 'bookmark-add', label:translate("\u6536\u85CF\u5F53\u524D\u9875"),extra:'Ctrl+D',onClick:()=>runBrowserMenuAction('bookmark-add')},
-    { key: 'bookmarks', label:translate("\u6253\u5F00\u6536\u85CF\u5939"),extra:'Ctrl+Shift+O',onClick:()=>runBrowserMenuAction('bookmarks')},
-    { key: 'bulk-summary', label:translate("\u591A\u94FE\u63A5 AI \u6458\u8981"),extra:'Ctrl+Shift+S',onClick:()=>runBrowserMenuAction('bulk-summary')},
-    { key: 'toggle-notes', label:translate("\u7F51\u9875\u7B14\u8BB0\u9762\u677F"),extra:'Ctrl+Shift+N',onClick:()=>runBrowserMenuAction('toggle-notes')},
-    { key: 'save-workspace', label:translate("\u4FDD\u5B58\u5168\u90E8\u6807\u7B7E\u4E3A\u5DE5\u4F5C\u533A"),extra:'Ctrl+Shift+W',icon:<SaveOutlined/>,disabled:tabs.length===0,onClick:()=>runBrowserMenuAction('save-workspace')},
-    { key: 'translate-page', label:translate("\u7FFB\u8BD1\u5F53\u524D\u7F51\u9875"),icon:<TranslationOutlined/>,disabled:!active.url,onClick:()=>runBrowserMenuAction('translate-page')},
-    { key: 'print', label:translate("\u6253\u5370 / \u4FDD\u5B58\u4E3A PDF"),icon:<PrinterOutlined/>,extra:'Ctrl+P',disabled:!nativeMode,onClick:()=>runBrowserMenuAction('print')},
-    { key: 'devtools', label:translate("\u5F00\u53D1\u8005\u5DE5\u5177"),extra:'F12',disabled:!nativeMode||!advancedSettings.developerToolsEnabled,onClick:()=>runBrowserMenuAction('devtools')},
-    { key: 'screenshot-visible', label:translate("\u622A\u53D6\u53EF\u89C6\u533A\u57DF"),disabled:!nativeMode,onClick:()=>runBrowserMenuAction('screenshot-visible')},
-    { key: 'screenshot-full', label:translate("\u622A\u53D6\u6574\u4E2A\u7F51\u9875"),disabled:!nativeMode,onClick:()=>runBrowserMenuAction('screenshot-full')},
-    { key: 'clear-site-data', label:translate("\u6E05\u9664\u5171\u4EAB\u6D4F\u89C8\u6570\u636E"),disabled:!active.url||!nativeMode,onClick:()=>runBrowserMenuAction('clear-site-data')},
+    { key: 'find', label:translate("在页面中查找"),extra:'Ctrl+F',onClick:()=>runBrowserMenuAction('find')},
+    { key: 'tab-search', label:translate("搜索标签页"),extra:'Ctrl+K',onClick:()=>runBrowserMenuAction('tab-search')},
+    { key: 'history-search', label:translate("浏览历史记录"),extra:'Ctrl+H',onClick:()=>runBrowserMenuAction('history-search')},
+    { key: 'bookmark-add', label:translate("收藏当前页"),extra:'Ctrl+D',onClick:()=>runBrowserMenuAction('bookmark-add')},
+    { key: 'bookmarks', label:translate("打开收藏夹"),extra:'Ctrl+Shift+O',onClick:()=>runBrowserMenuAction('bookmarks')},
+    { key: 'bulk-summary', label:translate("多链接 AI 摘要"),extra:'Ctrl+Shift+S',onClick:()=>runBrowserMenuAction('bulk-summary')},
+    { key: 'toggle-notes', label:translate("网页笔记面板"),extra:'Ctrl+Shift+N',onClick:()=>runBrowserMenuAction('toggle-notes')},
+    { key: 'save-workspace', label:translate("保存全部标签为工作区"),extra:'Ctrl+Shift+W',icon:<SaveOutlined/>,disabled:tabs.length===0,onClick:()=>runBrowserMenuAction('save-workspace')},
+    { key: 'translate-page', label:translate("翻译当前网页"),icon:<TranslationOutlined/>,disabled:!active.url,onClick:()=>runBrowserMenuAction('translate-page')},
+    { key: 'print', label:translate("打印 / 保存为 PDF"),icon:<PrinterOutlined/>,extra:'Ctrl+P',disabled:!nativeMode,onClick:()=>runBrowserMenuAction('print')},
+    { key: 'devtools', label:translate("开发者工具"),extra:'F12',disabled:!nativeMode||!advancedSettings.developerToolsEnabled,onClick:()=>runBrowserMenuAction('devtools')},
+    { key: 'screenshot-visible', label:translate("截取可视区域"),disabled:!nativeMode,onClick:()=>runBrowserMenuAction('screenshot-visible')},
+    { key: 'screenshot-full', label:translate("截取整个网页"),disabled:!nativeMode,onClick:()=>runBrowserMenuAction('screenshot-full')},
+    { key: 'clear-site-data', label:translate("清除共享浏览数据"),disabled:!active.url||!nativeMode,onClick:()=>runBrowserMenuAction('clear-site-data')},
     currentBlock
-      ? { key: 'site-unblock', label:translate("\u89E3\u9664\u5C01\u6740\u6B64\u7F51\u7AD9"),icon:<StopOutlined/>,onClick:()=>runBrowserMenuAction('site-unblock')}
-      : { key: 'site-block', label:translate("\u5C01\u6740\u6B64\u7F51\u7AD9"),icon:<StopOutlined/>,disabled:!currentHost||!nativeMode,onClick:()=>runBrowserMenuAction('site-block')},
+      ? { key: 'site-unblock', label:translate("解除封杀此网站"),icon:<StopOutlined/>,onClick:()=>runBrowserMenuAction('site-unblock')}
+      : { key: 'site-block', label:translate("封杀此网站"),icon:<StopOutlined/>,disabled:!currentHost||!nativeMode,onClick:()=>runBrowserMenuAction('site-block')},
     { type: 'divider' },
-    { key: 'new-private', label:translate("\u65B0\u5EFA\u79C1\u5BC6\u7A97\u53E3"),icon:<LockOutlined/>,extra:'Shift+Ctrl+N',onClick:()=>runBrowserMenuAction('new-private')},
-    { key: 'fullscreen', label: isWindowFullscreen ?translate("\u9000\u51FA\u5168\u5C4F"):translate("\u8FDB\u5165\u5168\u5C4F"),icon:<FullscreenOutlined/>,extra:'F11',onClick:()=>runBrowserMenuAction('fullscreen')},
+    { key: 'new-private', label:translate("新建私密窗口"),icon:<LockOutlined/>,extra:'Shift+Ctrl+N',onClick:()=>runBrowserMenuAction('new-private')},
+    { key: 'fullscreen', label: isWindowFullscreen ?translate("退出全屏"):translate("进入全屏"),icon:<FullscreenOutlined/>,extra:'F11',onClick:()=>runBrowserMenuAction('fullscreen')},
     { type: 'divider' },
     { key: 'zoom', label: <Space><Button size="small" onClick={event => { event.stopPropagation(); changeZoom(active.id, -0.1) }}>−</Button><span className="browser-zoom-value">{Math.round((zoomLevels[active.id] ?? browserAppearance.defaultZoom) * 100)}%</span><Button size="small" onClick={event => { event.stopPropagation(); changeZoom(active.id, 0.1) }}>+</Button></Space> },
-    { key: 'zoom-reset', label:translate("\u91CD\u7F6E\u7F29\u653E"),extra:'Ctrl+0',onClick:()=>setZoom(active.id,1)},
+    { key: 'zoom-reset', label:translate("重置缩放"),extra:'Ctrl+0',onClick:()=>setZoom(active.id,1)},
   ]) as MenuProps['items']
 
   const bookmarkBarPanel =(
     <div className="bookmark-bar-panel" role="menu">
       {bookmarkActions.bookmarks.length === 0
-        ? <Typography.Text type="secondary">{translate("\u8FD8\u6CA1\u6709\u6536\u85CF\uFF0CCtrl+D \u6536\u85CF\u5F53\u524D\u9875")}</Typography.Text>
+        ? <Typography.Text type="secondary">{translate("还没有收藏，Ctrl+D 收藏当前页")}</Typography.Text>
         : <ul>
             {bookmarkActions.bookmarks.slice(0, 8).map(            (bookmark
 
@@ -1439,7 +1439,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
                   <Typography.Text type="secondary" className="bookmark-bar-panel__url">{bookmark.url}</Typography.Text>
                 </button>
               </li>))}
-            {bookmarkActions.bookmarks.length > 8 && <li><button type="button" onClick={() => setBookmarkPaletteOpen(true)}>{translate("\u67E5\u770B\u5168\u90E8")} {bookmarkActions.bookmarks.length} {translate("\u6761\u2026")}</button></li>}
+            {bookmarkActions.bookmarks.length > 8 && <li><button type="button" onClick={() => setBookmarkPaletteOpen(true)}>{translate("查看全部")} {bookmarkActions.bookmarks.length} {translate("条\u2026")}</button></li>}
           </ul>}
     </div>);const downloadPanel=(<DownloadSummary feed={downloads.map((item             )=>({...item,targetPath:item.targetPath??item.path}))}
       inFlight={downloads.filter(item => item.status === 'downloading').length}
@@ -1464,38 +1464,38 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     },
     downloads: {
       subtitle: downloads.some(item => item.status === 'downloading')
-        ?translate("{value0} \u4E2A\u6B63\u5728\u4E0B\u8F7D / \u4E0A\u9650 {value1}",{value0:downloads.filter(item=>item.status==='downloading').length,value1:downloadQueue.maxConcurrent})
-        : downloadQueue.pending.length > 0 ?translate("{value0} \u4E2A\u6392\u961F\u4E2D",{value0:downloadQueue.pending.length}):translate("\u6682\u65E0\u6D3B\u52A8"),
+        ?translate("{value0} 个正在下载 / 上限 {value1}",{value0:downloads.filter(item=>item.status==='downloading').length,value1:downloadQueue.maxConcurrent})
+        : downloadQueue.pending.length > 0 ?translate("{value0} 个排队中",{value0:downloadQueue.pending.length}):translate("暂无活动"),
       items: downloads.slice(0, 5).map(        (item
 
 
 
 
 
-       )                                    =>( {name:item.fileName||item.url.split('/').pop()||translate("\u4E0B\u8F7D\u6587\u4EF6"),status:item.status,detail:item.totalBytes?`${item.status} · ${Math.min(100,Math.round(((item.receivedBytes??0)/item.totalBytes)*100))}%`:item.status,})),
+       )                                    =>( {name:item.fileName||item.url.split('/').pop()||translate("下载文件"),status:item.status,detail:item.totalBytes?`${item.status} · ${Math.min(100,Math.round(((item.receivedBytes??0)/item.totalBytes)*100))}%`:item.status,})),
     },
     resources: {
-      subtitle: mediaResources.length ?translate("\u53D1\u73B0 {value0} \u9879",{value0:mediaResources.length}):translate("\u624B\u52A8\u626B\u63CF\u5F53\u524D\u9875"),
+      subtitle: mediaResources.length ?translate("发现 {value0} 项",{value0:mediaResources.length}):translate("手动扫描当前页"),
       sections: [
-        { title:translate("\u5A92\u4F53\u8D44\u6E90"),items:mediaResources.slice(0,10).map((item                                                                                                               )=>({label:`${mediaKindLabel[item.kind]} · ${item.fileName}`,value:item.size?formatProcessBytes(item.size):translate("\u672A\u77E5\u5927\u5C0F"),url:item.url}))},
-        { title:translate("\u6807\u7B7E\u9875"),items:[
-          { label:translate("\u603B\u6807\u7B7E\u9875"),value:resourceStats.totalTabs},
-          { label:translate("\u6D3B\u8DC3 WebView"),value:resourceStats.liveTabs},
-          { label:translate("\u5DF2\u4F11\u7720"),value:resourceStats.suspendedTabs},
-          { label:translate("\u56FA\u5B9A"),value:resourceStats.pinnedTabs},
-          { label:translate("\u64AD\u653E\u97F3\u9891"),value:resourceStats.audibleTabs},
-          { label:translate("\u4E0B\u8F7D\u4E2D"),value:resourceStats.downloadingTabs},
-          { label:translate("\u6700\u4E45\u672A\u6D3B\u8DC3"),value:translate("{value0} \u5206\u949F",{value0:resourceStats.idleMinutes})},
+        { title:translate("媒体资源"),items:mediaResources.slice(0,10).map((item                                                                                                               )=>({label:`${mediaKindLabel[item.kind]} · ${item.fileName}`,value:item.size?formatProcessBytes(item.size):translate("未知大小"),url:item.url}))},
+        { title:translate("标签页"),items:[
+          { label:translate("总标签页"),value:resourceStats.totalTabs},
+          { label:translate("活跃 WebView"),value:resourceStats.liveTabs},
+          { label:translate("已休眠"),value:resourceStats.suspendedTabs},
+          { label:translate("固定"),value:resourceStats.pinnedTabs},
+          { label:translate("播放音频"),value:resourceStats.audibleTabs},
+          { label:translate("下载中"),value:resourceStats.downloadingTabs},
+          { label:translate("最久未活跃"),value:translate("{value0} 分钟",{value0:resourceStats.idleMinutes})},
         ]},
-        { title:translate("\u8FDB\u7A0B\u5185\u5B58"),items:[
-          { label:translate("\u5DE5\u4F5C\u96C6"),value:formatProcessBytes(memory?.workingSetBytes)},
-          { label:translate("\u63D0\u4EA4\u5927\u5C0F"),value:formatProcessBytes(memory?.commitBytes)},
-          { label:translate("\u5CF0\u503C"),value:formatProcessBytes(memory?.peakWorkingSetBytes)},
-          { label:translate("\u7F3A\u9875\u4E2D\u65AD"),value:memory?.pageFaultCount==null?'—':memory.pageFaultCount.toLocaleString('zh-CN')},
+        { title:translate("进程内存"),items:[
+          { label:translate("工作集"),value:formatProcessBytes(memory?.workingSetBytes)},
+          { label:translate("提交大小"),value:formatProcessBytes(memory?.commitBytes)},
+          { label:translate("峰值"),value:formatProcessBytes(memory?.peakWorkingSetBytes)},
+          { label:translate("缺页中断"),value:memory?.pageFaultCount==null?'—':memory.pageFaultCount.toLocaleString('zh-CN')},
         ]},
       ],
       canScan: nativeMode,
-      hint:translate("LRU \u9608\u503C {value0} \u4E2A WebView\uFF1B\u7A7A\u95F2 {value1} \u5206\u949F\u81EA\u52A8\u4F11\u7720\u3002",{value0:advancedSettings.maxLiveWebviews,value1:advancedSettings.idleSuspendMinutes}),
+      hint:translate("LRU 阈值 {value0} 个 WebView；空闲 {value1} 分钟自动休眠。",{value0:advancedSettings.maxLiveWebviews,value1:advancedSettings.idleSuspendMinutes}),
     },
   }), [advancedSettings.idleSuspendMinutes, advancedSettings.maxLiveWebviews, bookmarkActions.bookmarks, downloadQueue.maxConcurrent, downloadQueue.pending.length, downloads, mediaResources, memory, nativeMode, resourceStats])
 
@@ -1525,7 +1525,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       setToolbarOverlay(open ? kind : null)
       void setNativeToolbarPanel(active.id, open, kind, nativePanelPayloads[kind]).catch(() => {
         setToolbarOverlay(null)
-        messageApi.error(translate("\u6D6E\u5C42\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u542F\u684C\u9762\u5E94\u7528\u540E\u91CD\u8BD5"))
+        messageApi.error(translate("浮层加载失败，请重启桌面应用后重试"))
       })
     }
     document.addEventListener('pointerdown', stopPointerDown, true)
@@ -1545,7 +1545,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     if (!nativeMode) return
     const openNativeMenu = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return
-      const trigger = event.target.closest<HTMLButtonElement>(translate("button[aria-label=\"\u6D4F\u89C8\u5668\u83DC\u5355\"]"))
+      const trigger = event.target.closest<HTMLButtonElement>(translate("button[aria-label=\"浏览器菜单\"]"))
       if (!trigger) return
       event.preventDefault()
       event.stopImmediatePropagation()
@@ -1554,7 +1554,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       const restore = fullBounds ? resizeNativeTab(active.id, fullBounds) : Promise.resolve()
       void restore.then(() => setNativeToolbarMenu(active.id, true, zoomPercent)).catch(error => {
         diagnosticLog('browser.toolbar-menu.open-failed', 'error', { tabId: active.id, error })
-        messageApi.error(translate("\u6D4F\u89C8\u5668\u83DC\u5355\u6253\u5F00\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+        messageApi.error(translate("浏览器菜单打开失败：{value0}",{value0:String(error)}))
       })
     }
     document.addEventListener('click', openNativeMenu, true)
@@ -1563,54 +1563,54 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   const resourcePanel =(
     <div className="resource-panel" role="status">
-      <div className="resource-panel__header"><Typography.Text type="secondary" className="resource-panel__title">{translate("\u5A92\u4F53\u8D44\u6E90")}</Typography.Text><Button size="small"loading={resourceScanBusy}onClick={()=>void scanCurrentResources()}>{translate("\u626B\u63CF\u5F53\u524D\u9875")}</Button></div>
+      <div className="resource-panel__header"><Typography.Text type="secondary" className="resource-panel__title">{translate("媒体资源")}</Typography.Text><Button size="small" loading={resourceScanBusy} onClick={()=>void scanCurrentResources()}>{translate("扫描当前页")}</Button></div>
       <ul className="resource-panel__media">
-        {mediaResources.slice(0, 20).map(resource => <li key={resource.url} className="resource-panel__media-item"><div><Tag>{mediaKindLabel[resource.kind]}</Tag><b title={resource.url}>{resource.fileName}</b><small>{resource.size ? formatProcessBytes(resource.size) :translate("\u672A\u77E5\u5927\u5C0F")}</small></div><Space size={2}><Button type="text"size="small"icon={<CopyOutlined/>}aria-label={translate("\u590D\u5236\u8D44\u6E90\u94FE\u63A5")}onClick={()=>void navigator.clipboard.writeText(resource.url)}/><Button type="text"size="small"icon={<DownloadOutlined/>}aria-label={translate("\u4E0B\u8F7D\u8D44\u6E90")}onClick={()=>void downloadMediaResource(resource)}/></Space></li>)}
-        {!mediaResources.length && <li className="resource-panel__empty">{translate("\u626B\u63CF\u9875\u9762\u4E2D\u5DF2\u52A0\u8F7D\u7684\u89C6\u9891\u3001\u97F3\u9891\u3001\u6E05\u5355\u3001\u5B57\u5E55\u4E0E\u6587\u6863\u3002")}</li>}
+        {mediaResources.slice(0, 20).map(resource => <li key={resource.url} className="resource-panel__media-item"><div><Tag>{mediaKindLabel[resource.kind]}</Tag><b title={resource.url}>{resource.fileName}</b><small>{resource.size ? formatProcessBytes(resource.size) :translate("未知大小")}</small></div><Space size={2}><Button type="text" size="small" icon={<CopyOutlined/>} aria-label={translate("复制资源链接")} onClick={()=>void navigator.clipboard.writeText(resource.url)}/><Button type="text" size="small" icon={<DownloadOutlined/>} aria-label={translate("下载资源")} onClick={()=>void downloadMediaResource(resource)}/></Space></li>)}
+        {!mediaResources.length && <li className="resource-panel__empty">{translate("扫描页面中已加载的视频、音频、清单、字幕与文档。")}</li>}
       </ul>
-      <Typography.Text type="secondary" className="resource-panel__title resource-panel__title--sub">{translate("\u6027\u80FD\u4E0E\u9690\u79C1")}</Typography.Text>
+      <Typography.Text type="secondary" className="resource-panel__title resource-panel__title--sub">{translate("性能与隐私")}</Typography.Text>
       <ul>
-        <li><span>{translate("\u603B\u6807\u7B7E\u9875")}</span><b>{resourceStats.totalTabs}</b></li>
-        <li><span>{translate("\u6D3B\u8DC3 WebView")}</span><b>{resourceStats.liveTabs}</b></li>
-        <li><span>{translate("\u5DF2\u4F11\u7720")}</span><b>{resourceStats.suspendedTabs}</b></li>
-        <li><span>{translate("\u56FA\u5B9A")}</span><b>{resourceStats.pinnedTabs}</b></li>
-        <li><span>{translate("\u64AD\u653E\u97F3\u9891")}</span><b>{resourceStats.audibleTabs}</b></li>
-        <li><span>{translate("\u4E0B\u8F7D\u4E2D")}</span><b>{resourceStats.downloadingTabs}</b></li>
-        <li><span>{translate("\u6700\u4E45\u672A\u6D3B\u8DC3")}</span><b>{resourceStats.idleMinutes} {translate("\u5206\u949F")}</b></li>
+        <li><span>{translate("总标签页")}</span><b>{resourceStats.totalTabs}</b></li>
+        <li><span>{translate("活跃 WebView")}</span><b>{resourceStats.liveTabs}</b></li>
+        <li><span>{translate("已休眠")}</span><b>{resourceStats.suspendedTabs}</b></li>
+        <li><span>{translate("固定")}</span><b>{resourceStats.pinnedTabs}</b></li>
+        <li><span>{translate("播放音频")}</span><b>{resourceStats.audibleTabs}</b></li>
+        <li><span>{translate("下载中")}</span><b>{resourceStats.downloadingTabs}</b></li>
+        <li><span>{translate("最久未活跃")}</span><b>{resourceStats.idleMinutes} {translate("分钟")}</b></li>
       </ul>
-      <Typography.Text type="secondary" className="resource-panel__title resource-panel__title--sub">{translate("\u9690\u79C1\u62E6\u622A")}</Typography.Text>
+      <Typography.Text type="secondary" className="resource-panel__title resource-panel__title--sub">{translate("隐私拦截")}</Typography.Text>
       <ul className="resource-panel__privacy">
-        <li><span>{translate("\u5B50\u8D44\u6E90\u62E6\u622A")}</span><b>{privacyCap?.networkSubresourceBlocking?translate("\u5DF2\u5F00\u542F"):translate("\u672A\u542F\u7528")}</b></li>
-        <li><span>{translate("\u5DF2\u963B\u65AD\u8BF7\u6C42")}</span><b>{privacyStats.blocked}</b></li>
-        <li><span>{translate("\u5DF2\u653E\u884C\u8BF7\u6C42")}</span><b>{privacyStats.allowed}</b></li>
-        <li><span>{translate("\u79C1\u5BC6\u6807\u7B7E")}</span><b>{active.private?translate("\u662F"):translate("\u5426")}</b></li>
+        <li><span>{translate("子资源拦截")}</span><b>{privacyCap?.networkSubresourceBlocking?translate("已开启"):translate("未启用")}</b></li>
+        <li><span>{translate("已阻断请求")}</span><b>{privacyStats.blocked}</b></li>
+        <li><span>{translate("已放行请求")}</span><b>{privacyStats.allowed}</b></li>
+        <li><span>{translate("私密标签")}</span><b>{active.private?translate("是"):translate("否")}</b></li>
         {blockEvents.slice(0, 5).map(         (event
 
 
 
 
-        )                                  =>(<li key={event.id}className="resource-panel__privacy-item">
+        )                                  =>(<li key={event.id} className="resource-panel__privacy-item">
             <span>{event.resourceType}</span>
             <b title={event.requestHost}>{event.requestHost}</b>
           </li>))}
-        {blockEvents.length === 0 &&(<li className="resource-panel__privacy-item"><span>{translate("\u6700\u8FD1\u65E0\u963B\u65AD")}</span><b>—</b></li>)}
+        {blockEvents.length === 0 &&(<li className="resource-panel__privacy-item"><span>{translate("最近无阻断")}</span><b>—</b></li>)}
       </ul>
-      <Typography.Text type="secondary" className="resource-panel__title resource-panel__title--sub">{translate("\u8FDB\u7A0B\u5185\u5B58")}</Typography.Text>
+      <Typography.Text type="secondary" className="resource-panel__title resource-panel__title--sub">{translate("进程内存")}</Typography.Text>
       <ul className="resource-panel__memory">
-        <li><span>{translate("\u5DE5\u4F5C\u96C6")}</span><b>{formatProcessBytes(memory?.workingSetBytes)}</b></li>
-        <li><span>{translate("\u63D0\u4EA4\u5927\u5C0F")}</span><b>{formatProcessBytes(memory?.commitBytes)}</b></li>
-        <li><span>{translate("\u5CF0\u503C")}</span><b>{formatProcessBytes(memory?.peakWorkingSetBytes)}</b></li>
+        <li><span>{translate("工作集")}</span><b>{formatProcessBytes(memory?.workingSetBytes)}</b></li>
+        <li><span>{translate("提交大小")}</span><b>{formatProcessBytes(memory?.commitBytes)}</b></li>
+        <li><span>{translate("峰值")}</span><b>{formatProcessBytes(memory?.peakWorkingSetBytes)}</b></li>
         <li>
-          <span>{translate("\u7F3A\u9875\u4E2D\u65AD")}</span>
+          <span>{translate("缺页中断")}</span>
           <b>{memory?.pageFaultCount == null ? '—' : memory.pageFaultCount.toLocaleString('zh-CN')}</b>
         </li>
       </ul>
-      {processMemory.unsupported &&(<Typography.Paragraph type="secondary"className="resource-panel__hint">{translate("\u5F53\u524D\u5E73\u53F0\u672A\u63D0\u4F9B\u8FDB\u7A0B\u5185\u5B58\u67E5\u8BE2")} 
+      {processMemory.unsupported &&(<Typography.Paragraph type="secondary" className="resource-panel__hint">{translate("当前平台未提供进程内存查询")} 
 
         </Typography.Paragraph>)
        }
-      <Typography.Paragraph type="secondary" className="resource-panel__hint">{translate("LRU \u9608\u503C")} 
-               {advancedSettings.maxLiveWebviews} {translate("\u4E2A WebView\uFF1B\u7A7A\u95F2")} {advancedSettings.idleSuspendMinutes} {translate("\u5206\u949F\u81EA\u52A8\u4F11\u7720\uFF1B\u8FDB\u7A0B\u5185\u5B58\u6BCF 5 \u79D2\u5237\u65B0\u3002")} 
+      <Typography.Paragraph type="secondary" className="resource-panel__hint">{translate("LRU 阈值")} 
+               {advancedSettings.maxLiveWebviews} {translate("个 WebView；空闲")} {advancedSettings.idleSuspendMinutes} {translate("分钟自动休眠；进程内存每 5 秒刷新。")} 
       </Typography.Paragraph>
     </div>)
 
@@ -1627,12 +1627,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   function openSaveWorkspaceDialog() {
     if (tabs.length === 0) {
-      messageApi.warning(translate("\u5F53\u524D\u6CA1\u6709\u53EF\u4FDD\u5B58\u7684\u6807\u7B7E\u9875"))
+      messageApi.warning(translate("当前没有可保存的标签页"))
       return
     }
     const stamp = new Date()
     const stampLabel = `${stamp.getFullYear()}-${String(stamp.getMonth() + 1).padStart(2, '0')}-${String(stamp.getDate()).padStart(2, '0')} ${String(stamp.getHours()).padStart(2, '0')}:${String(stamp.getMinutes()).padStart(2, '0')}`
-    setSaveWorkspaceName(translate("\u5DE5\u4F5C\u533A {value0}",{value0:stampLabel}))
+    setSaveWorkspaceName(translate("工作区 {value0}",{value0:stampLabel}))
     setSaveWorkspaceDescription('')
     setSaveWorkspaceOpen(true)
   }
@@ -1644,11 +1644,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   async function confirmSaveWorkspace() {
     const name = saveWorkspaceName.trim()
     if (!name) {
-      messageApi.warning(translate("\u8BF7\u586B\u5199\u5DE5\u4F5C\u533A\u540D\u79F0"))
+      messageApi.warning(translate("请填写工作区名称"))
       return
     }
     if (name.length > 80) {
-      messageApi.warning(translate("\u540D\u79F0\u6700\u591A 80 \u4E2A\u5B57\u7B26"))
+      messageApi.warning(translate("名称最多 80 个字符"))
       return
     }
     try {
@@ -1657,17 +1657,17 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         description: saveWorkspaceDescription.trim(),
         payload: snapshotTabsToPayload(tabs),
       })
-      messageApi.success(translate("\u5DF2\u4FDD\u5B58\u5DE5\u4F5C\u533A\u300C{value0}\u300D({value1} \u4E2A\u6807\u7B7E)",{value0:summary.name,value1:summary.tabCount}))
+      messageApi.success(translate("已保存工作区「{value0}」({value1} 个标签)",{value0:summary.name,value1:summary.tabCount}))
       setSaveWorkspaceOpen(false)
     } catch (error) {
-      messageApi.error(translate("\u4FDD\u5B58\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+      messageApi.error(translate("保存失败：{value0}",{value0:String(error)}))
     }
   }
 
   async function applyWorkspaceRestore(workspace: WorkspaceRecord) {
     const result = restoreTabsFromWorkspace(tabs, workspace)
     if (result.tabs.length === 0) {
-      messageApi.warning(translate("\u5DE5\u4F5C\u533A\u4E3A\u7A7A"))
+      messageApi.warning(translate("工作区为空"))
       return
     }
     setTabs(result.tabs)
@@ -1682,7 +1682,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         try {
           const opened = await openNativeTab(tab.id, tab.url!, nextBounds, { private: tab.private })
           if (!opened) {
-            setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: { kind: 'web-mode-required', message:translate("\u7F51\u9875\u6D4F\u89C8\u4EC5\u5728 Tauri \u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528\u3002")}}:item))
+            setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: { kind: 'web-mode-required', message:translate("网页浏览仅在 Tauri 桌面应用中可用。")}}:item))
             return
           }
           setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: undefined } : item))
@@ -1694,7 +1694,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       setTabs(current => current.map(item => item.loading ? { ...item, loading: false } : item))
     }
     void enforceLiveTabLimit(result.activeTabId)
-    messageApi.success(translate("\u5DF2\u6062\u590D\u5DE5\u4F5C\u533A\uFF08+{value0} / \u2212{value1}\uFF09",{value0:result.addedCount,value1:result.removedCount}))
+    messageApi.success(translate("已恢复工作区（+{value0} / \u2212{value1}）",{value0:result.addedCount,value1:result.removedCount}))
   }
 
   async function retryTab(id: string) {
@@ -1716,34 +1716,34 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     if (!url) return
     try {
       await navigator.clipboard.writeText(url)
-      messageApi.success(translate("\u5DF2\u590D\u5236\u94FE\u63A5"))
+      messageApi.success(translate("已复制链接"))
     } catch {
-      messageApi.error(translate("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u590D\u5236"))
+      messageApi.error(translate("复制失败，请手动复制"))
     }
   }
 
   async function writeClipboard(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value)
-      messageApi.success(translate("\u5DF2\u590D\u5236{value0}",{value0:label}))
+      messageApi.success(translate("已复制{value0}",{value0:label}))
     } catch {
-      messageApi.error(translate("\u590D\u5236{value0}\u5931\u8D25",{value0:label}))
+      messageApi.error(translate("复制{value0}失败",{value0:label}))
     }
   }
 
   async function handleContextAction(action: ContextMenuAction, request: { linkUrl: string | null; imageUrl: string | null; selectionText: string; selectionRect?: {x:number;y:number;width:number;height:number}|null }) {
   if (action === 'add-to-notes') {
     const text = request.selectionText?.trim()
-    if (!text) { messageApi.info(translate("\u8BF7\u5148\u9009\u4E2D\u6587\u672C"));return}
+    if (!text) { messageApi.info(translate("请先选中文本"));return}
     const entry: Omit<NoteEntry, 'id' | 'createdAt'> = {
       url: active.url ?? '',
-      title: active.title ?? active.url ??translate("\u672A\u547D\u540D\u9875\u9762"),
+      title: active.title ?? active.url ??translate("未命名页面"),
       text,
       comment: '',
     }
     setNotes(current => appendNoteEntry(current, entry))
     setNotesOpen(true)
-    messageApi.success(translate("\u5DF2\u52A0\u5165\u7B14\u8BB0"),2)
+    messageApi.success(translate("已加入笔记"),2)
     return
   }
     switch (action) {
@@ -1754,19 +1754,19 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       case 'print': if (hasNativeTab(active.id)) void printNativeTab(active.id); return
       case 'view-source':
         try { setSourceView(await captureNativePage(active.id)) }
-        catch (error) { messageApi.error(translate("\u65E0\u6CD5\u8BFB\u53D6\u9875\u9762\u6E90\u4EE3\u7801\uFF1A{value0}",{value0:String(error)}))}
+        catch (error) { messageApi.error(translate("无法读取页面源代码：{value0}",{value0:String(error)}))}
         return
-      case 'copy': await writeClipboard(request.selectionText ?? '',translate("\u9009\u533A"));return
+      case 'copy': await writeClipboard(request.selectionText ?? '',translate("选区"));return
       case 'cut':
       case 'paste':
       case 'select-all':
         try { await editNativePage(active.id, action) }
-        catch (error) { messageApi.error(translate("\u7F16\u8F91\u64CD\u4F5C\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))}
+        catch (error) { messageApi.error(translate("编辑操作失败：{value0}",{value0:String(error)}))}
         return
       case 'search-selection': if (request.selectionText) void navigate(`https://www.google.com/search?q=${encodeURIComponent(request.selectionText)}`); return
       case 'ask-ai':
         await openReader()
-        setAiInitialQuestion(request.selectionText ?translate("\u8BF7\u89E3\u91CA\u8FD9\u6BB5\u5185\u5BB9\uFF1A\n\n{value0}",{value0:request.selectionText}):'')
+        setAiInitialQuestion(request.selectionText ?translate("请解释这段内容：\n\n{value0}",{value0:request.selectionText}):'')
         setAiInitialMode('ask')
         setAiTranslationSource('')
         setAiOpen(true)
@@ -1788,9 +1788,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         else if (!verdict.irreversible) openNewTab(request.linkUrl)
       }
       return
-      case 'copy-link': if (request.linkUrl) await writeClipboard(request.linkUrl,translate("\u94FE\u63A5"));return
+      case 'copy-link': if (request.linkUrl) await writeClipboard(request.linkUrl,translate("链接"));return
       case 'open-image-new': if (request.imageUrl) openNewTab(request.imageUrl); return
-      case 'copy-image': if (request.imageUrl) await writeClipboard(request.imageUrl,translate("\u56FE\u7247\u5730\u5740"));return
+      case 'copy-image': if (request.imageUrl) await writeClipboard(request.imageUrl,translate("图片地址"));return
       case 'save-image':
         if (request.imageUrl) {
           try {
@@ -1807,9 +1807,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
               sourceOrigin: request.imageUrl ? new URL(request.imageUrl).origin : undefined,
               sourceTabLabel: active.id,
             })
-            messageApi.success(translate("\u56FE\u7247\u52A0\u5165\u4E0B\u8F7D\u961F\u5217"))
+            messageApi.success(translate("图片加入下载队列"))
           } catch (error) {
-            messageApi.error(translate("\u4FDD\u5B58\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+            messageApi.error(translate("保存失败：{value0}",{value0:String(error)}))
           }
         }
         return
@@ -1819,13 +1819,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   function openNewTab(url?: string, options: { private?: boolean } = {}) {
     if (url && !isNativeBrowserAvailable()) {
       window.open(url, '_blank', 'noopener,noreferrer')
-      messageApi.info(translate("\u7F51\u9875\u9884\u89C8\u6A21\u5F0F\u4E0B\u5DF2\u4F7F\u7528\u7CFB\u7EDF\u6D4F\u89C8\u5668\u6253\u5F00"))
+      messageApi.info(translate("网页预览模式下已使用系统浏览器打开"))
       return
     }
     const tab = options.private ? makePrivateTab() : newTab()
     const currentId = activeTabIdRef.current
     if (currentId) void hideNativeTab(currentId)
-    if (url) { tab.url = url; tab.title =translate("\u6B63\u5728\u52A0\u8F7D\u2026");tab.loading=true}
+    if (url) { tab.url = url; tab.title =translate("正在加载\u2026");tab.loading=true}
     setTabs(current => {
       const next = current.map(        (item                      )=>({...item,active:false}))
       return [...next, tab]
@@ -1842,7 +1842,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         try {
           const opened = await openNativeTab(tab.id, url, nextBounds, { private: tab.private })
           if (!opened) {
-            setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: { kind: 'web-mode-required', message:translate("\u7F51\u9875\u6D4F\u89C8\u4EC5\u5728 Tauri \u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528\u3002")}}:item))
+            setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: { kind: 'web-mode-required', message:translate("网页浏览仅在 Tauri 桌面应用中可用。")}}:item))
             return
           }
           setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: undefined } : item))
@@ -1888,7 +1888,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       : tab))
     void setNativeMuted(id, nextMuted).catch(() => {
       setTabs(current => current.map(tab => tab.id === id ? { ...tab, muted: target.muted } : tab))
-      messageApi.error(translate("\u65E0\u6CD5\u4FEE\u6539\u7F51\u9875\u97F3\u9891\u72B6\u6001"))
+      messageApi.error(translate("无法修改网页音频状态"))
     })
   }
 
@@ -1924,26 +1924,26 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   function tabMenu(tab: BrowserTab, index: number): MenuProps['items'] {
     const sameDomainCount = idsToCloseForSameDomain(tabs, tab.id).length
     const items: NonNullable<MenuProps['items']> = [
-      { key: 'reload', label:translate("\u91CD\u65B0\u52A0\u8F7D"),disabled:!hasNativeTab(tab.id),onClick:()=>void reloadNativeTab(tab.id)},
-      { key: 'duplicate', label:translate("\u590D\u5236\u6807\u7B7E\u9875"),disabled:!tab.url,onClick:()=>duplicateTab(tab)},
-      { key: 'pin', label: tab.pinned ?translate("\u53D6\u6D88\u56FA\u5B9A"):translate("\u56FA\u5B9A\u6807\u7B7E\u9875"),onClick:()=>togglePinned(tab.id)},
-      { key: 'archive', label:translate("\u5F52\u6863\u6807\u7B7E\u9875"),disabled:!tab.url||tab.private,onClick:()=>{void archiveTabToStore(tab)}},
-      { key: 'mute', label: tab.muted ?translate("\u53D6\u6D88\u9759\u97F3\u6B64\u6807\u7B7E\u9875"):translate("\u9759\u97F3\u6B64\u6807\u7B7E\u9875"),onClick:()=>toggleMuted(tab.id)},
+      { key: 'reload', label:translate("重新加载"),disabled:!hasNativeTab(tab.id),onClick:()=>void reloadNativeTab(tab.id)},
+      { key: 'duplicate', label:translate("复制标签页"),disabled:!tab.url,onClick:()=>duplicateTab(tab)},
+      { key: 'pin', label: tab.pinned ?translate("取消固定"):translate("固定标签页"),onClick:()=>togglePinned(tab.id)},
+      { key: 'archive', label:translate("归档标签页"),disabled:!tab.url||tab.private,onClick:()=>{void archiveTabToStore(tab)}},
+      { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
       { type: 'divider' },
-      { key: 'close', label:translate("\u5173\u95ED\u6807\u7B7E\u9875"),disabled:tab.pinned,onClick:()=>closeTab(tab.id)},
-      { key: 'close-others', label:translate("\u5173\u95ED\u5176\u4ED6\u6807\u7B7E\u9875"),disabled:tabs.length<2,onClick:()=>closeTabs(tabs.filter(item=>item.id!==tab.id&&!item.pinned).map(item=>item.id))},
-      { key: 'close-right', label:translate("\u5173\u95ED\u53F3\u4FA7\u6807\u7B7E\u9875"),disabled:index===tabs.length-1,onClick:()=>closeTabs(tabs.slice(index+1).filter(item=>!item.pinned).map(item=>item.id))},
-      { key: 'close-domain', label: sameDomainCount > 0 ?translate("\u5173\u95ED\u540C\u57DF\u6807\u7B7E\u9875\uFF08{value0} \u4E2A\uFF09",{value0:sameDomainCount}):translate("\u5173\u95ED\u540C\u57DF\u6807\u7B7E\u9875"),disabled:sameDomainCount===0,onClick:()=>closeDomain(tab.id)},
+      { key: 'close', label:translate("关闭标签页"),disabled:tab.pinned,onClick:()=>closeTab(tab.id)},
+      { key: 'close-others', label:translate("关闭其他标签页"),disabled:tabs.length<2,onClick:()=>closeTabs(tabs.filter(item=>item.id!==tab.id&&!item.pinned).map(item=>item.id))},
+      { key: 'close-right', label:translate("关闭右侧标签页"),disabled:index===tabs.length-1,onClick:()=>closeTabs(tabs.slice(index+1).filter(item=>!item.pinned).map(item=>item.id))},
+      { key: 'close-domain', label: sameDomainCount > 0 ?translate("关闭同域标签页（{value0} 个）",{value0:sameDomainCount}):translate("关闭同域标签页"),disabled:sameDomainCount===0,onClick:()=>closeDomain(tab.id)},
     ]
     if (tab.crashed) {
-      items.unshift({ key: 'reopen', label:translate("\u91CD\u65B0\u6253\u5F00\u5D29\u6E83\u7684\u6807\u7B7E\u9875"),onClick:()=>void retryTab(tab.id)})
+      items.unshift({ key: 'reopen', label:translate("重新打开崩溃的标签页"),onClick:()=>void retryTab(tab.id)})
       items.splice(1, 0, { type: 'divider', key: 'crashed-divider' })
     }
     if (tab.private) {
       const insertAt = items.findIndex(item => item && 'key' in item && item.key === 'close-domain')
       const dividerAt = insertAt > 0 ? insertAt + 1 : items.length
       items.splice(dividerAt, 0, { type: 'divider', key: 'private-divider' })
-      items.push({ key: 'private-info', label:translate("\u79C1\u5BC6\u7A97\u53E3\uFF1A\u4E0D\u4F1A\u5199\u5165\u5386\u53F2\u4E0E\u4F1A\u8BDD"),disabled:true})
+      items.push({ key: 'private-info', label:translate("私密窗口：不会写入历史与会话"),disabled:true})
     }
     return items
   }
@@ -2009,7 +2009,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
 
   async function addCurrentAsBookmark() {
     const url = active.url
-    if (!url) { messageApi.warning(translate("\u5F53\u524D\u6807\u7B7E\u9875\u6CA1\u6709\u53EF\u6536\u85CF\u7684\u7F51\u5740"));return}
+    if (!url) { messageApi.warning(translate("当前标签页没有可收藏的网址"));return}
     try {
       await bookmarkActions.add({
         id: crypto.randomUUID(),
@@ -2017,9 +2017,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         title: active.title || url,
         favicon: active.favicon ?? null,
       })
-      messageApi.success(translate("\u5DF2\u52A0\u5165\u6536\u85CF\u5939"),2)
+      messageApi.success(translate("已加入收藏夹"),2)
     } catch (error) {
-      messageApi.error(translate("\u52A0\u5165\u6536\u85CF\u5939\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+      messageApi.error(translate("加入收藏夹失败：{value0}",{value0:String(error)}))
     }
   }
 
@@ -2027,15 +2027,15 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   async function archiveTabToStore(target: BrowserTab) {
     const entry = archivedTabFromBrowserTab(target)
     if (!entry) {
-      messageApi.warning(translate("\u5F53\u524D\u9875\u9762\u65E0\u6CD5\u5F52\u6863\uFF08\u4EC5\u652F\u6301 http/https\uFF0C\u79C1\u5BC6\u6807\u7B7E\u4E0D\u5F52\u6863\uFF09"))
+      messageApi.warning(translate("当前页面无法归档（仅支持 http/https，私密标签不归档）"))
       return
     }
     try {
       await archiveTab(entry)
-      messageApi.success(translate("\u5DF2\u5F52\u6863\uFF0C\u53EF\u5728\u77E5\u8BC6\u5E93\u300C\u5F52\u6863\u300D\u4E2D\u627E\u56DE"),2)
+      messageApi.success(translate("已归档，可在知识库「归档」中找回"),2)
       closeTab(target.id)
     } catch (error) {
-      messageApi.error(translate("\u5F52\u6863\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+      messageApi.error(translate("归档失败：{value0}",{value0:String(error)}))
     }
   }
 
@@ -2046,7 +2046,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     const { listAIProviders } = await import('../../api')
     const providers = await listAIProviders().catch(() => [])
     const providerId = providers[0]?.id
-    if (!providerId) { messageApi.error(translate("\u5C1A\u672A\u914D\u7F6E AI Provider"));return[]}
+    if (!providerId) { messageApi.error(translate("尚未配置 AI Provider"));return[]}
     const entries: Array<{ index: number; total: number; url: string; title: string; status: 'fetched' | 'summarised' | 'skipped' | 'failed'; documentId?: string; message?: string }> = []
     const titles: string[] = []
     const partials: string[] = []
@@ -2058,13 +2058,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
         const html = await response.text()
         const article = extractArticle({ url, html })
         if (!article.markdown?.trim()) {
-          entries.push({ index, total: urls.length, url, title: url, status: 'skipped', message:translate("\u6B63\u6587\u4E3A\u7A7A")})
+          entries.push({ index, total: urls.length, url, title: url, status: 'skipped', message:translate("正文为空")})
           continue
         }
         const request = buildSummaryPrompt(article.markdown, kind, article.title)
         const summaryResponse = await sendChat(providerId, request)
         const summary = summaryResponse.content
-        const saved = await saveDocument({ title:translate("\u6458\u8981\uFF1A{value0}",{value0:article.title||url}),url,markdown:translate("# {value0}\n\n\u6765\u6E90\uFF1A{value1}\n\n## \u6458\u8981\n\n{value2}\n\n## \u6B63\u6587\n\n{value3}",{value0:article.title,value1:url,value2:summary,value3:article.markdown}),tags:['bulk-summary',kind]})
+        const saved = await saveDocument({ title:translate("摘要：{value0}",{value0:article.title||url}),url,markdown:translate("# {value0}\n\n来源：{value1}\n\n## 摘要\n\n{value2}\n\n## 正文\n\n{value3}",{value0:article.title,value1:url,value2:summary,value3:article.markdown}),tags:['bulk-summary',kind]})
         entries.push({ index, total: urls.length, url, title: article.title, status: 'summarised', documentId: saved.id })
         titles.push(article.title)
         partials.push(summary)
@@ -2082,21 +2082,21 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           temperature: 0.2,
         }
         const cross = await sendChat(providerId, crossPrompt)
-        const aggregated =translate("# \u591A\u94FE\u63A5\u7EFC\u8FF0\uFF08{value0} \u6761\uFF09\n\n{value1}\n\n## \u5404\u7BC7\u6458\u8981\n\n{value2}",{value0:titles.length,value1:cross.content,value2:titles.map((title,i)=>`### ${title}\n\n${partials[i]??''}`).join('\n\n')})
+        const aggregated =translate("# 多链接综述（{value0} 条）\n\n{value1}\n\n## 各篇摘要\n\n{value2}",{value0:titles.length,value1:cross.content,value2:titles.map((title,i)=>`### ${title}\n\n${partials[i]??''}`).join('\n\n')})
         const saved = await saveDocument({ title: aggregatedTitleFor(titles), url: urls[0] ?? '', markdown: aggregated, tags: ['multi-summary', kind] })
-        messageApi.success(translate("\u591A\u94FE\u63A5\u7EFC\u8FF0\u5DF2\u5B58\u5165\u77E5\u8BC6\u5E93\uFF08{value0} \u6761\uFF09",{value0:titles.length}),3)
+        messageApi.success(translate("多链接综述已存入知识库（{value0} 条）",{value0:titles.length}),3)
         void saved
       } catch (error) {
-        messageApi.warning(translate("\u4EA4\u53C9\u7EFC\u8FF0\u751F\u6210\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+        messageApi.warning(translate("交叉综述生成失败：{value0}",{value0:String(error)}))
       }
     } else if (titles.length === 1) {
-      messageApi.success(translate("\u5DF2\u5B58\u5165 1 \u6761\u6458\u8981"),2)
+      messageApi.success(translate("已存入 1 条摘要"),2)
     }
     return entries
   }
 
   function aggregatedTitleFor(titles: string[]) {
-    return titles.length > 1 ?translate("\u591A\u94FE\u63A5\u7EFC\u8FF0\uFF08{value0} \u6761\uFF09",{value0:titles.length}):titles[0]??translate("\u591A\u94FE\u63A5\u7EFC\u8FF0")
+    return titles.length > 1 ?translate("多链接综述（{value0} 条）",{value0:titles.length}):titles[0]??translate("多链接综述")
   }
 
   function reopenLastClosed() {
@@ -2108,7 +2108,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     const tab: BrowserTab = {
       id: crypto.randomUUID(),
       url: restored.url,
-      title: restored.title ||translate("\u6B63\u5728\u52A0\u8F7D\u2026"),
+      title: restored.title ||translate("正在加载\u2026"),
       favicon: restored.favicon,
       loading: true,
       active: true,
@@ -2139,7 +2139,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   async function save() {
     const key = 'save-document'
     try {
-      messageApi.open({ key, type: 'loading', content:translate("\u6B63\u5728\u4FDD\u5B58\u5E76\u63D0\u53D6\u2026"),duration:0})
+      messageApi.open({ key, type: 'loading', content:translate("正在保存并提取\u2026"),duration:0})
       let article = readerArticle ?? aiArticle
       if (!article && hasNativeTab(active.id)) article = extractArticle(await captureNativePage(active.id))
       if (!article?.markdown?.trim()) throw new Error('reader_content_not_found')
@@ -2147,15 +2147,15 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       setStarredDocId(created.id)
       for (let attempt = 0; attempt < 30; attempt++) {
         const document = await getDocument(created.id)
-        if (document.status === 'READY') { messageApi.open({ key, type: 'success', content:translate("\u5DF2\u6536\u85CF\u5E76\u5B8C\u6210\u7D22\u5F15")});return}
+        if (document.status === 'READY') { messageApi.open({ key, type: 'success', content:translate("已收藏并完成索引")});return}
         if (document.status === 'FAILED') throw new Error('processing failed')
         await new Promise(resolve => window.setTimeout(resolve, 200))
       }
-      messageApi.open({ key, type: 'info', content:translate("\u5DF2\u6536\u85CF\uFF0C\u540E\u53F0\u4ECD\u5728\u5904\u7406\u4E2D")})
+      messageApi.open({ key, type: 'info', content:translate("已收藏，后台仍在处理中")})
     } catch (error) {
       const kind = classifySaveError(error)
       const contentEmpty = kind === 'reader_content_not_found'
-      messageApi.open({ key, type: contentEmpty ? 'error' : 'warning', content: contentEmpty ?translate("\u65E0\u6CD5\u8BC6\u522B\u8BE5\u9875\u9762\u6B63\u6587\uFF0C\u5DF2\u53D6\u6D88\u4FDD\u5B58"):translate("\u540E\u7AEF\u79BB\u7EBF\u6216\u5904\u7406\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5")})
+      messageApi.open({ key, type: contentEmpty ? 'error' : 'warning', content: contentEmpty ?translate("无法识别该页面正文，已取消保存"):translate("后端离线或处理失败，请稍后重试")})
     }
   }
 
@@ -2167,9 +2167,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       try {
         await toggleStarred(starredDocId, false)
         setStarredDocId(null)
-        messageApi.open({ key, type: 'success', content:translate("\u5DF2\u53D6\u6D88\u6536\u85CF"),duration:2})
+        messageApi.open({ key, type: 'success', content:translate("已取消收藏"),duration:2})
       } catch {
-        messageApi.open({ key, type: 'error', content:translate("\u53D6\u6D88\u6536\u85CF\u5931\u8D25"),duration:2})
+        messageApi.open({ key, type: 'error', content:translate("取消收藏失败"),duration:2})
       }
       return
     }
@@ -2177,18 +2177,18 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   }
 
   async function openReader() {
-    if (!hasNativeTab(active.id)) { messageApi.info(translate("\u8BF7\u5148\u5728\u684C\u9762\u5E94\u7528\u4E2D\u6253\u5F00\u4E00\u4E2A\u7F51\u9875"));return false}
+    if (!hasNativeTab(active.id)) { messageApi.info(translate("请先在桌面应用中打开一个网页"));return false}
     const key = 'reader'
     try {
-      messageApi.open({ key, type: 'loading', content:translate("\u6B63\u5728\u63D0\u53D6\u6B63\u6587\u2026"),duration:0})
+      messageApi.open({ key, type: 'loading', content:translate("正在提取正文\u2026"),duration:0})
       const article = extractArticle(await captureNativePage(active.id))
       await hideNativeTab(active.id)
       setReaderArticle(article)
       setAiArticle(article)
-      messageApi.open({ key, type: 'success', content:translate("\u5DF2\u63D0\u53D6 {value0} \u5B57\u8BCD",{value0:article.wordCount})})
+      messageApi.open({ key, type: 'success', content:translate("已提取 {value0} 字词",{value0:article.wordCount})})
       return true
     } catch {
-      messageApi.open({ key, type: 'error', content:translate("\u65E0\u6CD5\u8BC6\u522B\u8BE5\u9875\u9762\u6B63\u6587")})
+      messageApi.open({ key, type: 'error', content:translate("无法识别该页面正文")})
       return false
     }
   }
@@ -2210,7 +2210,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           return {
             key: tab.id,
             label: <Dropdown menu={{ items: tabMenu(tab, index) }} trigger={['contextMenu']} onOpenChange={open => changeToolbarOverlay('tab-menu', open)}>
-              <Tooltip title={tab.title || tab.url ||( tab.private ?translate("\u65B0\u79C1\u5BC6\u7A97\u53E3"):translate("\u65B0\u6807\u7B7E\u9875"))}mouseEnterDelay={0.6}>
+              <Tooltip title={tab.title || tab.url ||( tab.private ?translate("新私密窗口"):translate("新标签页"))} mouseEnterDelay={0.6}>
               <span
                 draggable
                 onAuxClick={event => { if (event.button === 1 && !tab.pinned) closeTab(tab.id) }}
@@ -2219,17 +2219,17 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
                 onDrop={onTabDrop(index)}
                 onDragEnd={onTabDragEnd}
                 className={`browser-tab-title${isDragging ? ' is-dragging' : ''}${isDropTarget ? ' is-drop-target' : ''}${tab.private ? ' browser-tab-title--private' : ''}`}
-              >{tab.crashed ? <WarningOutlined aria-label={translate("\u6807\u7B7E\u9875\u5D29\u6E83")}className="browser-tab-crash"/>:tab.loading?<span className="browser-tab-loading"role="status"aria-label={translate("\u6B63\u5728\u52A0\u8F7D")}/>:tab.private?<LockOutlined/>:<TabFavicon key={tab.favicon??tab.url}favicon={tab.favicon}pageUrl={tab.url}/>} {tab.muted?<Tooltip title={translate("\u5DF2\u9759\u97F3")}mouseEnterDelay={0.6}><AudioMutedOutlined aria-label={translate("\u5DF2\u9759\u97F3")}className="browser-tab-audio"/></Tooltip>:tab.audible?<Tooltip title={translate("\u6B63\u5728\u64AD\u653E\u97F3\u9891")}mouseEnterDelay={0.6}><SoundOutlined aria-label={translate("\u6B63\u5728\u64AD\u653E\u97F3\u9891")}className="browser-tab-audio"/></Tooltip>:null}<span>{tab.title}</span></span>
+              >{tab.crashed ? <WarningOutlined aria-label={translate("标签页崩溃")} className="browser-tab-crash"/>:tab.loading?<span className="browser-tab-loading" role="status" aria-label={translate("正在加载")}/>:tab.private?<LockOutlined/>:<TabFavicon key={tab.favicon??tab.url} favicon={tab.favicon} pageUrl={tab.url}/>} {tab.muted?<Tooltip title={translate("已静音")} mouseEnterDelay={0.6}><AudioMutedOutlined aria-label={translate("已静音")} className="browser-tab-audio"/></Tooltip>:tab.audible?<Tooltip title={translate("正在播放音频")} mouseEnterDelay={0.6}><SoundOutlined aria-label={translate("正在播放音频")} className="browser-tab-audio"/></Tooltip>:null}<span>{tab.title}</span></span>
               </Tooltip>
             </Dropdown>,
             style: group.groupId ?( { '--tab-group-color': groupColor } as CSSProperties) : undefined,
             className: `${tab.pinned ? 'browser-tab--pinned ' : ''}${tab.suspended ? 'browser-tab--suspended' : ''}${tab.private ? ' browser-tab--private' : ''}${tab.muted ? ' browser-tab--muted' : ''}${tab.crashed ? ' browser-tab--crashed' : ''}${group.groupId ? ' browser-tab--grouped' : ''}`.trim() || undefined,
             closable: tabs.length > 1 && !tab.pinned,
           }
-        })}                                                                                                                                 )()}activeKey={activeTabId}onChange={activateTab}addIcon={<Tooltip title={translate("\u65B0\u5EFA\u6807\u7B7E\u9875 (Ctrl+T)")}><PlusOutlined aria-label={translate("\u65B0\u5EFA\u6807\u7B7E\u9875")}/></Tooltip>}onEdit={(target,action)=>action==='add'?openNewTab():closeTab(String(target))}/></div></TopBarPortal>
-    <div className="browser-toolbar"><Space><Button type="text" aria-label={translate("\u540E\u9000")}title={translate("\u540E\u9000 (Alt+\u2190)")}icon={<ArrowLeftOutlined/>}disabled={!nativeMode||!active.canGoBack}onClick={()=>void navigateHistory(active.id,-1)}/><Button type="text"aria-label={translate("\u524D\u8FDB")}title={translate("\u524D\u8FDB (Alt+\u2192)")}icon={<ArrowRightOutlined/>}disabled={!nativeMode||!active.canGoForward}onClick={()=>void navigateHistory(active.id,1)}/><Button type="text"aria-label={active.loading?translate("\u505C\u6B62\u52A0\u8F7D"):translate("\u91CD\u65B0\u52A0\u8F7D")}title={active.loading?translate("\u505C\u6B62\u52A0\u8F7D (Esc)"):translate("\u91CD\u65B0\u52A0\u8F7D (F5)")}icon={active.loading?<CloseOutlined/>:<ReloadOutlined/>}disabled={!nativeMode}onClick={()=>void(active.loading?stopNativeTab(active.id):reloadNativeTab(active.id))}/>{browserAppearance.toolbar.reader&&<Button type="text"icon={<BookOutlined/>}onClick={()=>void openReader()}>{translate("\u9605\u8BFB\u6A21\u5F0F")}</Button>}</Space><form onSubmit={event=>{event.preventDefault();void navigate(address)}}><AutoComplete value={address}options={addressSuggestions}onChange={setAddress}onSelect={value=>void navigate(value)}><Input ref={addressRef}prefix={<SafetyCertificateOutlined/>}suffix={<button type="button"className={`browser-star${starredDocId?' is-active':''}`}disabled={!active.url}aria-label={starredDocId?translate("\u53D6\u6D88\u6536\u85CF"):translate("\u6536\u85CF\u5F53\u524D\u9875")}title={starredDocId?translate("\u53D6\u6D88\u6536\u85CF\u5F53\u524D\u9875"):translate("\u6536\u85CF\u5F53\u524D\u9875")}onClick={event=>{event.preventDefault();event.stopPropagation();void toggleStarCurrent()}}><StarOutlined/></button>}onFocus={event=>event.currentTarget.select()}placeholder={translate("\u641C\u7D22\u6216\u8F93\u5165\u7F51\u5740")}/></AutoComplete></form>{browserAppearance.toolbar.adBlock&&<Tooltip title={adBlockerEnabled?translate("\u5E7F\u544A\u8FC7\u6EE4\u5DF2\u5F00\u542F\uFF0C\u672C\u6807\u7B7E\u5DF2\u8FC7\u6EE4 {value0} \u9879",{value0:blockedAdsByTab[active.id]??0}):translate("\u5E7F\u544A\u8FC7\u6EE4\u5DF2\u5173\u95ED")}><Tag icon={<SafetyCertificateOutlined/>}color={adBlockerEnabled?'green':'default'}>{blockedAdsByTab[active.id]??0}</Tag></Tooltip>}{browserAppearance.toolbar.ai&&<Button type={aiOpen?'primary':'text'}ghost={aiOpen}icon={<RobotOutlined/>}onClick={toggleAiAssistant}/>} {browserAppearance.toolbar.downloads&&<Popover trigger="click"placement="bottomRight"content={downloadPanel}open={toolbarOverlay==='downloads'}onOpenChange={open=>void changeToolbarOverlay('downloads',open)}><Badge size="small"count={downloads.filter(item=>item.status==='downloading').length}><Button type="text"aria-label={translate("\u4E0B\u8F7D")}icon={<DownloadOutlined/>}/></Badge></Popover>}{browserAppearance.toolbar.bookmarks&&<Popover trigger="click"placement="bottomRight"content={bookmarkBarPanel}open={toolbarOverlay==='bookmarks'}onOpenChange={open=>void changeToolbarOverlay('bookmarks',open)}><Button type="text"aria-label={translate("\u6536\u85CF\u5939")}title={translate("{value0} \u6761\u6536\u85CF (Ctrl+Shift+O)",{value0:bookmarkActions.bookmarks.length})}icon={<StarFilled style={{color:bookmarkActions.bookmarks.length?'#d49a26':undefined}}/>}/></Popover>}{browserAppearance.toolbar.resources&&<Popover trigger="click"placement="bottomRight"content={resourcePanel}open={toolbarOverlay==='resources'}onOpenChange={open=>void changeToolbarOverlay('resources',open)}><Button type="text"aria-label={translate("\u8D44\u6E90\u9762\u677F")}icon={<ThunderboltOutlined/>}title={translate("{value0} \u4E2A WebView / {value1} \u6807\u7B7E",{value0:resourceStats.liveTabs,value1:resourceStats.totalTabs})}/></Popover>}<Dropdown menu={{items:browserMenu}}trigger={['click']}open={!nativeMode&&toolbarOverlay==='menu'}onOpenChange={open=>{if(nativeMode){if(open)void setNativeToolbarMenu(active.id,true,Math.round((zoomLevels[active.id]??browserAppearance.defaultZoom)*100));return}changeToolbarOverlay('menu',open)}}><Button type="text"aria-label={translate("\u6D4F\u89C8\u5668\u83DC\u5355")}icon={<MoreOutlined/>}/></Dropdown></div>
-    {active.private&&<div className="browser-private-bar"><LockOutlined/><strong>{translate("\u79C1\u5BC6\u6D4F\u89C8")}</strong><span>{translate("\u4E0D\u4F1A\u4FDD\u5B58\u5386\u53F2\u8BB0\u5F55\u3001\u5173\u95ED\u8BB0\u5F55\u4E0E\u7AD9\u70B9\u6743\u9650")}</span></div>}
-    {findOpen&&<div className="browser-find"><Input autoFocus allowClear prefix={<SearchOutlined/>} value={findQuery} status={findStatus==='missing'?'error':undefined} placeholder={translate("\u5728\u9875\u9762\u4E2D\u67E5\u627E")}onChange={event=>{setFindQuery(event.target.value);setFindStatus('idle')}}onPressEnter={event=>void runFind(event.shiftKey)}/><Typography.Text type={findStatus==='missing'?'danger':'secondary'}>{findStatus==='missing'?translate("\u672A\u627E\u5230"):findStatus==='found'?translate("\u5DF2\u5B9A\u4F4D"):''}</Typography.Text><Button type="text"aria-label={translate("\u4E0A\u4E00\u4E2A\u5339\u914D\u9879")}icon={<ArrowUpOutlined/>}onClick={()=>void runFind(true)}/><Button type="text"aria-label={translate("\u4E0B\u4E00\u4E2A\u5339\u914D\u9879")}icon={<ArrowDownOutlined/>}onClick={()=>void runFind(false)}/><Button type="text"aria-label={translate("\u5173\u95ED\u67E5\u627E")}icon={<CloseOutlined/>}onClick={closeFind}/></div>}
+        })}                                                                                                                                 )()} activeKey={activeTabId} onChange={activateTab} addIcon={<Tooltip title={translate("新建标签页 (Ctrl+T)")}><PlusOutlined aria-label={translate("新建标签页")}/></Tooltip>} onEdit={(target,action)=>action==='add'?openNewTab():closeTab(String(target))}/></div></TopBarPortal>
+    <div className="browser-toolbar"><Space><Button type="text" aria-label={translate("后退")} title={translate("后退 (Alt+\u2190)")} icon={<ArrowLeftOutlined/>} disabled={!nativeMode||!active.canGoBack} onClick={()=>void navigateHistory(active.id,-1)}/><Button type="text" aria-label={translate("前进")} title={translate("前进 (Alt+\u2192)")} icon={<ArrowRightOutlined/>} disabled={!nativeMode||!active.canGoForward} onClick={()=>void navigateHistory(active.id,1)}/><Button type="text" aria-label={active.loading?translate("停止加载"):translate("重新加载")} title={active.loading?translate("停止加载 (Esc)"):translate("重新加载 (F5)")} icon={active.loading?<CloseOutlined/>:<ReloadOutlined/>} disabled={!nativeMode} onClick={()=>void(active.loading?stopNativeTab(active.id):reloadNativeTab(active.id))}/>{browserAppearance.toolbar.reader&&<Button type="text" icon={<BookOutlined/>} onClick={()=>void openReader()}>{translate("阅读模式")}</Button>}</Space><form onSubmit={event=>{event.preventDefault();void navigate(address)}}><AutoComplete value={address} options={addressSuggestions} onChange={setAddress} onSelect={value=>void navigate(value)}><Input ref={addressRef} prefix={<SafetyCertificateOutlined/>} suffix={<button type="button" className={`browser-star${starredDocId?' is-active':''}`} disabled={!active.url} aria-label={starredDocId?translate("取消收藏"):translate("收藏当前页")} title={starredDocId?translate("取消收藏当前页"):translate("收藏当前页")} onClick={event=>{event.preventDefault();event.stopPropagation();void toggleStarCurrent()}}><StarOutlined/></button>} onFocus={event=>event.currentTarget.select()} placeholder={translate("搜索或输入网址")}/></AutoComplete></form>{browserAppearance.toolbar.adBlock&&<Tooltip title={adBlockerEnabled?translate("广告过滤已开启，本标签已过滤 {value0} 项",{value0:blockedAdsByTab[active.id]??0}):translate("广告过滤已关闭")}><Tag icon={<SafetyCertificateOutlined/>} color={adBlockerEnabled?'green':'default'}>{blockedAdsByTab[active.id]??0}</Tag></Tooltip>}{browserAppearance.toolbar.ai&&<Button type={aiOpen?'primary':'text'} ghost={aiOpen} icon={<RobotOutlined/>} onClick={toggleAiAssistant}/>} {browserAppearance.toolbar.downloads&&<Popover trigger="click" placement="bottomRight" content={downloadPanel} open={toolbarOverlay==='downloads'} onOpenChange={open=>void changeToolbarOverlay('downloads',open)}><Badge size="small" count={downloads.filter(item=>item.status==='downloading').length}><Button type="text" aria-label={translate("下载")} icon={<DownloadOutlined/>}/></Badge></Popover>}{browserAppearance.toolbar.bookmarks&&<Popover trigger="click" placement="bottomRight" content={bookmarkBarPanel} open={toolbarOverlay==='bookmarks'} onOpenChange={open=>void changeToolbarOverlay('bookmarks',open)}><Button type="text" aria-label={translate("收藏夹")} title={translate("{value0} 条收藏 (Ctrl+Shift+O)",{value0:bookmarkActions.bookmarks.length})} icon={<StarFilled style={{color:bookmarkActions.bookmarks.length?'#d49a26':undefined}}/>}/></Popover>}{browserAppearance.toolbar.resources&&<Popover trigger="click" placement="bottomRight" content={resourcePanel} open={toolbarOverlay==='resources'} onOpenChange={open=>void changeToolbarOverlay('resources',open)}><Button type="text" aria-label={translate("资源面板")} icon={<ThunderboltOutlined/>} title={translate("{value0} 个 WebView / {value1} 标签",{value0:resourceStats.liveTabs,value1:resourceStats.totalTabs})}/></Popover>}<Dropdown menu={{items:browserMenu}} trigger={['click']} open={!nativeMode&&toolbarOverlay==='menu'} onOpenChange={open=>{if(nativeMode){if(open)void setNativeToolbarMenu(active.id,true,Math.round((zoomLevels[active.id]??browserAppearance.defaultZoom)*100));return}changeToolbarOverlay('menu',open)}}><Button type="text" aria-label={translate("浏览器菜单")} icon={<MoreOutlined/>}/></Dropdown></div>
+    {active.private&&<div className="browser-private-bar"><LockOutlined/><strong>{translate("私密浏览")}</strong><span>{translate("不会保存历史记录、关闭记录与站点权限")}</span></div>}
+    {findOpen&&<div className="browser-find"><Input autoFocus allowClear prefix={<SearchOutlined/>} value={findQuery} status={findStatus==='missing'?'error':undefined} placeholder={translate("在页面中查找")} onChange={event=>{setFindQuery(event.target.value);setFindStatus('idle')}} onPressEnter={event=>void runFind(event.shiftKey)}/><Typography.Text type={findStatus==='missing'?'danger':'secondary'}>{findStatus==='missing'?translate("未找到"):findStatus==='found'?translate("已定位"):''}</Typography.Text><Button type="text" aria-label={translate("上一个匹配项")} icon={<ArrowUpOutlined/>} onClick={()=>void runFind(true)}/><Button type="text" aria-label={translate("下一个匹配项")} icon={<ArrowDownOutlined/>} onClick={()=>void runFind(false)}/><Button type="text" aria-label={translate("关闭查找")} icon={<CloseOutlined/>} onClick={closeFind}/></div>}
     <PermissionPromptBar prompt={permissionPrompt} />
     <CommandPalette
       open={commandOpen}
@@ -2305,34 +2305,34 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       onUpdate={(id, patch) => setNotes(current => patchNoteEntry(current, id, patch))}
     />
     <Modal
-      title={translate("\u4FDD\u5B58\u5DE5\u4F5C\u533A")}
+      title={translate("保存工作区")}
       open={saveWorkspaceOpen}
       onCancel={() => setSaveWorkspaceOpen(false)}
       onOk={() => void confirmSaveWorkspace()}
-      okText={translate("\u4FDD\u5B58")}
-      cancelText={translate("\u53D6\u6D88")}
+      okText={translate("保存")}
+      cancelText={translate("取消")}
       destroyOnHidden
     >
-      <Typography.Paragraph type="secondary">{translate("\u5DE5\u4F5C\u533A\u4F1A\u8BB0\u4F4F\u5F53\u524D\u6240\u6709\u6807\u7B7E\u9875\u7684 URL\u3001\u6807\u9898\u3001\u56FA\u5B9A/\u9759\u97F3\u72B6\u6001\u3002\u70B9\u51FB\u4FDD\u5B58\u540E\u53EF\u5728\u300C\u8BBE\u7F6E \u2192 \u6D4F\u89C8\u5668 \u2192 \u5DE5\u4F5C\u533A\u300D\u4E2D\u6062\u590D\u6216\u5220\u9664\u3002")}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{translate("工作区会记住当前所有标签页的 URL、标题、固定/静音状态。点击保存后可在「设置 \u2192 浏览器 \u2192 工作区」中恢复或删除。")}</Typography.Paragraph>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <label>
-          <Typography.Text strong>{translate("\u540D\u79F0")}</Typography.Text>
+          <Typography.Text strong>{translate("名称")}</Typography.Text>
           <Input
             value={saveWorkspaceName}
             onChange={event => setSaveWorkspaceName(event.target.value)}
             maxLength={80}
-            placeholder={translate("\u4F8B\u5982\uFF1A\u5DE5\u4F5C\u65E5\u4E0A\u5348")}
+            placeholder={translate("例如：工作日上午")}
             autoFocus
           />
         </label>
         <label>
-          <Typography.Text strong>{translate("\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09")}</Typography.Text>
+          <Typography.Text strong>{translate("描述（可选）")}</Typography.Text>
           <Input.TextArea
             value={saveWorkspaceDescription}
             onChange={event => setSaveWorkspaceDescription(event.target.value)}
             maxLength={240}
             rows={3}
-            placeholder={translate("\u8FD9\u4E2A\u5DE5\u4F5C\u533A\u7528\u6765\u505A\u4EC0\u4E48\uFF1F")}
+            placeholder={translate("这个工作区用来做什么？")}
           />
         </label>
       </div>
@@ -2342,7 +2342,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       <div className={`browser-safety-warn browser-safety-warn--${safetyLevel}`} role="status">
         <SafetyCertificateOutlined />
         <span>
-          {safetyLevel === 'dangerous' ?translate("\u5371\u9669\uFF1A"):translate("\u6CE8\u610F\uFF1A")}
+          {safetyLevel === 'dangerous' ?translate("危险："):translate("注意：")}
           {safetyIssues.map(issue => issue.message).join(' / ')}
         </span>
       </div>)
@@ -2352,7 +2352,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
       : readerArticle
       ? <ReaderArticleView article={readerArticle}/>
       : active.crashed
-        ? <BrowserErrorView tab={{...active, error:{kind:'load-failed',message:translate("\u6B64\u6807\u7B7E\u9875\u7684\u5E95\u5C42\u89C6\u56FE\u5DF2\u505C\u6B62\u54CD\u5E94\uFF0C\u53EF\u70B9\u51FB\"\u91CD\u65B0\u6253\u5F00\"\u6062\u590D\u3002")}}}onRetry={retryActive}onNewTab={openNewTab}onCopy={copyUrl}/>
+        ? <BrowserErrorView tab={{...active, error:{kind:'load-failed',message:translate("此标签页的底层视图已停止响应，可点击\"重新打开\"恢复。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
         : active.error
           ? <BrowserErrorView tab={active} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl} onUnblock={active.error.kind === 'site-blocked' ? () => void unblockAndVisit(active.error?.entryId, active.url) : undefined}/>
         : nativeMode
@@ -2360,7 +2360,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           : active.loading
             ? <div className="web-surface__loading"><LoadingOutlined spin/></div>
             : active.url
-              ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:translate("\u5F53\u524D\u73AF\u5883\u6682\u65F6\u65E0\u6CD5\u6253\u5F00\u6B64\u7F51\u9875\u3002")}}}onRetry={retryActive}onNewTab={openNewTab}onCopy={copyUrl}/>
+              ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:translate("当前环境暂时无法打开此网页。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
               : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
@@ -2374,9 +2374,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     />
     <Modal
       open={clearSiteDataOpen}
-      title={translate("\u6E05\u9664\u5171\u4EAB\u6D4F\u89C8\u6570\u636E")}
-      okText={translate("\u6E05\u9664\u5E76\u91CD\u65B0\u52A0\u8F7D")}
-      cancelText={translate("\u53D6\u6D88")}
+      title={translate("清除共享浏览数据")}
+      okText={translate("清除并重新加载")}
+      cancelText={translate("取消")}
       okButtonProps={{ danger: true }}
       onCancel={() => setClearSiteDataOpen(false)}
       onOk={async () => {
@@ -2384,80 +2384,80 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           await clearNativePageData(active.id)
           setClearSiteDataOpen(false)
           await reloadNativeTab(active.id)
-          messageApi.success(translate("\u5DF2\u6E05\u9664 HTTP-only Cookie\u3001\u78C1\u76D8\u7F13\u5B58\u548C\u5F53\u524D\u7F51\u9875\u5B58\u50A8"))
-        } catch (error) { messageApi.error(translate("\u6E05\u9664\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))}
+          messageApi.success(translate("已清除 HTTP-only Cookie、磁盘缓存和当前网页存储"))
+        } catch (error) { messageApi.error(translate("清除失败：{value0}",{value0:String(error)}))}
       }}
     >
-      <Typography.Paragraph>{translate("\u5C06\u6E05\u9664 WebView2 Profile \u4E2D\u7684\u5168\u90E8 Cookie\uFF08\u5305\u62EC HTTP-only Cookie\uFF09\u3001\u78C1\u76D8\u7F13\u5B58\u3001Cache Storage \u4E0E Service Worker\uFF0C\u5E76\u6E05\u9664\u5F53\u524D\u7F51\u9875\u7684\u672C\u5730\u5B58\u50A8\u3001\u4F1A\u8BDD\u5B58\u50A8\u548C IndexedDB\u3002")}</Typography.Paragraph>
-      <Typography.Paragraph type="secondary">{translate("Cookie \u4E0E\u78C1\u76D8\u7F13\u5B58\u7531\u540C\u4E00\u6D4F\u89C8\u5668 Profile \u5171\u4EAB\uFF0C\u56E0\u6B64\u5176\u4ED6\u5DF2\u6253\u5F00\u7F51\u7AD9\u53EF\u80FD\u9700\u8981\u91CD\u65B0\u767B\u5F55\u6216\u91CD\u65B0\u52A0\u8F7D\u3002")}</Typography.Paragraph>
+      <Typography.Paragraph>{translate("将清除 WebView2 Profile 中的全部 Cookie（包括 HTTP-only Cookie）、磁盘缓存、Cache Storage 与 Service Worker，并清除当前网页的本地存储、会话存储和 IndexedDB。")}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{translate("Cookie 与磁盘缓存由同一浏览器 Profile 共享，因此其他已打开网站可能需要重新登录或重新加载。")}</Typography.Paragraph>
     </Modal>
     <Modal
       open={blockPrompt !== null}
-      title={translate("\u5C01\u6740 {value0}\uFF1F",{value0:blockPrompt?.host??translate("\u6B64\u7F51\u7AD9")})}
-      okText={translate("\u5C01\u6740")}
-      cancelText={translate("\u53D6\u6D88")}
+      title={translate("封杀 {value0}？",{value0:blockPrompt?.host??translate("此网站")})}
+      okText={translate("封杀")}
+      cancelText={translate("取消")}
       okButtonProps={{ danger: true }}
       onCancel={() => setBlockPrompt(null)}
       onOk={() => void confirmBlockCurrentSite()}
     >
-      <Typography.Paragraph>{translate("\u5C01\u6740\u540E\uFF0C\u547D\u4E2D\u540D\u5355\u7684\u9875\u9762\u4F1A\u5728\u53D1\u51FA\u8BF7\u6C42\u524D\u88AB\u53D6\u6D88\uFF1B\u5F00\u5173\u5F00\u542F\u65F6\uFF0C\u5176\u4ED6\u7AD9\u70B9\u5D4C\u5165\u8BE5\u7AD9\u70B9\u7684\u811A\u672C\u3001\u56FE\u7247\u4E0E iframe \u4E5F\u4F1A\u88AB\u963B\u65AD\u3002")}</Typography.Paragraph>
-      <Typography.Paragraph type="secondary">{translate("\u53EF\u968F\u65F6\u5728\u300C\u8BBE\u7F6E \u2192 \u9690\u79C1 \u2192 \u7F51\u7AD9\u5C01\u6740\u300D\u4E2D\u89E3\u9664\uFF0C\u6216\u4F7F\u7528\u83DC\u5355\u91CC\u7684\u300C\u89E3\u9664\u5C01\u6740\u6B64\u7F51\u7AD9\u300D\u3002")}</Typography.Paragraph>
+      <Typography.Paragraph>{translate("封杀后，命中名单的页面会在发出请求前被取消；开关开启时，其他站点嵌入该站点的脚本、图片与 iframe 也会被阻断。")}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{translate("可随时在「设置 \u2192 隐私 \u2192 网站封杀」中解除，或使用菜单里的「解除封杀此网站」。")}</Typography.Paragraph>
       <Typography.Text code>{blockPrompt?.url}</Typography.Text>
     </Modal>
     <Modal
       open={passwordFillRequest !== null}
-      title={translate("\u9009\u62E9\u8981\u586B\u5145\u7684\u8D26\u53F7")}
+      title={translate("选择要填充的账号")}
       footer={null}
       onCancel={() => setPasswordFillRequest(null)}
       destroyOnHidden
     >
       {passwordFillRequest && <Space direction="vertical" style={{width:'100%'}}>
-        <Typography.Text type="secondary">{translate("\u4EC5\u5728\u4F60\u9009\u62E9\u8D26\u53F7\u540E\u624D\u4F1A\u5411\u5F53\u524D HTTPS \u9875\u9762\u586B\u5165\u5BC6\u7801\u3002")}</Typography.Text>
+        <Typography.Text type="secondary">{translate("仅在你选择账号后才会向当前 HTTPS 页面填入密码。")}</Typography.Text>
         <Typography.Text code>{passwordFillRequest.origin}</Typography.Text>
         {passwordFillRequest.credentials.map(credential => <Button key={credential.id} block onClick={async () => {
           const request = passwordFillRequest
           setPasswordFillRequest(null)
           try {
             await fillBrowserPassword(request.tabLabel, credential.id)
-            messageApi.success(translate("\u5DF2\u586B\u5145\u8D26\u53F7 {value0}",{value0:credential.username}))
-          } catch (error) { messageApi.error(translate("\u586B\u5145\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))}
+            messageApi.success(translate("已填充账号 {value0}",{value0:credential.username}))
+          } catch (error) { messageApi.error(translate("填充失败：{value0}",{value0:String(error)}))}
         }}>{credential.username}</Button>)}
       </Space>}
     </Modal>
     <Modal
       open={passwordCandidate !== null}
-      title={passwordCandidate?.existingId ?translate("\u66F4\u65B0\u5BC6\u7801"):translate("\u4FDD\u5B58\u5BC6\u7801")}
-      okText={passwordCandidate?.existingId ?translate("\u66F4\u65B0\u7CFB\u7EDF\u5BC6\u7801\u5E93"):translate("\u4FDD\u5B58\u5230\u7CFB\u7EDF\u5BC6\u7801\u5E93")}
-      cancelText={translate("\u6682\u4E0D\u4FDD\u5B58")}
+      title={passwordCandidate?.existingId ?translate("更新密码"):translate("保存密码")}
+      okText={passwordCandidate?.existingId ?translate("更新系统密码库"):translate("保存到系统密码库")}
+      cancelText={translate("暂不保存")}
       onCancel={() => setPasswordCandidate(null)}
       onOk={async () => {
         if (!passwordCandidate) return
         try {
           await saveBrowserPassword(passwordCandidate)
           setPasswordCandidate(null)
-          messageApi.success(passwordCandidate.existingId ?translate("\u5BC6\u7801\u5DF2\u5B89\u5168\u66F4\u65B0"):translate("\u5BC6\u7801\u5DF2\u5B89\u5168\u4FDD\u5B58\uFF0C\u70B9\u51FB\u5BC6\u7801\u6846\u5373\u53EF\u9009\u62E9\u586B\u5145"))
+          messageApi.success(passwordCandidate.existingId ?translate("密码已安全更新"):translate("密码已安全保存，点击密码框即可选择填充"))
         } catch (error) {
           setPasswordCandidate(null)
-          messageApi.error(translate("\u4FDD\u5B58\u5BC6\u7801\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))
+          messageApi.error(translate("保存密码失败：{value0}",{value0:String(error)}))
         }
       }}
     >
       {passwordCandidate && <Space direction="vertical" style={{width:'100%'}}>
-        <Typography.Text type="secondary">{translate("\u4EC5\u4E3A HTTPS \u7F51\u7AD9\u4FDD\u5B58\uFF1B\u5BC6\u7801\u6B63\u6587\u5199\u5165\u64CD\u4F5C\u7CFB\u7EDF\u51ED\u636E\u4FDD\u9669\u5E93\uFF0C\u6570\u636E\u5E93\u53EA\u4FDD\u5B58\u7F51\u7AD9\u548C\u7528\u6237\u540D\u3002")}</Typography.Text>
+        <Typography.Text type="secondary">{translate("仅为 HTTPS 网站保存；密码正文写入操作系统凭据保险库，数据库只保存网站和用户名。")}</Typography.Text>
         <Typography.Text copyable>{passwordCandidate.origin}</Typography.Text>
-        <Input value={passwordCandidate.username} onChange={event => setPasswordCandidate(current => current ? {...current, username:event.target.value} : current)} placeholder={translate("\u7528\u6237\u540D")}/>
-        <Input.Password value={passwordCandidate.password} onChange={event => setPasswordCandidate(current => current ? {...current, password:event.target.value} : current)} placeholder={translate("\u5BC6\u7801")}/>
+        <Input value={passwordCandidate.username} onChange={event => setPasswordCandidate(current => current ? {...current, username:event.target.value} : current)} placeholder={translate("用户名")}/>
+        <Input.Password value={passwordCandidate.password} onChange={event => setPasswordCandidate(current => current ? {...current, password:event.target.value} : current)} placeholder={translate("密码")}/>
         <Button onClick={async () => {
           const password = await generateBrowserPassword(20)
           setPasswordCandidate(current => current ? {...current, password} : current)
           await navigator.clipboard.writeText(password).catch(() => undefined)
-          messageApi.success(translate("\u5DF2\u751F\u6210\u5F3A\u5BC6\u7801\u5E76\u590D\u5236\uFF0C\u53EF\u7C98\u8D34\u5230\u7F51\u9875\u5BC6\u7801\u6846"))
-        }}>{translate("\u751F\u6210\u5F3A\u5BC6\u7801\u5E76\u590D\u5236")}</Button>
+          messageApi.success(translate("已生成强密码并复制，可粘贴到网页密码框"))
+        }}>{translate("生成强密码并复制")}</Button>
       </Space>}
     </Modal>
     <Modal
       open={sourceView !== null}
-      title={translate("\u9875\u9762\u6E90\u4EE3\u7801")}
+      title={translate("页面源代码")}
       footer={null}
       width="min(1100px, 92vw)"
       onCancel={() => setSourceView(null)}
@@ -2467,21 +2467,21 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     </Modal>
     <Modal
       open={pendingShellOpen !== null}
-      title={translate("\u6253\u5F00\u5916\u90E8\u5E94\u7528")}
-      okText={translate("\u5728\u7CFB\u7EDF\u5E94\u7528\u4E2D\u6253\u5F00")}
-      cancelText={translate("\u53D6\u6D88")}
+      title={translate("打开外部应用")}
+      okText={translate("在系统应用中打开")}
+      cancelText={translate("取消")}
       onCancel={() => setPendingShellOpen(null)}
       onOk={async () => {
         const url = pendingShellOpen
         setPendingShellOpen(null)
         if (!url) return
-        try { await shellOpen(url) } catch (error) { messageApi.error(translate("\u65E0\u6CD5\u542F\u52A8\u5916\u90E8\u5E94\u7528\uFF1A{value0}",{value0:String(error)}))}
+        try { await shellOpen(url) } catch (error) { messageApi.error(translate("无法启动外部应用：{value0}",{value0:String(error)}))}
       }}
     >
       {pendingShellOpen &&  (()=> {
         const verdict = classifyShellOpenUrl(pendingShellOpen)
         return <>
-            <Typography.Paragraph>{translate("\u5373\u5C06\u79BB\u5F00\u6D4F\u89C8\u5668\uFF0C\u7531")} <b>{describeScheme(verdict.scheme)}</b> {translate("\u5904\u7406\uFF1A")}</Typography.Paragraph>
+            <Typography.Paragraph>{translate("即将离开浏览器，由")} <b>{describeScheme(verdict.scheme)}</b> {translate("处理：")}</Typography.Paragraph>
             <Typography.Text code className="browser-error__url">{pendingShellOpen}</Typography.Text>
           </>
       }                      )()}

@@ -86,25 +86,25 @@ export function HistorySearchPalette({ open, history, onClose, onOpen, onRemove,
           ref={inputRef}
           value={query}
           onChange={event => { setQuery(event.target.value); setHighlight(0) }}
-          placeholder={t("\u641C\u7D22\u5386\u53F2\u8BB0\u5F55\uFF08\u6807\u9898\u6216\u7F51\u5740\uFF09")}
+          placeholder={t("搜索历史记录（标题或网址）")}
           size="large"
           prefix={<GlobalOutlined />}
-          suffix={<Typography.Text type="secondary">{t("\u2191\u2193 \u9009\u62E9 \xB7 Enter \u6253\u5F00 \xB7 Del \u5220\u9664")}</Typography.Text>}
+          suffix={<Typography.Text type="secondary">{t("\u2191\u2193 选择 \xB7 Enter 打开 \xB7 Del 删除")}</Typography.Text>}
         />
-        <Popconfirm title={t("\u6E05\u7A7A\u5168\u90E8\u5386\u53F2\u8BB0\u5F55\uFF1F")}okText={t("\u6E05\u7A7A")}cancelText={t("\u53D6\u6D88")}okButtonProps={{danger:true}}onConfirm={()=>{onClear();onClose()}}>
-          <Button danger>{t("\u5168\u90E8\u6E05\u7A7A")}</Button>
+        <Popconfirm title={t("清空全部历史记录？")} okText={t("清空")} cancelText={t("取消")} okButtonProps={{danger:true}} onConfirm={()=>{onClear();onClose()}}>
+          <Button danger>{t("全部清空")}</Button>
         </Popconfirm>
       </div>
       <div className="tab-search-palette__list">
         {rows.length === 0
-          ? <div className="tab-search-palette__empty">{t("\u6CA1\u6709\u5339\u914D\u7684\u5386\u53F2\u8BB0\u5F55")}</div>
+          ? <div className="tab-search-palette__empty">{t("没有匹配的历史记录")}</div>
           : <List
               dataSource={rows}
               size="small"
               renderItem={(row, index) => <HistoryRow item={row} active={highlight === index} onHover={() => setHighlight(index)} onOpen={() => { onOpen(row); onClose() }} onRemove={() => onRemove(row)} />}
             />}
-        {rows.length > 0 && current && <Typography.Text type="secondary" className="tab-search-palette__hint">{t("\u663E\u793A")} 
-             {rows.length} / {history.length} {t("\u6761\u5386\u53F2")} 
+        {rows.length > 0 && current && <Typography.Text type="secondary" className="tab-search-palette__hint">{t("显示")} 
+             {rows.length} / {history.length} {t("条历史")} 
         </Typography.Text>}
       </div>
     </div>
@@ -124,7 +124,7 @@ function HistoryRow({ item, active, onHover, onOpen, onRemove }: HistoryRowProps
     className={`tab-search-row${active ? ' is-active' : ''}`}
     onMouseEnter={onHover}
     onClick={onOpen}
-    actions={[<Button key="remove" type="text" danger icon={<DeleteOutlined />} aria-label={t("\u4ECE\u5386\u53F2\u4E2D\u5220\u9664")}onClick={event=>{event.stopPropagation();onRemove()}}/>]}
+    actions={[<Button key="remove" type="text" danger icon={<DeleteOutlined />} aria-label={t("从历史中删除")} onClick={event=>{event.stopPropagation();onRemove()}}/>]}
   >
     <List.Item.Meta
       avatar={<GlobalOutlined />}

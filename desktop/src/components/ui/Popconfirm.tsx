@@ -17,7 +17,7 @@ export interface PopconfirmProps {
   onCancel?: () => void
 }
 
-export function Popconfirm({ children, title, description, okText =t("\u786E\u5B9A"),cancelText=t("\u53D6\u6D88"),okButtonProps,disabled,onConfirm,onCancel}:PopconfirmProps){
+export function Popconfirm({ children, title, description, okText =t("确定"),cancelText = t("取消"),okButtonProps,disabled,onConfirm,onCancel}:PopconfirmProps){
   const [open, setOpen] = useState(false)
   useModalOverlayLifecycle(open)
   if (disabled) return children

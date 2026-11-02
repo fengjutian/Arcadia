@@ -17,7 +17,7 @@ export function classifyNavigationError(error: unknown): BrowserTabError {
   if (blockedMatch) {
     return {
       kind: 'site-blocked',
-      message:t("\u8BE5\u7F51\u7AD9\u5DF2\u88AB\u5C01\u6740\uFF08{value0}\uFF09",{value0:blockedMatch[2]}),
+      message:t("该网站已被封杀（{value0}）",{value0:blockedMatch[2]}),
       host: blockedMatch[1],
       ruleHost: blockedMatch[2],
       entryId: blockedMatch[3],
@@ -26,7 +26,7 @@ export function classifyNavigationError(error: unknown): BrowserTabError {
   const protocolMatch = /^(external|blocked|unknown)-protocol:([a-z]+)/i.exec(message)
   if (protocolMatch) {
     const scheme = protocolMatch[2]
-    return { kind: 'unsupported-protocol', message:t("\u4E0D\u652F\u6301\u7684\u534F\u8BAE\uFF1A{value0}://\uFF08\u5E94\u7528\u4EC5\u6253\u5F00 http/https \u94FE\u63A5\uFF09",{value0:scheme})}
+    return { kind: 'unsupported-protocol', message:t("不支持的协议：{value0}://（应用仅打开 http/https 链接）",{value0:scheme})}
   }
   // A missing view is a lifecycle problem, not a network problem — never show
   // the raw Tauri/Rust string to the user.
@@ -37,7 +37,7 @@ export function classifyNavigationError(error: unknown): BrowserTabError {
 }
 
 export function safeFileName(value: string): string {
-  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '').slice(0, 100) ||t("\u7F51\u9875")
+  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '').slice(0, 100) ||t("网页")
 }
 
 export async function diagnoseNavigationError(url: string, error: unknown): Promise<BrowserTabError> {
@@ -47,7 +47,7 @@ export async function diagnoseNavigationError(url: string, error: unknown): Prom
     basic.kind === 'site-blocked' ||
     basic.kind === 'tab-view-missing'
   ) return basic
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { kind:'offline', message:t("\u8BBE\u5907\u5F53\u524D\u5904\u4E8E\u79BB\u7EBF\u72B6\u6001\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u8FDE\u63A5\u3002")}
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { kind:'offline', message:t("设备当前处于离线状态，请检查网络连接。")}
   try {
     const result = await diagnoseNativeNavigation(url)
     if (result.kind === 'reachable') return basic

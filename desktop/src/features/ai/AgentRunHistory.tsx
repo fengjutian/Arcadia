@@ -40,8 +40,8 @@ export function AgentRunHistory({ runs }: { runs: readonly AgentRun[] }) {
       image={Empty.PRESENTED_IMAGE_SIMPLE}
       description={
         <div>
-          <div>{t("\u6682\u65E0\u6DF1\u5EA6\u7814\u7A76\u8BB0\u5F55")}</div>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t("\u666E\u901A\u95EE\u7B54\u4FDD\u5B58\u5728\u5DE6\u4FA7\u5F53\u524D\u5BF9\u8BDD\u4E2D\uFF1B\u8FD9\u91CC\u53EA\u8BB0\u5F55\u70B9\u51FB\u201C\u6DF1\u5EA6\u7814\u7A76\u201D\u540E\u6267\u884C\u7684\u4EFB\u52A1\u3002")} 
+          <div>{t("暂无深度研究记录")}</div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t("普通问答保存在左侧当前对话中；这里只记录点击\u201C深度研究\u201D后执行的任务。")} 
 
           </Typography.Text>
         </div>
@@ -80,17 +80,17 @@ export function AgentRunHistory({ runs }: { runs: readonly AgentRun[] }) {
 
 
     )               =>(<List.Item>
-        <List.Item.Meta title={<Typography.Text strong>{run.title||t("(\u65E0\u6807\u9898)")}</Typography.Text>}description={<div className="agent-run-steps">
+        <List.Item.Meta title={<Typography.Text strong>{run.title||t("(无标题)")}</Typography.Text>} description={<div className="agent-run-steps">
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {run.startedAt}
               </Typography.Text>
               <div>
                 <Tag color={STATUS_COLOR[run.status] ?? 'default'}>{run.status}</Tag>
               </div>
-              {parseAgentSteps(run.stepsJson).map(        (step)=>(<Typography.Text key={`${run.id}-${step.index}`}style={{fontSize:12}}>
+              {parseAgentSteps(run.stepsJson).map(        (step)=>(<Typography.Text key={`${run.id}-${step.index}`} style={{fontSize:12}}>
                   {step.index}. [{step.kind}] {step.summary}
                 </Typography.Text>))}
-              {run.lastError &&(<Typography.Text type="danger"style={{fontSize:12}}>{run.lastError}</Typography.Text>)}
+              {run.lastError &&(<Typography.Text type="danger" style={{fontSize:12}}>{run.lastError}</Typography.Text>)}
               {run.finalAnswer &&(<Typography.Paragraph style={{whiteSpace:'pre-wrap',marginBottom:0,fontSize:12}}>
                   {run.finalAnswer}
                 </Typography.Paragraph>)}

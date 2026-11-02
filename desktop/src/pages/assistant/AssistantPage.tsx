@@ -67,9 +67,9 @@ const CONVERSATION_KEY = 'ai.conversation.v1'
 const CONVERSATION_HISTORY_KEY = 'ai.conversation.history.v1'
 
 const SUGGESTED_PROMPTS = [
-  { title:t("\u603B\u7ED3\u6211\u6700\u8FD1\u4FDD\u5B58\u7684\u5185\u5BB9"),hint:t("\u63D0\u70BC\u6700\u8FD1\u8D44\u6599\u91CC\u7684\u5173\u952E\u7ED3\u8BBA"),icon:<FileTextOutlined/>},
-  { title:t("\u6BD4\u8F83\u8FD9\u4E9B\u6765\u6E90\u7684\u6838\u5FC3\u89C2\u70B9"),hint:t("\u627E\u51FA\u5171\u8BC6\u3001\u5206\u6B67\u4E0E\u8BC1\u636E"),icon:<BookOutlined/>},
-  { title:t("\u4ECE\u5DF2\u4FDD\u5B58\u8D44\u6599\u751F\u6210\u7814\u7A76\u7B80\u62A5"),hint:t("\u6574\u7406\u6210\u7ED3\u6784\u5316\u901F\u89C8"),icon:<SearchOutlined/>},
+  { title:t("总结我最近保存的内容"),hint:t("提炼最近资料里的关键结论"),icon:<FileTextOutlined/>},
+  { title:t("比较这些来源的核心观点"),hint:t("找出共识、分歧与证据"),icon:<BookOutlined/>},
+  { title:t("从已保存资料生成研究简报"),hint:t("整理成结构化速览"),icon:<SearchOutlined/>},
 ]
 
 interface UserTurn {
@@ -130,25 +130,25 @@ async function waitForAssistantTask(taskId: string): Promise<RagAnswerResponse> 
       continue
     }
     if (task.status === 'completed' && task.result) return task.result
-    if (task.status === 'failed') throw new Error(task.error ||t("\u540E\u53F0\u751F\u6210\u5931\u8D25"))
+    if (task.status === 'failed') throw new Error(task.error ||t("后台生成失败"))
     await new Promise(resolve => window.setTimeout(resolve, 800))
   }
 }
 
 function conversationAsMarkdown(turns: readonly Turn[], documentsById: ReadonlyMap<string, Document>): string {
-  const lines = [t("# \u77E5\u8BC6\u5E93\u5BF9\u8BDD"),'']
+  const lines = [t("# 知识库对话"),'']
   for (const turn of turns) {
     if (turn.role === 'user') {
-      lines.push(t("## \u6211"),'',turn.content,'')
+      lines.push(t("## 我"),'',turn.content,'')
       continue
     }
     if (turn.pending) continue
-    lines.push(t("## \u77E5\u8BC6\u52A9\u624B"),'',stripSourceBlocks(turn.content),'')
+    lines.push(t("## 知识助手"),'',stripSourceBlocks(turn.content),'')
     const cited = (turn.documentIds ?? [])
       .map(id => documentsById.get(id))
       .filter((doc): doc is Document => Boolean(doc))
     if (cited.length > 0) {
-      lines.push(t("\u5F15\u7528\uFF1A"),...cited.map((doc,index)=>`${index+1}. ${doc.title}${doc.url?` — ${doc.url}`:''}`),'')
+      lines.push(t("引用："),...cited.map((doc,index)=>`${index+1}. ${doc.title}${doc.url?` — ${doc.url}`:''}`),'')
     }
   }
   return lines.join('\n').trimEnd()
@@ -327,10 +327,10 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
   const noDocuments = documents.length === 0
   const canAsk = conversationHydrated && !noProvider && question.trim().length > 0
   const placeholder = !conversationHydrated
-    ?t("\u6B63\u5728\u6062\u590D\u5BF9\u8BDD\u2026")
+    ?t("正在恢复对话\u2026")
     : noProvider
-        ?t("\u8BF7\u5148\u5728\u300C\u8BBE\u7F6E \u2192 AI Provider\u300D\u4E2D\u914D\u7F6E")
-        :t("\u7EE7\u7EED\u8FFD\u95EE\uFF0C\u6216\u6362\u4E00\u4E2A\u89D2\u5EA6\u63D0\u95EE\u2026")
+        ?t("请先在「设置 \u2192 AI Provider」中配置")
+        :t("继续追问，或换一个角度提问\u2026")
 
   const assistantRuntime = useExternalStoreRuntime<Turn>({
     messages: turns,
@@ -367,9 +367,9 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         .join('\n\n')
         .trim() ?? ''
       if (prompt || attachmentText) {
-        await submitQuestion(prompt ||t("\u8BF7\u5206\u6790\u9644\u4EF6"),{
+        await submitQuestion(prompt ||t("请分析附件"),{
           attachments: message.attachments,
-          modelPrompt: attachmentText ? `${prompt ||t("\u8BF7\u5206\u6790\u4EE5\u4E0B\u9644\u4EF6")}\n\n${attachmentText}`:prompt,
+          modelPrompt: attachmentText ? `${prompt ||t("请分析以下附件")}\n\n${attachmentText}`:prompt,
         })
       }
     },
@@ -578,7 +578,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
       }
       if (!parsed.notFound && !hasUsableAnswerCitations(validation)) {
-        throw new Error(t("\u6A21\u578B\u672A\u80FD\u6309\u8D44\u6599\u751F\u6210\u6709\u6548\u5F15\u7528\uFF0C\u8BF7\u6362\u4E00\u79CD\u95EE\u6CD5\u6216\u91CD\u8BD5"))
+        throw new Error(t("模型未能按资料生成有效引用，请换一种问法或重试"))
       }
       patchTurn(pendingId, {
         content: parsed.answer,
@@ -592,7 +592,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
     } catch (caught) {
       const errorMessage = caught instanceof Error
         ? caught.message
-        : String(caught ||t("\u63D0\u95EE\u5931\u8D25"))
+        : String(caught ||t("提问失败"))
       patchTurn(pendingId, {
         content: errorMessage,
         pending: false,
@@ -686,14 +686,14 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
     try {
       const result = await runResearchAgent(defaultAgentDeps, trimmed, { providerId })
       const content = result.stopped && !result.answer
-        ?t("\u7814\u7A76\u672A\u5B8C\u6210\uFF1A{value0}",{value0:result.stopped.message})
+        ?t("研究未完成：{value0}",{value0:result.stopped.message})
         : result.stopped
-          ?t("{value0}\n\n\uFF08\u5DF2\u4E2D\u6B62\uFF1A{value1}\uFF09",{value0:result.answer,value1:result.stopped.message})
+          ?t("{value0}\n\n（已中止：{value1}）",{value0:result.answer,value1:result.stopped.message})
           : result.answer
       patchTurn(pendingTurn.id, { content, pending:false })
       await listAgentRuns(20).then(setAgentRuns).catch(() => undefined)
     } catch (caught) {
-      const text = caught instanceof Error ? caught.message :t("\u7814\u7A76\u5931\u8D25")
+      const text = caught instanceof Error ? caught.message :t("研究失败")
       patchTurn(pendingTurn.id, { content:text, pending:false, error:text })
       messageApi.error(text)
     } finally {
@@ -760,9 +760,9 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
     if (!markdown) return
     try {
       await navigator.clipboard.writeText(markdown)
-      messageApi.success(t("\u5DF2\u590D\u5236\u6574\u6BB5\u5BF9\u8BDD"))
+      messageApi.success(t("已复制整段对话"))
     } catch {
-      messageApi.error(t("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u526A\u8D34\u677F\u6743\u9650"))
+      messageApi.error(t("复制失败，请检查剪贴板权限"))
     }
   }
 
@@ -772,10 +772,10 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
     const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
-    link.download =t("\u77E5\u8BC6\u5E93\u5BF9\u8BDD-{value0}.md",{value0:new Date().toISOString().slice(0,10)})
+    link.download =t("知识库对话-{value0}.md",{value0:new Date().toISOString().slice(0,10)})
     link.click()
     URL.revokeObjectURL(url)
-    messageApi.success(t("\u5BF9\u8BDD\u5DF2\u5BFC\u51FA"))
+    messageApi.success(t("对话已导出"))
   }
 
   function goToProviderSettings() {
@@ -785,29 +785,29 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
   async function saveAnswerToKnowledge(turn: AssistantTurn, answer: string, cited: readonly Document[]) {
     if (turn.savedDocumentId || savingAnswerId) return
     const turnIndex = turns.findIndex(item => item.id === turn.id)
-    const question = [...turns.slice(0, turnIndex)].reverse().find(item => item.role === 'user')?.content.trim() ||t("\u77E5\u8BC6\u52A9\u624B\u56DE\u7B54")
+    const question = [...turns.slice(0, turnIndex)].reverse().find(item => item.role === 'user')?.content.trim() ||t("知识助手回答")
     const markdown = [
       `# ${question}`,
       '',
       answer,
       ...(cited.length > 0
-        ? ['',t("## \u5F15\u7528"),'',...cited.map((doc,index)=>`${index+1}. [${doc.title}](${doc.url})`)]
+        ? ['',t("## 引用"),'',...cited.map((doc,index)=>`${index+1}. [${doc.title}](${doc.url})`)]
         : []),
     ].join('\n')
 
     setSavingAnswerId(turn.id)
     try {
       const saved = await saveDocument({
-        title: t("\u77E5\u8BC6\u52A9\u624B\uFF1A{value0}",{value0:question}).slice(0,160),
+        title: t("知识助手：{value0}",{value0:question}).slice(0,160),
         url: `arcadia://assistant-answer/${encodeURIComponent(turn.id)}`,
         markdown,
-        tags: [t("\u77E5\u8BC6\u52A9\u624B\u56DE\u7B54")],
+        tags: [t("知识助手回答")],
       })
       setTurns(current => current.map(item => item.id === turn.id ? { ...item, savedDocumentId: saved.id } : item))
       setDocuments(current => current.some(item => item.id === saved.id) ? current : [saved, ...current])
-      messageApi.success(t("\u56DE\u7B54\u5DF2\u52A0\u5165\u77E5\u8BC6\u5E93"))
+      messageApi.success(t("回答已加入知识库"))
     } catch (caught) {
-      messageApi.error(caught instanceof Error ? caught.message :t("\u52A0\u5165\u77E5\u8BC6\u5E93\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5"))
+      messageApi.error(caught instanceof Error ? caught.message :t("加入知识库失败，请稍后重试"))
     } finally {
       setSavingAnswerId(undefined)
     }
@@ -815,17 +815,17 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
 
   function renderConversation() {
     if (!conversationHydrated) {
-      return <div className="assistant-thread-loading"><Spin size="small"/><span>{t("\u6B63\u5728\u6062\u590D\u5BF9\u8BDD\u2026")}</span></div>
+      return <div className="assistant-thread-loading"><Spin size="small"/><span>{t("正在恢复对话\u2026")}</span></div>
     }
     if (turns.length === 0) {
       return(
         <div className="assistant-empty">
           <span className="assistant-empty__icon"><RobotOutlined/></span>
-          <h2>{noDocuments ?t("\u77E5\u8BC6\u5E93\u8FD8\u662F\u7A7A\u7684"):t("\u4ECE\u4E00\u4E2A\u597D\u95EE\u9898\u5F00\u59CB")}</h2>
+          <h2>{noDocuments ?t("知识库还是空的"):t("从一个好问题开始")}</h2>
           <p>
             {noDocuments
-              ?t("\u53EF\u4EE5\u76F4\u63A5\u63D0\u95EE\uFF1B\u4FDD\u5B58\u7F51\u9875\u540E\uFF0C\u6211\u8FD8\u4F1A\u4F18\u5148\u7ED3\u5408\u4F60\u7684\u8D44\u6599\u5E76\u6807\u6CE8\u6765\u6E90\u3002")
-              :t("\u6211\u4F1A\u5728\u5DF2\u4FDD\u5B58\u7684 {value0} \u7BC7\u8D44\u6599\u4E2D\u68C0\u7D22\uFF0C\u5E76\u6807\u6CE8\u5F15\u7528\u6765\u6E90\u3002",{value0:documents.length})}
+              ?t("可以直接提问；保存网页后，我还会优先结合你的资料并标注来源。")
+              :t("我会在已保存的 {value0} 篇资料中检索，并标注引用来源。",{value0:documents.length})}
           </p>
           {!noDocuments &&(
             <div className="assistant-suggestions">
@@ -845,7 +845,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
 
 
 
-              )                           =>(<ThreadPrimitive.Suggestion key={item.title}prompt={item.title}send={false}className="assistant-suggestion"disabled={noProvider}onClick={()=>applySuggestion(item.title)}>
+              )                           =>(<ThreadPrimitive.Suggestion key={item.title} prompt={item.title} send={false} className="assistant-suggestion" disabled={noProvider} onClick={()=>applySuggestion(item.title)}>
                   <span className="assistant-suggestion__icon">{item.icon}</span>
                   <span className="assistant-suggestion__copy">
                     <b>{item.title}</b>
@@ -854,7 +854,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                   <ArrowRightOutlined className="assistant-suggestion__arrow"/>
                 </ThreadPrimitive.Suggestion>))}
             </div>)}
-        </div>)}return(<div className="assistant-thread"role="log"aria-live="polite"aria-label={t("\u77E5\u8BC6\u5E93\u5BF9\u8BDD")}>
+        </div>)}return(<div className="assistant-thread" role="log" aria-live="polite" aria-label={t("知识库对话")}>
         <ThreadPrimitive.Messages>{({ message: runtimeMessage }) => {const turn=turns.find(item=>item.id===runtimeMessage.id)
           if (!turn) return null
           if (runtimeMessage.composer.isEditing) {
@@ -863,8 +863,8 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                 <ComposerPrimitive.Root className="assistant-edit-composer">
                   <ComposerPrimitive.Input className="assistant-edit-composer__input" minRows={2} maxRows={8} autoFocus />
                   <div className="assistant-edit-composer__actions">
-                    <ComposerPrimitive.Cancel type="button">{t("\u53D6\u6D88")}</ComposerPrimitive.Cancel>
-                    <ComposerPrimitive.Send type="submit">{t("\u4FDD\u5B58\u5E76\u91CD\u65B0\u751F\u6210")}</ComposerPrimitive.Send>
+                    <ComposerPrimitive.Cancel type="button">{t("取消")}</ComposerPrimitive.Cancel>
+                    <ComposerPrimitive.Send type="submit">{t("保存并重新生成")}</ComposerPrimitive.Send>
                   </div>
                 </ComposerPrimitive.Root>
               </MessagePrimitive.Root>)
@@ -881,13 +881,13 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
 
 
 
-                      )                                =>(<span className="assistant-message-attachment"key={attachment.id}>
+                      )                                =>(<span className="assistant-message-attachment" key={attachment.id}>
                           <FileTextOutlined />{attachment.name}
                         </span>))}
                     </div>)}
                   <ActionBarPrimitive.Root className="assistant-response-actions assistant-response-actions--user" autohide="never">
-                    <ActionBarPrimitive.Edit title={t("\u7F16\u8F91\u95EE\u9898")}>{t("\u7F16\u8F91")}</ActionBarPrimitive.Edit>
-                    <ActionBarPrimitive.Copy title={t("\u590D\u5236\u95EE\u9898")}><CopyOutlined/>{t("\u590D\u5236")}</ActionBarPrimitive.Copy>
+                    <ActionBarPrimitive.Edit title={t("编辑问题")}>{t("编辑")}</ActionBarPrimitive.Edit>
+                    <ActionBarPrimitive.Copy title={t("复制问题")}><CopyOutlined/>{t("复制")}</ActionBarPrimitive.Copy>
                   </ActionBarPrimitive.Root>
                 </div>
                 <span className="assistant-avatar assistant-avatar--user" aria-hidden="true"><UserOutlined/></span>
@@ -902,17 +902,17 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
               <span className="assistant-avatar assistant-avatar--bot" aria-hidden="true"><RobotOutlined/></span>
               <div className="assistant-message__body">
                 <div className="assistant-message__meta">
-                  <span className="assistant-message__author">{t("\u77E5\u8BC6\u52A9\u624B")}</span>
-                  {turn.pending && <span className="assistant-message__status">{t("\u6B63\u5728\u751F\u6210")}</span>}
-                  {turn.interrupted && <span className="assistant-message__status is-interrupted">{t("\u5DF2\u4E2D\u65AD")}</span>}
-                  {turn.generalKnowledge && <span className="assistant-message__status">{t("\u901A\u7528\u77E5\u8BC6\u8865\u5145")}</span>}
+                  <span className="assistant-message__author">{t("知识助手")}</span>
+                  {turn.pending && <span className="assistant-message__status">{t("正在生成")}</span>}
+                  {turn.interrupted && <span className="assistant-message__status is-interrupted">{t("已中断")}</span>}
+                  {turn.generalKnowledge && <span className="assistant-message__status">{t("通用知识补充")}</span>}
                 </div>
                 <div className={`assistant-bubble assistant-bubble--assistant${turn.pending ? ' is-pending' : ''}${noticeOnly ? ' is-notice' : ''}`}>
                   {turn.pending ?(
                     <>
                       <div className="assistant-thinking">
                         <span className="assistant-thinking__dots" aria-hidden="true"><i/><i/><i/></span>
-                        <span>{t("\u6B63\u5728\u68C0\u7D22")} {documents.length} {t("\u7BC7\u8D44\u6599\u5E76\u751F\u6210\u56DE\u7B54\u2026")}</span>
+                        <span>{t("正在检索")} {documents.length} {t("篇资料并生成回答\u2026")}</span>
                       </div>
                       <div className="assistant-thinking__skeleton" aria-hidden="true"><span/><span/></div>
                     </>)
@@ -920,7 +920,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                     <div className="assistant-notice assistant-notice--error">
                       <span className="assistant-notice__icon"><WarningOutlined/></span>
                       <div className="assistant-notice__body">
-                        <strong>{t("\u751F\u6210\u5931\u8D25")}</strong>
+                        <strong>{t("生成失败")}</strong>
                         <p>{turn.error}</p>
                       </div>
                       <Button
@@ -928,7 +928,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                         icon={<ReloadOutlined/>}
                         disabled={busy || agentBusy}
                         onClick={() => void retryTurn(turn)}
-                      >{t("\u91CD\u8BD5")} 
+                      >{t("重试")} 
 
                       </Button>
                     </div>)
@@ -942,15 +942,15 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                       <div className="assistant-notice assistant-notice--interrupted">
                         <span className="assistant-notice__icon"><ClockCircleOutlined/></span>
                         <div className="assistant-notice__body">
-                          <strong>{t("\u56DE\u7B54\u5728\u5E94\u7528\u91CD\u65B0\u52A0\u8F7D\u65F6\u4E2D\u65AD")}</strong>
-                          <p>{t("\u8FD9\u6B21\u751F\u6210\u6CA1\u6709\u5B8C\u6210\uFF0C\u53EF\u4EE5\u91CD\u65B0\u751F\u6210\u540C\u4E00\u6761\u56DE\u7B54\u3002")}</p>
+                          <strong>{t("回答在应用重新加载时中断")}</strong>
+                          <p>{t("这次生成没有完成，可以重新生成同一条回答。")}</p>
                         </div>
                         <Button
                           size="small"
                           icon={<ReloadOutlined/>}
                           disabled={busy || agentBusy}
                           onClick={() => void retryTurn(turn)}
-                        >{t("\u91CD\u65B0\u751F\u6210")} 
+                        >{t("重新生成")} 
 
                         </Button>
                       </div>
@@ -959,8 +959,8 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                     <div className="assistant-notice assistant-notice--empty">
                       <span className="assistant-notice__icon"><SearchOutlined/></span>
                       <div className="assistant-notice__body">
-                        <strong>{t("\u8D44\u6599\u4E2D\u6682\u672A\u627E\u5230\u7B54\u6848")}</strong>
-                        <p>{answer ||t("\u8BD5\u8BD5\u6362\u4E00\u4E2A\u95EE\u6CD5\uFF0C\u6216\u518D\u4FDD\u5B58\u4E00\u4E9B\u76F8\u5173\u8D44\u6599\u3002")}</p>
+                        <strong>{t("资料中暂未找到答案")}</strong>
+                        <p>{answer ||t("试试换一个问法，或再保存一些相关资料。")}</p>
                       </div>
                     </div>)
                     :(
@@ -972,13 +972,13 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
 
                 {!turn.pending && !turn.error && cited.length > 0 &&(
                   <div className="assistant-citations">
-                    <span className="assistant-citations__label">{t("\u5F15\u7528")}</span>
+                    <span className="assistant-citations__label">{t("引用")}</span>
                     {cited.map((doc, index) =>(
                       <button
                         type="button"
                         className="assistant-citation"
                         key={doc.id}
-                        title={t("\u6253\u5F00\uFF1A{value0}",{value0:doc.title})}
+                        title={t("打开：{value0}",{value0:doc.title})}
                         onClick={() => setSelectedDoc(doc)}
                       >
                         <span className="assistant-citation__index">{index + 1}</span>
@@ -990,31 +990,31 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
 
                 {!turn.pending && !turn.error && !turn.notFound && !turn.interrupted && answer &&(
                   <ActionBarPrimitive.Root className="assistant-response-actions" hideWhenRunning autohide="never">
-                    <ActionBarPrimitive.Copy title={t("\u590D\u5236\u56DE\u7B54")}>
+                    <ActionBarPrimitive.Copy title={t("复制回答")}>
                       <CopyOutlined />
-                      <span>{t("\u590D\u5236")}</span>
+                      <span>{t("复制")}</span>
                     </ActionBarPrimitive.Copy>
-                    <ActionBarPrimitive.Reload title={t("\u91CD\u65B0\u751F\u6210\u56DE\u7B54")}>
+                    <ActionBarPrimitive.Reload title={t("重新生成回答")}>
                       <ReloadOutlined/>
-                      <span>{t("\u91CD\u65B0\u751F\u6210")}</span>
+                      <span>{t("重新生成")}</span>
                     </ActionBarPrimitive.Reload>
-                    <ActionBarPrimitive.ExportMarkdown title={t("\u5BFC\u51FA Markdown")}>
+                    <ActionBarPrimitive.ExportMarkdown title={t("导出 Markdown")}>
                       <FileTextOutlined />
-                      <span>{t("\u5BFC\u51FA")}</span>
+                      <span>{t("导出")}</span>
                     </ActionBarPrimitive.ExportMarkdown>
                     <button
                       type="button"
-                      title={turn.savedDocumentId ?t("\u5DF2\u52A0\u5165\u77E5\u8BC6\u5E93"):t("\u5C06\u56DE\u7B54\u52A0\u5165\u77E5\u8BC6\u5E93")}
+                      title={turn.savedDocumentId ?t("已加入知识库"):t("将回答加入知识库")}
                       disabled={Boolean(turn.savedDocumentId) || Boolean(savingAnswerId)}
                       onClick={() => void saveAnswerToKnowledge(turn, answer, cited)}
                     >
                       <BookOutlined />
-                      <span>{turn.savedDocumentId ?t("\u5DF2\u52A0\u5165\u77E5\u8BC6\u5E93"):savingAnswerId===turn.id?t("\u52A0\u5165\u4E2D\u2026"):t("\u52A0\u5165\u77E5\u8BC6\u5E93")}</span>
+                      <span>{turn.savedDocumentId ?t("已加入知识库"):savingAnswerId===turn.id?t("加入中\u2026"):t("加入知识库")}</span>
                     </button>
                     <BranchPickerPrimitive.Root className="assistant-branch-picker" hideWhenSingleBranch>
-                      <BranchPickerPrimitive.Previous title={t("\u4E0A\u4E00\u4E2A\u5206\u652F")}>‹</BranchPickerPrimitive.Previous>
+                      <BranchPickerPrimitive.Previous title={t("上一个分支")}>‹</BranchPickerPrimitive.Previous>
                       <span><BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count /></span>
-                      <BranchPickerPrimitive.Next title={t("\u4E0B\u4E00\u4E2A\u5206\u652F")}>›</BranchPickerPrimitive.Next>
+                      <BranchPickerPrimitive.Next title={t("下一个分支")}>›</BranchPickerPrimitive.Next>
                     </BranchPickerPrimitive.Root>
                   </ActionBarPrimitive.Root>)
                  }
@@ -1035,9 +1035,9 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
             className="assistant-provider-alert"
             type="warning"
             showIcon
-            message={t("\u5C1A\u672A\u914D\u7F6E AI Provider")}
-            description={t("\u8BF7\u5728\u201C\u8BBE\u7F6E \u2192 AI Provider\u201D\u4E2D\u6DFB\u52A0 OpenAI \u517C\u5BB9\u6216 Ollama \u670D\u52A1\u3002")}
-            action={onNavigate ? <Button size="small" type="primary" icon={<SettingOutlined />} onClick={goToProviderSettings}>{t("\u53BB\u8BBE\u7F6E")}</Button>:undefined}
+            message={t("尚未配置 AI Provider")}
+            description={t("请在\u201C设置 \u2192 AI Provider\u201D中添加 OpenAI 兼容或 Ollama 服务。")}
+            action={onNavigate ? <Button size="small" type="primary" icon={<SettingOutlined />} onClick={goToProviderSettings}>{t("去设置")}</Button>:undefined}
           />)
          }
         <div className="assistant-grid">
@@ -1046,10 +1046,10 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
             className="assistant-chat"
             title={
               <div className="assistant-chat__title">
-                <span>{t("\u5BF9\u8BDD")}</span>
+                <span>{t("对话")}</span>
                 {roundCount > 0 &&(
                   <span className="assistant-chat__summary">
-                    {roundCount} {t("\u8F6E")}{citedDocIds.size>0?t(" \xB7 {value0} \u7BC7\u5F15\u7528",{value0:citedDocIds.size}):''}
+                    {roundCount} {t("轮")}{citedDocIds.size>0?t(" \xB7 {value0} 篇引用",{value0:citedDocIds.size}):''}
                   </span>)
                  }
               </div>
@@ -1060,7 +1060,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                   size="small"
                   icon={<ClockCircleOutlined />}
                   onClick={() => setHistoryOpen(true)}
-                >{t("\u5BF9\u8BDD\u5386\u53F2")}
+                >{t("对话历史")}
                       {conversationHistory.length > 0 ? ` ${conversationHistory.length}` : ''}
                 </Button>
                 {providers.length > 1 &&(
@@ -1074,37 +1074,37 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                      )                              =>( {value:provider.id,label:`${provider.type==='ollama'?'Ollama':'OpenAI'} · ${provider.model}`,}))}
                     onChange={value => setProviderId(value)}
                     disabled={busy || agentBusy}
-                    ariaLabel={t("\u9009\u62E9\u5BF9\u8BDD\u6A21\u578B")}
+                    ariaLabel={t("选择对话模型")}
                   />)
                  }
                 <Button
                   size="small"
                   icon={<RobotOutlined />}
-                  title={t("\u67E5\u770B\u901A\u8FC7\u201C\u6DF1\u5EA6\u7814\u7A76\u201D\u6267\u884C\u7684\u4EFB\u52A1\uFF0C\u4E0D\u5305\u542B\u666E\u901A\u95EE\u7B54")}
+                  title={t("查看通过\u201C深度研究\u201D执行的任务，不包含普通问答")}
                   onClick={() => void openAgent()}
-                >{t("\u6DF1\u5EA6\u7814\u7A76\u8BB0\u5F55")}
+                >{t("深度研究记录")}
                         {agentRuns.length > 0 ? ` ${agentRuns.length}` : ''}
                 </Button>
                 <Button size="small" icon={<FileTextOutlined />} onClick={() => setSourcesOpen(true)}>
-                  {citedDocIds.size > 0 ?t("\u5F15\u7528 {value0}",{value0:citedDocIds.size}):t("\u6765\u6E90 {value0}",{value0:documents.length})}
+                  {citedDocIds.size > 0 ?t("引用 {value0}",{value0:citedDocIds.size}):t("来源 {value0}",{value0:documents.length})}
                 </Button>
                 {turns.length > 0 &&(
                   <>
-                    <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => void copyConversation()}>{t("\u590D\u5236\u5BF9\u8BDD")} 
+                    <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => void copyConversation()}>{t("复制对话")} 
 
                     </Button>
-                    <Button size="small" type="text" icon={<DownloadOutlined />} onClick={exportConversation}>{t("\u5BFC\u51FA")} 
+                    <Button size="small" type="text" icon={<DownloadOutlined />} onClick={exportConversation}>{t("导出")} 
 
                     </Button>
                     <Popconfirm
-                      title={t("\u5F00\u59CB\u65B0\u5BF9\u8BDD\uFF1F")}
-                      description={t("\u5F53\u524D\u5BF9\u8BDD\u5C06\u4ECE\u672C\u673A\u5220\u9664\uFF1B\u9700\u8981\u4FDD\u7559\u65F6\u8BF7\u5148\u5BFC\u51FA\u3002")}
-                      okText={t("\u65B0\u5EFA")}
+                      title={t("开始新对话？")}
+                      description={t("当前对话将从本机删除；需要保留时请先导出。")}
+                      okText={t("新建")}
                       okButtonProps={{ danger: true }}
                       disabled={busy || agentBusy}
                       onConfirm={startNewConversation}
                     >
-                      <Button size="small" icon={<PlusOutlined />} disabled={busy || agentBusy}>{t("\u65B0\u5BF9\u8BDD")}</Button>
+                      <Button size="small" icon={<PlusOutlined />} disabled={busy || agentBusy}>{t("新对话")}</Button>
                     </Popconfirm>
                   </>)
                  }
@@ -1115,7 +1115,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
               <ThreadPrimitive.Viewport className="assistant-conversation" ref={listRef} autoScroll>
                 {renderConversation()}
               </ThreadPrimitive.Viewport>
-              <ThreadPrimitive.ScrollToBottom className="assistant-scroll-to-bottom" aria-label={t("\u6EDA\u52A8\u5230\u6700\u65B0\u6D88\u606F")}>
+              <ThreadPrimitive.ScrollToBottom className="assistant-scroll-to-bottom" aria-label={t("滚动到最新消息")}>
                 <ArrowUpOutlined />
               </ThreadPrimitive.ScrollToBottom>
 
@@ -1126,7 +1126,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                     <AttachmentPrimitive.Root className="assistant-composer-attachment">
                       <FileTextOutlined />
                       <AttachmentPrimitive.Name />
-                      <AttachmentPrimitive.Remove aria-label={t("\u79FB\u9664 {value0}",{value0:attachment.name})}>×</AttachmentPrimitive.Remove>
+                      <AttachmentPrimitive.Remove aria-label={t("移除 {value0}",{value0:attachment.name})}>×</AttachmentPrimitive.Remove>
                     </AttachmentPrimitive.Root>)
                    }
                 </ComposerPrimitive.Attachments>
@@ -1139,19 +1139,19 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                   onChange={event => setQuestion(event.target.value)}
                   submitMode="enter"
                   placeholder={placeholder}
-                  aria-label={t("\u5411\u77E5\u8BC6\u5E93\u63D0\u95EE")}
+                  aria-label={t("向知识库提问")}
                 />
                 <div className="assistant-composer__toolbar">
                   <div className="assistant-composer__hint">
-                    <span>{t("Enter \u53D1\u9001 \xB7 Shift + Enter \u6362\u884C")}</span>
+                    <span>{t("Enter 发送 \xB7 Shift + Enter 换行")}</span>
                     {activeProvider && <span className="assistant-composer__model">{activeProvider.model}</span>}
                   </div>
                   <Space size={6}>
                     <ComposerPrimitive.AddAttachment
                       type="button"
                       className="assistant-attach-button"
-                      title={t("\u6DFB\u52A0\u9644\u4EF6\uFF08PDF\u3001DOCX \u6216\u6587\u672C\u6587\u4EF6\uFF09")}
-                      aria-label={t("\u6DFB\u52A0\u9644\u4EF6")}
+                      title={t("添加附件（PDF、DOCX 或文本文件）")}
+                      aria-label={t("添加附件")}
                     >
                       <FileTextOutlined />
                     </ComposerPrimitive.AddAttachment>
@@ -1161,15 +1161,15 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
                       loading={agentBusy}
                       disabled={!canAsk || busy || agentBusy}
                       onClick={() => void runAgent()}
-                      title={t("\u7528\u53D7\u63A7 Agent \u5FAA\u73AF\u7814\u7A76\u8FD9\u4E2A\u95EE\u9898")}
-                    >{t("\u6DF1\u5EA6\u7814\u7A76")} 
+                      title={t("用受控 Agent 循环研究这个问题")}
+                    >{t("深度研究")} 
 
                     </Button>
                     <ComposerPrimitive.Send
                       type="submit"
                       className="assistant-send"
-                      aria-label={t("\u53D1\u9001")}
-                      title={t("\u53D1\u9001")}
+                      aria-label={t("发送")}
+                      title={t("发送")}
                     >
                       {busy ? <Spin size="small" /> : <ArrowUpOutlined />}
                     </ComposerPrimitive.Send>
@@ -1183,7 +1183,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         </div>
 
         <Drawer
-          title={t("\u5BF9\u8BDD\u5386\u53F2\uFF08{value0}\uFF09",{value0:conversationHistory.length})}
+          title={t("对话历史（{value0}）",{value0:conversationHistory.length})}
           placement="right"
           width={420}
           open={historyOpen}
@@ -1195,24 +1195,24 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
               onChange={event => setHistoryQuery(event.target.value)}
               prefix={<SearchOutlined />}
               allowClear
-              placeholder={t("\u641C\u7D22\u6807\u9898\u6216\u5BF9\u8BDD\u5185\u5BB9")}
-              aria-label={t("\u641C\u7D22\u5386\u53F2\u5BF9\u8BDD")}
+              placeholder={t("搜索标题或对话内容")}
+              aria-label={t("搜索历史对话")}
             />
             {conversationHistory.length > 0 &&(
               <Popconfirm
-                title={t("\u6E05\u7A7A\u5168\u90E8\u5386\u53F2\u5BF9\u8BDD\uFF1F")}
-                description={t("\u5F53\u524D\u6B63\u5728\u67E5\u770B\u7684\u5BF9\u8BDD\u4E0D\u4F1A\u88AB\u5220\u9664\uFF1B\u5386\u53F2\u8BB0\u5F55\u5220\u9664\u540E\u65E0\u6CD5\u6062\u590D\u3002")}
-                okText={t("\u5168\u90E8\u6E05\u7A7A")}
+                title={t("清空全部历史对话？")}
+                description={t("当前正在查看的对话不会被删除；历史记录删除后无法恢复。")}
+                okText={t("全部清空")}
                 okButtonProps={{ danger: true }}
                 onConfirm={() => setConversationHistory([])}
               >
-                <Button danger>{t("\u6E05\u7A7A\u5386\u53F2")}</Button>
+                <Button danger>{t("清空历史")}</Button>
               </Popconfirm>)
              }
           </div>
           <List
             dataSource={filteredConversationHistory}
-            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={historyQuery ?t("\u6CA1\u6709\u5339\u914D\u7684\u5386\u53F2\u5BF9\u8BDD"):t("\u6682\u65E0\u5386\u53F2\u5BF9\u8BDD\uFF1B\u65B0\u5EFA\u5BF9\u8BDD\u540E\uFF0C\u5F53\u524D\u5185\u5BB9\u4F1A\u81EA\u52A8\u4FDD\u5B58\u5728\u8FD9\u91CC\u3002")}/>}}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={historyQuery ?t("没有匹配的历史对话"):t("暂无历史对话；新建对话后，当前内容会自动保存在这里。")}/>}}
             renderItem={        (item
 
 
@@ -1254,13 +1254,13 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
 
 
 
-            )                =>(<List.Item className="assistant-history-item"onClick={()=>openSavedConversation(item)}actions={[<Button key="rename"type="text"size="small"icon={<EditOutlined/>}title={t("\u91CD\u547D\u540D")}onClick={event=>{event.stopPropagation();beginRenameConversation(item)}}/>,<Popconfirm key="delete"title={t("\u5220\u9664\u8FD9\u6761\u5386\u53F2\u5BF9\u8BDD\uFF1F")}description={t("\u5220\u9664\u540E\u65E0\u6CD5\u6062\u590D\u3002")}okText={t("\u5220\u9664")}okButtonProps={{danger:true}}onConfirm={()=>deleteSavedConversation(item.id)}>
-                    <Button type="text"danger size="small"icon={<DeleteOutlined/>}title={t("\u5220\u9664\u8FD9\u6761\u5386\u53F2\u5BF9\u8BDD")}onClick={event=>event.stopPropagation()}/>
+            )                =>(<List.Item className="assistant-history-item" onClick={()=>openSavedConversation(item)} actions={[<Button key="rename" type="text" size="small" icon={<EditOutlined/>} title={t("重命名")} onClick={event=>{event.stopPropagation();beginRenameConversation(item)}}/>,<Popconfirm key="delete" title={t("删除这条历史对话？")} description={t("删除后无法恢复。")} okText={t("删除")} okButtonProps={{danger:true}} onConfirm={()=>deleteSavedConversation(item.id)}>
+                    <Button type="text"danger size="small" icon={<DeleteOutlined/>} title={t("删除这条历史对话")} onClick={event=>event.stopPropagation()}/>
                   </Popconfirm>,]}>
-                <List.Item.Meta avatar={<ClockCircleOutlined/>}title={item.title}description={t("{value0} \u8F6E \xB7 {value1}",{value0:item.turns.filter(turn=>turn.role==='user').length,value1:new Date(item.updatedAt).toLocaleString('zh-CN')})}/>
+                <List.Item.Meta avatar={<ClockCircleOutlined/>} title={item.title} description={t("{value0} 轮 \xB7 {value1}",{value0:item.turns.filter(turn=>turn.role==='user').length,value1:new Date(item.updatedAt).toLocaleString('zh-CN')})}/>
               </List.Item>)}/>
         </Drawer>
-        <Modal title={t("\u91CD\u547D\u540D\u5BF9\u8BDD")}open={renamingConversation!==null}okText={t("\u4FDD\u5B58")}
+        <Modal title={t("重命名对话")} open={renamingConversation!==null} okText={t("保存")}
           okButtonProps={{ disabled: normalizeConversationTitle(conversationTitleDraft).length === 0 }}
           onOk={renameConversation}
           onCancel={() => setRenamingConversation(null)}
@@ -1271,12 +1271,12 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
             value={conversationTitleDraft}
             onChange={event => setConversationTitleDraft(event.target.value)}
             onPressEnter={renameConversation}
-            placeholder={t("\u8F93\u5165\u5BF9\u8BDD\u6807\u9898")}
-            aria-label={t("\u5BF9\u8BDD\u6807\u9898")}
+            placeholder={t("输入对话标题")}
+            aria-label={t("对话标题")}
           />
         </Modal>
         <Drawer
-          title={citedDocIds.size > 0 ?t("\u5F15\u7528\u6765\u6E90\uFF08{value0}\uFF09",{value0:citedDocIds.size}):t("\u77E5\u8BC6\u5E93\u6765\u6E90\uFF08{value0}\uFF09",{value0:documents.length})}
+          title={citedDocIds.size > 0 ?t("引用来源（{value0}）",{value0:citedDocIds.size}):t("知识库来源（{value0}）",{value0:documents.length})}
           placement="right"
           width={420}
           open={sourcesOpen}
@@ -1284,7 +1284,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
         >
           <List
             dataSource={sourceItems}
-            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("\u6682\u65E0\u6765\u6E90")}/>}}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("暂无来源")}/>}}
             renderItem={        (item
 
 
@@ -1297,8 +1297,8 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
 
 
 
-            )                =>(<List.Item onClick={()=>setSelectedDoc(item)}className="search-result-clickable"actions={citedDocIds.has(item.id)?[<Tag key="cited"color="green">{t("\u5DF2\u5F15\u7528")}</Tag>]:undefined}>
-                <List.Item.Meta avatar={<FileTextOutlined/>}title={item.title}description={item.source||item.url}/>
+            )                =>(<List.Item onClick={()=>setSelectedDoc(item)} className="search-result-clickable" actions={citedDocIds.has(item.id)?[<Tag key="cited" color="green">{t("已引用")}</Tag>]:undefined}>
+                <List.Item.Meta avatar={<FileTextOutlined/>} title={item.title} description={item.source||item.url}/>
               </List.Item>)}/>
         </Drawer>
         <DocumentDetailDrawer document={selectedDoc}
@@ -1306,7 +1306,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
           onDeleted={() => setSelectedDoc(null)}
         />
         <Drawer
-          title={t("\u6DF1\u5EA6\u7814\u7A76\u8BB0\u5F55")}
+          title={t("深度研究记录")}
           placement="right"
           width={460}
           open={agentOpen}

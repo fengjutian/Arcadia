@@ -62,8 +62,8 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
       const [toolResponse, resourceResponse] = await Promise.all([listMcpTools(server.id), listMcpResources(server.id)])
       setTools((toolResponse as { tools?: McpTool[] }).tools ?? [])
       setResources((resourceResponse as { resources?: McpResource[] }).resources ?? [])
-      messageApi.success(t("\u5DF2\u8FDE\u63A5 {value0}",{value0:server.name}))
-    } catch (error) { messageApi.error(t("\u8FDE\u63A5\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))}
+      messageApi.success(t("已连接 {value0}",{value0:server.name}))
+    } catch (error) { messageApi.error(t("连接失败：{value0}",{value0:String(error)}))}
     finally { setBusy(false) }
   }
 
@@ -73,11 +73,11 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     try {
       parsed = JSON.parse(toolArgs[tool.name] || '{}') as Record<string, unknown>
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error()
-    } catch { messageApi.error(t("\u5DE5\u5177\u53C2\u6570\u5FC5\u987B\u662F JSON \u5BF9\u8C61"));return}
-    if (!window.confirm(t("\u5141\u8BB8\u672C\u6B21\u8C03\u7528\u5DE5\u5177 {value0}\uFF1F\n\n{value1}",{value0:tool.name,value1:JSON.stringify(parsed,null,2)})))return
+    } catch { messageApi.error(t("工具参数必须是 JSON 对象"));return}
+    if (!window.confirm(t("允许本次调用工具 {value0}？\n\n{value1}",{value0:tool.name,value1:JSON.stringify(parsed,null,2)})))return
     setBusy(true)
     try { setResult(await callMcpTool(selected.id, tool.name, parsed, true)) }
-    catch (error) { messageApi.error(t("\u8C03\u7528\u5931\u8D25\uFF1A{value0}",{value0:String(error)}))}
+    catch (error) { messageApi.error(t("调用失败：{value0}",{value0:String(error)}))}
     finally { setBusy(false) }
   }
 
@@ -86,9 +86,9 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   }
 
   async function addServer() {
-    if (!name.trim()) { messageApi.error(t("\u8BF7\u8F93\u5165 Server \u540D\u79F0"));return}
-    if (transport === 'stdio' && !command.trim()) { messageApi.error(t("\u8BF7\u8F93\u5165\u542F\u52A8\u547D\u4EE4"));return}
-    if (transport !== 'stdio' && !url.trim()) { messageApi.error(t("\u8BF7\u8F93\u5165\u670D\u52A1\u5730\u5740"));return}
+    if (!name.trim()) { messageApi.error(t("请输入 Server 名称"));return}
+    if (transport === 'stdio' && !command.trim()) { messageApi.error(t("请输入启动命令"));return}
+    if (transport !== 'stdio' && !url.trim()) { messageApi.error(t("请输入服务地址"));return}
     setBusy(true)
     try {
       const saved = await saveMcpServer({
@@ -96,14 +96,14 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
         command: transport === 'stdio' ? command.trim() : undefined,
         url: transport === 'stdio' ? undefined : url.trim(),
         args: parseArguments(args),
-        env: parseStringMap(env,t("\u73AF\u5883\u53D8\u91CF")),
-        headers: parseStringMap(headers,t("\u8BF7\u6C42\u5934")),
+        env: parseStringMap(env,t("环境变量")),
+        headers: parseStringMap(headers,t("请求头")),
       })
       await reload()
       setSelectedId(saved.id)
       setAdding(false)
       resetForm()
-      messageApi.success(t("MCP Server \u5DF2\u6DFB\u52A0"))
+      messageApi.success(t("MCP Server 已添加"))
     } catch (error) { messageApi.error(error instanceof Error ? error.message : String(error)) }
     finally { setBusy(false) }
   }
@@ -111,54 +111,54 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   return <section className={`page mcp-page${section === 'skillhub' ? ' mcp-page--market' : ''}`}>
     {contextHolder}
     <header className="mcp-page__header">
-      <div><span className="eyebrow">MODEL CONTEXT PROTOCOL</span><Typography.Title level={1}>{t("MCP \u5DE5\u4F5C\u53F0")}</Typography.Title><Typography.Text type="secondary">{t("\u8FDE\u63A5\u5916\u90E8\u5DE5\u5177\u4E0E\u6570\u636E\u6E90\uFF0C\u6BCF\u6B21\u5DE5\u5177\u8C03\u7528\u90FD\u9700\u8981\u4F60\u7684\u660E\u786E\u6388\u6743\u3002")}</Typography.Text></div>
-      {section === 'servers' && <Button type="primary" icon={<Plus size={16}/>} onClick={() => setAdding(true)}>{t("\u6DFB\u52A0 Server")}</Button>}
+      <div><span className="eyebrow">MODEL CONTEXT PROTOCOL</span><Typography.Title level={1}>{t("MCP 工作台")}</Typography.Title><Typography.Text type="secondary">{t("连接外部工具与数据源，每次工具调用都需要你的明确授权。")}</Typography.Text></div>
+      {section === 'servers' && <Button type="primary" icon={<Plus size={16}/>} onClick={() => setAdding(true)}>{t("添加 Server")}</Button>}
     </header>
 
-    <nav className="mcp-section-nav" aria-label={t("MCP \u5DE5\u4F5C\u53F0\u529F\u80FD")}>
+    <nav className="mcp-section-nav" aria-label={t("MCP 工作台功能")}>
       <button type="button" className={section === 'servers' ? 'is-active' : ''} onClick={() => setSection('servers')}><Server size={17}/><span>Server</span></button>
-      <button type="button" className={section === 'skillhub' ? 'is-active' : ''} onClick={() => setSection('skillhub')}><Store size={17}/><span>{t("SkillHub \u6280\u80FD\u5E02\u573A")}</span></button>
+      <button type="button" className={section === 'skillhub' ? 'is-active' : ''} onClick={() => setSection('skillhub')}><Store size={17}/><span>{t("SkillHub 技能市场")}</span></button>
     </nav>
 
     {section === 'skillhub' ? <SkillHubPage onOpenUrl={onOpenUrl}/> : <div className="mcp-workspace">
       <aside className="mcp-servers">
-        <div className="mcp-section-title"><span><Server size={17}/>Servers</span><button type="button" aria-label={t("\u5237\u65B0 Server")}onClick={()=>void reload()}><RefreshCw size={15}/></button></div>
+        <div className="mcp-section-title"><span><Server size={17}/>Servers</span><button type="button" aria-label={t("刷新 Server")} onClick={()=>void reload()}><RefreshCw size={15}/></button></div>
         {servers.length === 0
-          ? <div className="mcp-empty"><Boxes size={30}/><b>{t("\u8FD8\u6CA1\u6709 MCP Server")}</b><span>{t("\u6DFB\u52A0\u672C\u5730 stdio \u6216\u8FDC\u7A0B HTTP \u670D\u52A1\u3002")}</span></div>
+          ? <div className="mcp-empty"><Boxes size={30}/><b>{t("还没有 MCP Server")}</b><span>{t("添加本地 stdio 或远程 HTTP 服务。")}</span></div>
           : servers.map(server => <button key={server.id} type="button" className={`mcp-server${selectedId === server.id ? ' is-selected' : ''}`} onClick={() => setSelectedId(server.id)}>
               <span className="mcp-server__icon"><PlugZap size={18}/></span>
               <span className="mcp-server__copy"><b>{server.name}</b><small>{server.transport === 'stdio' ? [server.command, ...server.args].filter(Boolean).join(' ') : server.url}</small></span>
-              <Tag color={server.enabled ? 'green' : 'default'}>{server.enabled ?t("\u542F\u7528"):t("\u505C\u7528")}</Tag><ChevronRight size={15}/>
+              <Tag color={server.enabled ? 'green' : 'default'}>{server.enabled ?t("启用"):t("停用")}</Tag><ChevronRight size={15}/>
             </button>)}
       </aside>
 
       <main className="mcp-console">
-        {!selected ? <div className="mcp-console__empty"><PlugZap size={42}/><h2>{t("\u9009\u62E9\u4E00\u4E2A MCP Server")}</h2><p>{t("\u8FDE\u63A5\u540E\u53EF\u4EE5\u6D4F\u89C8\u5B83\u63D0\u4F9B\u7684\u5DE5\u5177\u548C\u8D44\u6E90\u3002")}</p></div>:<>
-          <div className="mcp-console__head"><div><h2>{selected.name}</h2><span>{selected.transport.toUpperCase()} · {selected.enabled ?t("\u53EF\u8FDE\u63A5"):t("\u5DF2\u505C\u7528")}</span></div><Button type="primary"loading={busy}disabled={!selected.enabled}icon={<PlugZap size={16}/>}onClick={()=>void connect(selected)}>{t("\u8FDE\u63A5\u5E76\u53D1\u73B0")}</Button></div>
-          <Alert type="info" showIcon message={t("\u5B89\u5168\u8C03\u7528")}description={t("\u5DE5\u5177\u540D\u79F0\u3001\u53C2\u6570\u4F1A\u5728\u6267\u884C\u524D\u5C55\u793A\u3002\u53EA\u6709\u786E\u8BA4\u540E\uFF0CArcadia \u624D\u4F1A\u53D1\u9001\u672C\u6B21\u8C03\u7528\u3002")}/>
-          {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("\u6B63\u5728\u53D1\u73B0\u670D\u52A1\u80FD\u529B\u2026")}</span></div>:<div className="mcp-capabilities">
-            <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("\u5DE5\u5177")}</span><Tag>{tools.length}</Tag></div>
-              {tools.length === 0 ? <div className="mcp-placeholder">{t("\u8FDE\u63A5 Server \u540E\u663E\u793A\u5DE5\u5177")}</div>:tools.map(tool=><Card key={tool.name}className="mcp-tool-card">
-                <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("\u65E0\u63CF\u8FF0")}</p></div><Button icon={<Play size={14}/>}disabled={busy}onClick={()=>void invoke(tool)}>{t("\u5BA1\u6838\u5E76\u8C03\u7528")}</Button></div>
-                <Input.TextArea value={toolArgs[tool.name] ?? '{}'} onChange={event => setToolArgs(           (current                                        )=>({...current,[tool.name]:event.target.value}))}autoSize={{minRows:2,maxRows:8}}/>
+        {!selected ? <div className="mcp-console__empty"><PlugZap size={42}/><h2>{t("选择一个 MCP Server")}</h2><p>{t("连接后可以浏览它提供的工具和资源。")}</p></div>:<>
+          <div className="mcp-console__head"><div><h2>{selected.name}</h2><span>{selected.transport.toUpperCase()} · {selected.enabled ?t("可连接"):t("已停用")}</span></div><Button type="primary" loading={busy} disabled={!selected.enabled} icon={<PlugZap size={16}/>} onClick={()=>void connect(selected)}>{t("连接并发现")}</Button></div>
+          <Alert type="info" showIcon message={t("安全调用")} description={t("工具名称、参数会在执行前展示。只有确认后，Arcadia 才会发送本次调用。")}/>
+          {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("正在发现服务能力\u2026")}</span></div>:<div className="mcp-capabilities">
+            <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("工具")}</span><Tag>{tools.length}</Tag></div>
+              {tools.length === 0 ? <div className="mcp-placeholder">{t("连接 Server 后显示工具")}</div>:tools.map(tool=><Card key={tool.name} className="mcp-tool-card">
+                <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("无描述")}</p></div><Button icon={<Play size={14}/>} disabled={busy} onClick={()=>void invoke(tool)}>{t("审核并调用")}</Button></div>
+                <Input.TextArea value={toolArgs[tool.name] ?? '{}'} onChange={event => setToolArgs(           (current                                        )=>({...current,[tool.name]:event.target.value}))} autoSize={{minRows:2,maxRows:8}}/>
               </Card>)}
             </section>
-            <section><div className="mcp-section-title"><span><Database size={17}/>{t("\u8D44\u6E90")}</span><Tag>{resources.length}</Tag></div>
-              {resources.length === 0 ? <div className="mcp-placeholder">{t("\u670D\u52A1\u672A\u8FD4\u56DE\u8D44\u6E90")}</div>:resources.map((resource,index)=><div className="mcp-resource"key={resource.uri??index}><Database size={16}/><span><b>{resource.name??resource.uri}</b><small>{resource.description??resource.uri}</small></span></div>)}
+            <section><div className="mcp-section-title"><span><Database size={17}/>{t("资源")}</span><Tag>{resources.length}</Tag></div>
+              {resources.length === 0 ? <div className="mcp-placeholder">{t("服务未返回资源")}</div>:resources.map((resource,index)=><div className="mcp-resource" key={resource.uri??index}><Database size={16}/><span><b>{resource.name??resource.uri}</b><small>{resource.description??resource.uri}</small></span></div>)}
             </section>
           </div>}
-          {result !== undefined && <section className="mcp-result"><div className="mcp-section-title"><span>{t("\u8C03\u7528\u7ED3\u679C")}</span></div><pre>{JSON.stringify(result,null,2)}</pre></section>}
+          {result !== undefined && <section className="mcp-result"><div className="mcp-section-title"><span>{t("调用结果")}</span></div><pre>{JSON.stringify(result,null,2)}</pre></section>}
         </>}
       </main>
     </div>}
 
-    <Modal open={adding} title={t("\u6DFB\u52A0 MCP Server")}width={640}okText={t("\u6DFB\u52A0")}okButtonProps={{loading:busy}}onOk={()=>void addServer()}onCancel={()=>setAdding(false)}>
+    <Modal open={adding} title={t("添加 MCP Server")} width={640} okText={t("添加")} okButtonProps={{loading:busy}} onOk={()=>void addServer()} onCancel={()=>setAdding(false)}>
       <div className="mcp-add-form">
-        <label><span>{t("Server \u540D\u79F0")}</span><Input value={name}onChange={event=>setName(event.target.value)}placeholder={t("\u4F8B\u5982 filesystem")}/></label>
-        <label><span>{t("\u4F20\u8F93\u65B9\u5F0F")}</span><Segmented value={transport}onChange={value=>setTransport(value as McpTransport)}options={[{label:'stdio',value:'stdio'},{label:'HTTP',value:'http'},{label:'SSE',value:'sse'}]}/></label>
-        {transport === 'stdio' ? <><label><span>{t("\u542F\u52A8\u547D\u4EE4")}</span><Input value={command}onChange={event=>setCommand(event.target.value)}placeholder={t("\u4F8B\u5982 npx")}/></label><label><span>{t("\u53C2\u6570\uFF08\u6BCF\u884C\u4E00\u4E2A\uFF09")}</span><Input.TextArea rows={4}value={args}onChange={event=>setArgs(event.target.value)}placeholder={'-y\n@modelcontextprotocol/server-filesystem\nD:\\Documents'}/></label></>:<label><span>{t("\u670D\u52A1\u5730\u5740")}</span><Input value={url}onChange={event=>setUrl(event.target.value)}placeholder="https://example.com/mcp"/></label>}
-        <div className="mcp-add-form__split"><label><span>{t("\u73AF\u5883\u53D8\u91CF JSON")}</span><Input.TextArea rows={3}value={env}onChange={event=>setEnv(event.target.value)}placeholder='{"TOKEN":"..."}'/></label><label><span>{t("\u8BF7\u6C42\u5934 JSON")}</span><Input.TextArea rows={3}value={headers}onChange={event=>setHeaders(event.target.value)}placeholder='{"Authorization":"Bearer ..."}'/></label></div>
-        <label className="mcp-add-form__toggle"><Switch checked={enabled} onChange={setEnabled}/><span>{t("\u6DFB\u52A0\u540E\u542F\u7528")}</span></label>
+        <label><span>{t("Server 名称")}</span><Input value={name} onChange={event=>setName(event.target.value)} placeholder={t("例如 filesystem")}/></label>
+        <label><span>{t("传输方式")}</span><Segmented value={transport} onChange={value=>setTransport(value as McpTransport)} options={[{label:'stdio',value:'stdio'},{label:'HTTP',value:'http'},{label:'SSE',value:'sse'}]}/></label>
+        {transport === 'stdio' ? <><label><span>{t("启动命令")}</span><Input value={command} onChange={event=>setCommand(event.target.value)} placeholder={t("例如 npx")}/></label><label><span>{t("参数（每行一个）")}</span><Input.TextArea rows={4} value={args} onChange={event=>setArgs(event.target.value)} placeholder={'-y\n@modelcontextprotocol/server-filesystem\nD:\\Documents'}/></label></>:<label><span>{t("服务地址")}</span><Input value={url} onChange={event=>setUrl(event.target.value)} placeholder="https://example.com/mcp"/></label>}
+        <div className="mcp-add-form__split"><label><span>{t("环境变量 JSON")}</span><Input.TextArea rows={3} value={env} onChange={event=>setEnv(event.target.value)} placeholder='{"TOKEN":"..."}'/></label><label><span>{t("请求头 JSON")}</span><Input.TextArea rows={3} value={headers} onChange={event=>setHeaders(event.target.value)} placeholder='{"Authorization":"Bearer ..."}'/></label></div>
+        <label className="mcp-add-form__toggle"><Switch checked={enabled} onChange={setEnabled}/><span>{t("添加后启用")}</span></label>
       </div>
     </Modal>
   </section>

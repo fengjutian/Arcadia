@@ -29,7 +29,7 @@ export interface SelectProps<Value = string, Option extends SelectOption<Value> 
   ariaLabel?: string
 }
 
-export function Select<Value = string, Option extends SelectOption<Value> = SelectOption<Value>>({ value, defaultValue, options = [], onChange, mode, placeholder =t("\u8BF7\u9009\u62E9"),disabled,size='middle',className='',style,name,id,ariaLabel}:SelectProps<Value,Option>){
+export function Select<Value = string, Option extends SelectOption<Value> = SelectOption<Value>>({ value, defaultValue, options = [], onChange, mode, placeholder =t("请选择"),disabled,size='middle',className='',style,name,id,ariaLabel}:SelectProps<Value,Option>){
   const [open, setOpen] = useState(false)
   const multiple = mode === 'multiple'
   useModalOverlayLifecycle(open)

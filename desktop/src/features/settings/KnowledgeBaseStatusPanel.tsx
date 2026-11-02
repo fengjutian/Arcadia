@@ -51,28 +51,28 @@ export function KnowledgeBaseStatusPanel() {
     const remaining = rules.filter(rule => rule.origin !== origin)
     await replaceSitePermissions(remaining)
     setRules(remaining)
-    messageApi.success(t("\u5DF2\u6E05\u9664 {value0} \u7684\u7AD9\u70B9\u6743\u9650",{value0:origin}))
+    messageApi.success(t("已清除 {value0} 的站点权限",{value0:origin}))
   }
 
   async function rebuildIndex() {
     const target = providers.find(p => p.embeddingModel)
     if (!target) {
-      messageApi.warning(t("\u8BF7\u5148\u5728\u300CAI Provider\u300D\u4E2D\u914D\u7F6E\u5E26 embeddingModel \u7684 Provider"))
+      messageApi.warning(t("请先在「AI Provider」中配置带 embeddingModel 的 Provider"))
       return
     }
     const n = await ragRebuildIndex(target.id, target.embeddingModel ?? target.model)
-    messageApi.success(t("\u5DF2\u91CD\u5EFA\u7D22\u5F15\uFF1A{value0} \u4E2A\u6587\u6863\u5F85\u5904\u7406",{value0:n}))
+    messageApi.success(t("已重建索引：{value0} 个文档待处理",{value0:n}))
     void refresh()
   }
 
   async function enqueueAll() {
     const target = providers.find(p => p.embeddingModel)
     if (!target) {
-      messageApi.warning(t("\u8BF7\u5148\u5728\u300CAI Provider\u300D\u4E2D\u914D\u7F6E\u5E26 embeddingModel \u7684 Provider"))
+      messageApi.warning(t("请先在「AI Provider」中配置带 embeddingModel 的 Provider"))
       return
     }
     const n = await ragEnqueueAll(target.id, target.embeddingModel ?? target.model)
-    messageApi.success(t("\u5DF2\u5165\u961F {value0} \u7BC7\u65B0\u6587\u6863",{value0:n}))
+    messageApi.success(t("已入队 {value0} 篇新文档",{value0:n}))
     void refresh()
   }
 
@@ -84,27 +84,27 @@ export function KnowledgeBaseStatusPanel() {
   return <div className="kb-status-panel">
     {contextHolder}
     <Space style={{ marginBottom: 8 }} align="center">
-      <Typography.Title level={5} style={{ margin: 0 }}>{t("\u77E5\u8BC6\u5E93\u72B6\u6001")}</Typography.Title>
-      <Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={() => void refresh()}>{t("\u5237\u65B0")}</Button>
+      <Typography.Title level={5} style={{ margin: 0 }}>{t("知识库状态")}</Typography.Title>
+      <Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={() => void refresh()}>{t("刷新")}</Button>
     </Space>
     {status
-      ? <Typography.Paragraph type="secondary">{t("\u6570\u636E\u5E93 schema \u7248\u672C")} 
+      ? <Typography.Paragraph type="secondary">{t("数据库 schema 版本")} 
                         <b>{status.version}</b>
           {status.pending > 0
-            ? <Tag color="gold" style={{ marginLeft: 8 }}>{t("\u5F85\u5E94\u7528")} {status.pending} {t("\u4E2A\u8FC1\u79FB")}</Tag>
-            : <Tag color="green" style={{ marginLeft: 8 }}>{t("\u5DF2\u662F\u6700\u65B0")}</Tag>}
+            ? <Tag color="gold" style={{ marginLeft: 8 }}>{t("待应用")} {status.pending} {t("个迁移")}</Tag>
+            : <Tag color="green" style={{ marginLeft: 8 }}>{t("已是最新")}</Tag>}
         </Typography.Paragraph>
-      : <Alert type="info" showIcon message={t("\u684C\u9762\u7AEF\u4EE5\u5916\u7684\u73AF\u5883\u4E0D\u5305\u542B\u672C\u5730\u77E5\u8BC6\u5E93")}/>}
-    <Typography.Title level={5} style={{ marginTop: 16 }}>{t("\u7AD9\u70B9\u6743\u9650\uFF08")}{rules.length}）</Typography.Title>
+      : <Alert type="info" showIcon message={t("桌面端以外的环境不包含本地知识库")}/>}
+    <Typography.Title level={5} style={{ marginTop: 16 }}>{t("站点权限（")}{rules.length}）</Typography.Title>
     {rules.length === 0
-      ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("\u5C1A\u672A\u8BB0\u5F55\u4EFB\u4F55\u7AD9\u70B9\u6743\u9650")}/>
+      ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("尚未记录任何站点权限")}/>
       : <Table<SitePermissionRule>
           size="small"
           rowKey="origin"
           dataSource={rules}
           pagination={false}
           columns={[
-            { title:t("\u7AD9\u70B9"),dataIndex:'origin'},
+            { title:t("站点"),dataIndex:'origin'},
             ...SITE_PERMISSION_KINDS.map(        (kind
 
 
@@ -114,30 +114,30 @@ export function KnowledgeBaseStatusPanel() {
 
              )                                =>( {title:kind,key:kind,width:80,render:(_:unknown,rule:SitePermissionRule)=>(<Tag color={DECISION_COLOR[rule[kind]]??'default'}>{rule[kind]}</Tag>),})),
             {
-              title:t("\u64CD\u4F5C"),
+              title:t("操作"),
               key: 'actions',
               width: 90,
               render: (_: unknown, rule: SitePermissionRule) =>(
-                <Button size="small" danger onClick={() => void resetRule(rule.origin)}>{t("\u6E05\u9664")}</Button>)
+                <Button size="small" danger onClick={() => void resetRule(rule.origin)}>{t("清除")}</Button>)
                ,
             },
           ]}
         />}
 
-    <Typography.Title level={5} style={{ marginTop: 16 }}>{t("RAG \u7D22\u5F15")}</Typography.Title>
+    <Typography.Title level={5} style={{ marginTop: 16 }}>{t("RAG 索引")}</Typography.Title>
     {ragStatus
       ? <Space wrap>
-          <Tag>{t("\u603B\u4EFB\u52A1")} {ragStatus.totalJobs}</Tag>
-          <Tag color="gold">{t("\u7B49\u5F85")} {ragStatus.pending}</Tag>
-          <Tag color="red">{t("\u5931\u8D25")} {ragStatus.failed}</Tag>
-          <Tag color="green">{t("\u5B8C\u6210")} {ragStatus.completed}</Tag>
-          <Tag>{t("\u5DF2\u7D22\u5F15")} {ragStatus.indexedDocuments}</Tag>
-          {ragStatus.recovered > 0 && <Tag color="cyan">{t("\u5DF2\u6062\u590D")} {ragStatus.recovered}</Tag>}
+          <Tag>{t("总任务")} {ragStatus.totalJobs}</Tag>
+          <Tag color="gold">{t("等待")} {ragStatus.pending}</Tag>
+          <Tag color="red">{t("失败")} {ragStatus.failed}</Tag>
+          <Tag color="green">{t("完成")} {ragStatus.completed}</Tag>
+          <Tag>{t("已索引")} {ragStatus.indexedDocuments}</Tag>
+          {ragStatus.recovered > 0 && <Tag color="cyan">{t("已恢复")} {ragStatus.recovered}</Tag>}
         </Space>
-      : <Alert type="info" showIcon message={t("\u975E\u684C\u9762\u73AF\u5883\uFF0C\u8DF3\u8FC7 RAG \u7D22\u5F15")}/>}
+      : <Alert type="info" showIcon message={t("非桌面环境，跳过 RAG 索引")}/>}
     <Space style={{ marginTop: 8 }} wrap>
-      <Button size="small" onClick={() => void rebuildIndex()}>{t("\u91CD\u5EFA\u7D22\u5F15")}</Button>
-      <Button size="small" onClick={() => void enqueueAll()}>{t("\u5165\u961F\u65B0\u6587\u6863")}</Button>
+      <Button size="small" onClick={() => void rebuildIndex()}>{t("重建索引")}</Button>
+      <Button size="small" onClick={() => void enqueueAll()}>{t("入队新文档")}</Button>
     </Space>
     {ragJobs.length > 0 &&(
       <Table<RagJobRow>
@@ -147,11 +147,11 @@ export function KnowledgeBaseStatusPanel() {
         dataSource={ragJobs}
         pagination={false}
         columns={[
-          { title:t("\u6587\u6863"),dataIndex:'documentId'},
+          { title:t("文档"),dataIndex:'documentId'},
           { title: 'Provider', dataIndex: 'providerId' },
-          { title:t("\u6A21\u578B"),dataIndex:'model'},
+          { title:t("模型"),dataIndex:'model'},
           {
-            title:t("\u72B6\u6001"),
+            title:t("状态"),
             dataIndex: 'status',
             render: (status: RagJobRow['status']) => {
               const color = status === 'COMPLETED' ? 'green'
@@ -162,10 +162,10 @@ export function KnowledgeBaseStatusPanel() {
             },
           },
           {
-            title:t("\u64CD\u4F5C"),
+            title:t("操作"),
             key: 'actions',
             render: (_: unknown, job: RagJobRow) =>(
-              <Button size="small" onClick={() => void retryJob(job.id)}>{t("\u91CD\u8BD5")}</Button>)
+              <Button size="small" onClick={() => void retryJob(job.id)}>{t("重试")}</Button>)
              ,
           },
         ]}

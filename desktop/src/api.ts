@@ -70,7 +70,7 @@ export async function listSearchAliases(): Promise<SearchAlias[]> {
 }
 
 export async function addSearchAlias(term: string, alias: string): Promise<SearchAlias> {
-  if (!isTauri()) throw new Error(t("\u672C\u5730\u641C\u7D22\u4E0D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("本地搜索不可用"))
   return invoke<SearchAlias>('local_add_search_alias', { term, alias })
 }
 
@@ -84,7 +84,7 @@ export async function getSearchIndexStatus(): Promise<SearchIndexStatus> {
 }
 
 export async function rebuildSearchIndex(): Promise<SearchIndexStatus> {
-  if (!isTauri()) throw new Error(t("\u672C\u5730\u641C\u7D22\u4E0D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("本地搜索不可用"))
   return invoke<SearchIndexStatus>('local_rebuild_search_index')
 }
 
@@ -1089,32 +1089,32 @@ export async function siteBlacklistList(): Promise<SiteBlacklistEntry[]> {
 }
 
 export async function siteBlacklistAdd(input: string, note?: string | null, source?: string, includeSubdomains = true): Promise<SiteBlacklistEntry> {
-  if (!isTauri()) throw new Error(t("\u7F51\u7AD9\u5C01\u6740\u4EC5\u5728\u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("网站封杀仅在桌面应用中可用"))
   return invoke<SiteBlacklistEntry>('site_blacklist_add', { input, note: note ?? null, source: source ?? null, includeSubdomains })
 }
 
 export async function siteBlacklistAddMany(input: string): Promise<SiteBlacklistImportResult> {
-  if (!isTauri()) throw new Error(t("\u7F51\u7AD9\u5C01\u6740\u4EC5\u5728\u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("网站封杀仅在桌面应用中可用"))
   return invoke<SiteBlacklistImportResult>('site_blacklist_add_many', { input })
 }
 
 export async function siteBlacklistRemove(id: string): Promise<void> {
-  if (!isTauri()) throw new Error(t("\u7F51\u7AD9\u5C01\u6740\u4EC5\u5728\u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("网站封杀仅在桌面应用中可用"))
   await invoke('site_blacklist_remove', { id })
 }
 
 export async function siteBlacklistSetEnabled(id: string, enabled: boolean): Promise<void> {
-  if (!isTauri()) throw new Error(t("\u7F51\u7AD9\u5C01\u6740\u4EC5\u5728\u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("网站封杀仅在桌面应用中可用"))
   await invoke('site_blacklist_set_enabled', { id, enabled })
 }
 
 export async function siteBlacklistSetScope(id: string, includeSubdomains: boolean): Promise<void> {
-  if (!isTauri()) throw new Error(t("\u7F51\u7AD9\u5C01\u6740\u4EC5\u5728\u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("网站封杀仅在桌面应用中可用"))
   await invoke('site_blacklist_set_scope', { id, includeSubdomains })
 }
 
 export async function siteBlacklistClear(): Promise<number> {
-  if (!isTauri()) throw new Error(t("\u7F51\u7AD9\u5C01\u6740\u4EC5\u5728\u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("网站封杀仅在桌面应用中可用"))
   return invoke<number>('site_blacklist_clear')
 }
 
@@ -1124,7 +1124,7 @@ export async function siteBlacklistGetSettings(): Promise<SiteBlacklistSettings>
 }
 
 export async function siteBlacklistSetSettings(enabled: boolean, blockSubresources: boolean): Promise<void> {
-  if (!isTauri()) throw new Error(t("\u7F51\u7AD9\u5C01\u6740\u4EC5\u5728\u684C\u9762\u5E94\u7528\u4E2D\u53EF\u7528"))
+  if (!isTauri()) throw new Error(t("网站封杀仅在桌面应用中可用"))
   await invoke('site_blacklist_set_settings', { enabled, blockSubresources })
 }
 

@@ -50,7 +50,7 @@ const isTauri = () => '__TAURI_INTERNALS__' in window
 const FALLBACK: DownloadRecord[] = []
 
 export async function getDefaultDownloadDirectory(): Promise<string> {
-  if (!isTauri()) return t("\u7CFB\u7EDF\u9ED8\u8BA4\u4E0B\u8F7D\u6587\u4EF6\u5939")
+  if (!isTauri()) return t("系统默认下载文件夹")
   return invoke<string>('download_default_directory')
 }
 

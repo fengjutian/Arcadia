@@ -30,9 +30,9 @@ interface AssistantPanelProps {
 }
 
 const TRANSLATION_LANGUAGES = [
-  { value: 'zh-CN', label:t("\u4E2D\u6587\uFF08\u7B80\u4F53\uFF09")},
+  { value: 'zh-CN', label:t("中文（简体）")},
   { value: 'en', label: 'English' },
-  { value: 'ja', label:t("\u65E5\u672C\u8A9E")},
+  { value: 'ja', label:t("日本語")},
   { value: 'ko', label: '한국어' },
   { value: 'fr', label: 'Français' },
   { value: 'de', label: 'Deutsch' },
@@ -167,24 +167,24 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
   const passages = useMemo(() => article ? numberPassages(article.markdown ?? '') : [], [article])
 
   async function generateSummary() {
-    if (!providerId) { setError(t("\u8BF7\u5148\u5728\u300C\u8BBE\u7F6E \u2192 AI Provider\u300D\u4E2D\u914D\u7F6E\u4E00\u4E2A Provider\u3002"));return}
+    if (!providerId) { setError(t("请先在「设置 \u2192 AI Provider」中配置一个 Provider。"));return}
     const markdown = (translationSource || article?.markdown || '').trim()
-    if (!markdown) { setError(t("\u6682\u65F6\u65E0\u6CD5\u63D0\u53D6\u5F53\u524D\u9875\u9762\u6B63\u6587\u3002"));return}
+    if (!markdown) { setError(t("暂时无法提取当前页面正文。"));return}
     setBusy(true); setError(null); setSummary('')
     try {
       const request = buildSummaryPrompt(markdown, kind, article?.title || currentUrl)
       const response = await aiChat(providerId, request)
       setSummary(response.content)
-    } catch (caught) { setError(caught instanceof Error ? caught.message :t("\u751F\u6210\u6458\u8981\u5931\u8D25"))}
+    } catch (caught) { setError(caught instanceof Error ? caught.message :t("生成摘要失败"))}
     finally { setBusy(false) }
   }
 
   async function askQuestion() {
-    if (!providerId) { setError(t("\u8BF7\u5148\u5728\u300C\u8BBE\u7F6E \u2192 AI Provider\u300D\u4E2D\u914D\u7F6E\u4E00\u4E2A Provider\u3002"));return}
+    if (!providerId) { setError(t("请先在「设置 \u2192 AI Provider」中配置一个 Provider。"));return}
     const markdown = article?.markdown?.trim()
     const trimmed = question.trim()
-    if (!markdown) { setError(t("\u6682\u65F6\u65E0\u6CD5\u63D0\u53D6\u5F53\u524D\u9875\u9762\u6B63\u6587\u3002"));return}
-    if (!trimmed) { setError(t("\u8BF7\u8F93\u5165\u95EE\u9898\u3002"));return}
+    if (!markdown) { setError(t("暂时无法提取当前页面正文。"));return}
+    if (!trimmed) { setError(t("请输入问题。"));return}
     setBusy(true); setError(null); setAskAnswer(''); setAskCitations([]); setAskNotFound(false)
     try {
       const request = buildAskPrompt(markdown, trimmed, article?.title || currentUrl)
@@ -194,16 +194,16 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
       setAskCitations(parsed.citations)
       setAskNotFound(parsed.notFound)
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message :t("\u56DE\u7B54\u5931\u8D25")
+      const message = caught instanceof Error ? caught.message :t("回答失败")
       if (message !== 'cancelled') setError(message)
     }
     finally { setBusy(false) }
   }
 
   async function translateArticle() {
-    if (!providerId) { setError(t("\u8BF7\u5148\u5728\u300C\u8BBE\u7F6E \u2192 AI Provider\u300D\u4E2D\u914D\u7F6E\u4E00\u4E2A Provider\u3002"));return}
+    if (!providerId) { setError(t("请先在「设置 \u2192 AI Provider」中配置一个 Provider。"));return}
     const markdown = article?.markdown?.trim()
-    if (!markdown) { setError(t("\u6682\u65F6\u65E0\u6CD5\u63D0\u53D6\u5F53\u524D\u9875\u9762\u6B63\u6587\u3002"));return}
+    if (!markdown) { setError(t("暂时无法提取当前页面正文。"));return}
     const input = { markdown, targetLanguage, view: translationView }
     const key = translationKey(input)
     const hit = cache.find(entry => entry.key === key)
@@ -217,23 +217,23 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
       setCache(next)
       void setSession('ai.translations', JSON.stringify(next))
       setTranslation(content)
-    } catch (caught) { setError(caught instanceof Error ? caught.message :t("\u7FFB\u8BD1\u5931\u8D25"))}
+    } catch (caught) { setError(caught instanceof Error ? caught.message :t("翻译失败"))}
     finally { setBusy(false) }
   }
 
   async function copyText(text: string) {
-    try { await navigator.clipboard.writeText(text); messageApi.success(t("\u5DF2\u590D\u5236"))}
-    catch { messageApi.error(t("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u6D4F\u89C8\u5668\u6743\u9650"))}
+    try { await navigator.clipboard.writeText(text); messageApi.success(t("已复制"))}
+    catch { messageApi.error(t("复制失败，请检查浏览器权限"))}
   }
 
   async function saveAsDocumentSummary() {
     if (!summary) return
     try {
       const document = await findDocumentByUrl(currentUrl)
-      if (!document) { messageApi.warning(t("\u8BF7\u5148\u4FDD\u5B58\u7F51\u9875\u5230\u77E5\u8BC6\u5E93\uFF0C\u518D\u5199\u5165\u6458\u8981"));return}
+      if (!document) { messageApi.warning(t("请先保存网页到知识库，再写入摘要"));return}
       await updateDocument(document.id, { summary })
-      messageApi.success(t("\u6458\u8981\u5DF2\u5199\u5165\u6587\u6863"))
-    } catch (caught) { messageApi.error(caught instanceof Error ? caught.message :t("\u4FDD\u5B58\u5931\u8D25"))}
+      messageApi.success(t("摘要已写入文档"))
+    } catch (caught) { messageApi.error(caught instanceof Error ? caught.message :t("保存失败"))}
   }
 
   const currentProvider = providers.find(item => item.id === providerId)
@@ -252,49 +252,49 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
       onPointerMove={dragPanel}
       onPointerUp={stopDragging}
       onPointerCancel={stopDragging}
-      title={t("\u62D6\u62FD\u79FB\u52A8 AI \u52A9\u624B")}
-    ><div className="ai-panel__heading"><span className="ai-mark"><RobotOutlined/></span><span><b>AI Assistant</b><small>{t("\u9605\u8BFB\u3001\u63D0\u95EE\u4E0E\u7FFB\u8BD1")}</small></span></div><Button type="text"aria-label={t("\u5173\u95ED AI \u52A9\u624B")}icon={<CloseOutlined/>}onClick={close}/></div>
+      title={t("拖拽移动 AI 助手")}
+    ><div className="ai-panel__heading"><span className="ai-mark"><RobotOutlined/></span><span><b>AI Assistant</b><small>{t("阅读、提问与翻译")}</small></span></div><Button type="text" aria-label={t("关闭 AI 助手")} icon={<CloseOutlined/>} onClick={close}/></div>
     <Segmented className="ai-panel__modes" block value={mode} onChange={value => setMode(value as PanelMode)} options={[
-      {label:t("\u6458\u8981"),value:'summarize'as PanelMode},
-      {label:t("\u63D0\u95EE"),value:'ask'as PanelMode},
-      {label:t("\u7FFB\u8BD1"),value:'translate'as PanelMode},
+      {label:t("摘要"),value:'summarize'as PanelMode},
+      {label:t("提问"),value:'ask'as PanelMode},
+      {label:t("翻译"),value:'translate'as PanelMode},
     ]}/>
     <Space wrap className="ai-panel__provider">
       <Tag icon={<RobotOutlined/>} color={currentProvider ? 'green' : 'default'}>
-        {currentProvider ? `${currentProvider.type ||t("OpenAI \u517C\u5BB9")} · ${currentProvider.model||t("\u672A\u8BBE\u7F6E\u6A21\u578B")}`:t("\u672A\u914D\u7F6E Provider")}
+        {currentProvider ? `${currentProvider.type ||t("OpenAI 兼容")} · ${currentProvider.model||t("未设置模型")}`:t("未配置 Provider")}
       </Tag>
-      {providers.length > 1 && <Select<string> size="small" value={providerId ?? undefined} onChange={setProviderId} options={providers.map(        (item                            )=>({label:item.model,value:item.id}))}style={{minWidth:160}}/>}
+      {providers.length > 1 && <Select<string> size="small" value={providerId ?? undefined} onChange={setProviderId} options={providers.map(        (item                            )=>({label:item.model,value:item.id}))} style={{minWidth:160}}/>}
     </Space>
     <Card size="small" className="context-card">
       {article
-        ? <><GlobalOutlined/> {isPdfContext ?t("PDF \u6587\u672C"):t("\u9875\u9762\u6B63\u6587")} · {article.wordCount} {t("\u5B57")}<Tag color="success">{t("\u5C31\u7EEA")}</Tag></>
+        ? <><GlobalOutlined/> {isPdfContext ?t("PDF 文本"):t("页面正文")} · {article.wordCount} {t("字")}<Tag color="success">{t("就绪")}</Tag></>
         : isPdfContext
-          ? <><GlobalOutlined/> {t("PDF \u6587\u672C")}<Tag>{pdfContextError||t("\u6B63\u5728\u63D0\u53D6")}</Tag></>
-          : <><GlobalOutlined/> {t("\u5F53\u524D\u9875\u9762")}<Tag>{pageContextPending?t("\u6B63\u5728\u63D0\u53D6\u6B63\u6587"):pageContextError||t("\u65E0\u6CD5\u63D0\u53D6\u6B63\u6587")}</Tag></>}
+          ? <><GlobalOutlined/> {t("PDF 文本")}<Tag>{pdfContextError||t("正在提取")}</Tag></>
+          : <><GlobalOutlined/> {t("当前页面")}<Tag>{pageContextPending?t("正在提取正文"):pageContextError||t("无法提取正文")}</Tag></>}
     </Card>
 
     {mode === 'summarize' &&(
       <>
         <Segmented className="ai-panel__summary-kind" block value={kind} onChange={value => setKind(value as SummaryKind)} options={[
-          {label:t("\u4E00\u53E5\u8BDD"),value:'one-sentence'},
-          {label:t("\u7B80\u77ED"),value:'short'},
-          {label:t("\u8BE6\u7EC6"),value:'detailed'},
-          {label:t("\u89C2\u70B9"),value:'key-points'},
+          {label:t("一句话"),value:'one-sentence'},
+          {label:t("简短"),value:'short'},
+          {label:t("详细"),value:'detailed'},
+          {label:t("观点"),value:'key-points'},
         ]}/>
         <Space orientation="vertical" className="panel-actions">
-          <Button block icon={<ThunderboltOutlined/>} onClick={() => void generateSummary()} loading={busy} disabled={noProvider || noArticle}>{t("\u751F\u6210")} {summaryKindLabel(kind)}</Button>
-          <Button block icon={<CopyOutlined/>} onClick={() => void copyText(summary)} disabled={!summary}>{t("\u590D\u5236\u6458\u8981")}</Button>
-          <Button block icon={<ThunderboltOutlined/>} onClick={() => void generateSummary()} disabled={busy || noProvider || !summary}>{t("\u91CD\u65B0\u751F\u6210")}</Button>
+          <Button block icon={<ThunderboltOutlined/>} onClick={() => void generateSummary()} loading={busy} disabled={noProvider || noArticle}>{t("生成")} {summaryKindLabel(kind)}</Button>
+          <Button block icon={<CopyOutlined/>} onClick={() => void copyText(summary)} disabled={!summary}>{t("复制摘要")}</Button>
+          <Button block icon={<ThunderboltOutlined/>} onClick={() => void generateSummary()} disabled={busy || noProvider || !summary}>{t("重新生成")}</Button>
         </Space>
         <Card className="ai-result" size="small">
           {busy && <Spin/>}
           {error && <Alert type="error" message={error}/>}
           {!busy && !error && summary && <Typography.Paragraph style={{whiteSpace:'pre-wrap'}}>{summary}</Typography.Paragraph>}
-          {!busy && !error && !summary && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("\u751F\u6210\u7ED3\u679C\u5C06\u51FA\u73B0\u5728\u8FD9\u91CC")}/>}
+          {!busy && !error && !summary && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("生成结果将出现在这里")}/>}
         </Card>
         <Space orientation="vertical" style={{width:'100%'}}>
-          <Button block icon={<SaveOutlined/>} onClick={() => void saveAsDocumentSummary()} disabled={!summary}>{t("\u628A\u6458\u8981\u5199\u56DE\u6587\u6863")}</Button>
-          <Button block onClick={() => void saveToLibrary()}>{t("\u4FDD\u5B58\u5230\u77E5\u8BC6\u5E93")}</Button>
+          <Button block icon={<SaveOutlined/>} onClick={() => void saveAsDocumentSummary()} disabled={!summary}>{t("把摘要写回文档")}</Button>
+          <Button block onClick={() => void saveToLibrary()}>{t("保存到知识库")}</Button>
         </Space>
       </>)
      }
@@ -302,12 +302,12 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
     {mode === 'ask' &&(
       <>
         <Space orientation="vertical" className="panel-actions" style={{width:'100%'}}>
-          <Input.TextArea autoSize={{minRows:2,maxRows:4}} value={question} onChange={event => setQuestion(event.target.value)} placeholder={t("\u5411\u5F53\u524D\u9875\u9762\u63D0\u95EE\u2026")}disabled={busy}/>
+          <Input.TextArea autoSize={{minRows:2,maxRows:4}} value={question} onChange={event => setQuestion(event.target.value)} placeholder={t("向当前页面提问\u2026")} disabled={busy}/>
           {askStream.status === 'streaming'
-            ? <Button block danger icon={<StopOutlined/>} onClick={() => askStream.cancel()}>{t("\u505C\u6B62\u751F\u6210")}</Button>
-            : <Button block type="primary" icon={<ArrowRightOutlined/>} onClick={() => void askQuestion()} loading={busy} disabled={noProvider || noArticle || !question.trim()}>{t("\u63D0\u95EE")}</Button>}
+            ? <Button block danger icon={<StopOutlined/>} onClick={() => askStream.cancel()}>{t("停止生成")}</Button>
+            : <Button block type="primary" icon={<ArrowRightOutlined/>} onClick={() => void askQuestion()} loading={busy} disabled={noProvider || noArticle || !question.trim()}>{t("提问")}</Button>}
           {askStream.status === 'failed' && askStream.retryable &&(
-            <Alert type="warning" showIcon message={t("\u4E0A\u6B21\u5931\u8D25\uFF1A{value0}",{value0:askStream.errorMessage??''})}description={t("\u7F51\u7EDC\u6216\u670D\u52A1\u7AEF\u6682\u65F6\u4E0D\u53EF\u7528\uFF0C\u53EF\u91CD\u65B0\u63D0\u4EA4\u4EE5\u89E6\u53D1\u81EA\u52A8\u91CD\u8BD5\u3002")}/>)
+            <Alert type="warning" showIcon message={t("上次失败：{value0}",{value0:askStream.errorMessage??''})} description={t("网络或服务端暂时不可用，可重新提交以触发自动重试。")}/>)
            }
         </Space>
         <Card className="ai-result" size="small">
@@ -320,16 +320,16 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
                 : <Typography.Paragraph style={{whiteSpace:'pre-wrap'}}>{askAnswer}</Typography.Paragraph>}
               {!askNotFound && askCitations.length > 0 &&(
                 <Space wrap style={{marginTop:8}}>
-                  <Typography.Text type="secondary">{t("\u5F15\u7528\uFF1A")}</Typography.Text>
+                  <Typography.Text type="secondary">{t("引用：")}</Typography.Text>
                   {askCitations.map(id => {
                     const passage = passageById(passages, id)
-                    return <Tag key={id} className="ai-citation" onClick={() => passage && void copyText(passage.text)} title={passage ?t("\u70B9\u51FB\u590D\u5236\u6BB5\u843D\u539F\u6587"):t("\u672A\u627E\u5230\u6BB5\u843D")}>{id}</Tag>
+                    return <Tag key={id} className="ai-citation" onClick={() => passage && void copyText(passage.text)} title={passage ?t("点击复制段落原文"):t("未找到段落")}>{id}</Tag>
                   })}
                 </Space>)
                }
             </>)
            }
-          {!busy && !error && !askAnswer && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("\u56DE\u7B54\u5C06\u51FA\u73B0\u5728\u8FD9\u91CC")}/>}
+          {!busy && !error && !askAnswer && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("回答将出现在这里")}/>}
         </Card>
       </>)
      }
@@ -344,16 +344,16 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
           ]}/>
         </Space>
         <Space orientation="vertical" className="panel-actions" style={{width:'100%'}}>
-          <Button block type="primary" icon={<TranslationOutlined/>} onClick={() => void translateArticle()} loading={busy} disabled={noProvider || noTranslationSource}>{t("\u7FFB\u8BD1")}{translationSource?t("\u9009\u4E2D\u5185\u5BB9"):t("\u5F53\u524D\u9875\u9762")}</Button>
-          <Button block icon={<CopyOutlined/>} onClick={() => void copyText(translation)} disabled={!translation}>{t("\u590D\u5236\u8BD1\u6587")}</Button>
+          <Button block type="primary" icon={<TranslationOutlined/>} onClick={() => void translateArticle()} loading={busy} disabled={noProvider || noTranslationSource}>{t("翻译")}{translationSource?t("选中内容"):t("当前页面")}</Button>
+          <Button block icon={<CopyOutlined/>} onClick={() => void copyText(translation)} disabled={!translation}>{t("复制译文")}</Button>
         </Space>
         <Card className="ai-result" size="small">
           {busy && <Spin/>}
           {error && <Alert type="error" message={error}/>}
           {!busy && !error && translation && <Typography.Paragraph style={{whiteSpace:'pre-wrap'}}>{translation}</Typography.Paragraph>}
-          {!busy && !error && !translation && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("\u8BD1\u6587\u5C06\u51FA\u73B0\u5728\u8FD9\u91CC")}/>}
+          {!busy && !error && !translation && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("译文将出现在这里")}/>}
         </Card>
-        {cache.length > 0 && <Typography.Text type="secondary" style={{fontSize:12}}>{t("\u7F13\u5B58")} {cache.length} {t("\u6761\u5386\u53F2\u7FFB\u8BD1")}</Typography.Text>}
+        {cache.length > 0 && <Typography.Text type="secondary" style={{fontSize:12}}>{t("缓存")} {cache.length} {t("条历史翻译")}</Typography.Text>}
       </>)
      }
   </aside></>

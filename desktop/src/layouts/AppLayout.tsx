@@ -8,7 +8,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TopBarPortalProvider } from '../app/TopBarPortal'
 import { diagnosticLog } from '../shared/diagnostics'
 
-const items = [{ key: 'browser', icon: <Globe2/>, label:t("\u6D4F\u89C8\u5668")},{key:'library',icon:<BookOpen/>,label:t("\u77E5\u8BC6\u5E93")},{key:'search',icon:<Search/>,label:t("\u641C\u7D22")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const
+const items = [{ key: 'browser', icon: <Globe2/>, label:t("浏览器")},{key:'library',icon:<BookOpen/>,label:t("知识库")},{key:'search',icon:<Search/>,label:t("搜索")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const
 
 const SIDER_WIDTH = 64
 
@@ -51,7 +51,7 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
         <div className="app-topbar__slot" ref={setTopBarSlot}/>
       </header>
       <Layout className="app-body">
-        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><nav className="rail-nav rail-nav--primary" aria-label={t("\u4E3B\u5BFC\u822A")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("\u4FDD\u62A4\u5DF2\u5F00\u542F")}</b></Space><Typography.Text>{t("\u5DF2\u62E6\u622A 43 \u4E2A\u8BF7\u6C42")}</Typography.Text></div><nav className="rail-nav rail-nav--utility"aria-label={t("\u8F85\u52A9\u5BFC\u822A")}>{navButton({key:'settings',icon:<Settings/>,label:t("\u8BBE\u7F6E")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("\u672C\u5730\u5DE5\u4F5C\u533A")}</small></span></div></Layout.Sider>
+        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
         <Layout.Content className="app-content">{children}</Layout.Content>
       </Layout>
     </Layout>
@@ -74,10 +74,10 @@ function WindowChrome() {
   }
   return <>
     <div className="window-drag-strip" data-tauri-drag-region/>
-    <div className="window-controls" aria-label={t("\u7A97\u53E3\u63A7\u5236")}>
-      <button type="button" aria-label={t("\u6700\u5C0F\u5316")}title={t("\u6700\u5C0F\u5316")}onPointerDown={stopWindowDrag}onClick={()=>runWindowAction('minimize')}><Minus size={16}strokeWidth={1.5}/></button>
-      <button type="button" aria-label={t("\u6700\u5927\u5316\u6216\u8FD8\u539F")}title={t("\u6700\u5927\u5316\u6216\u8FD8\u539F")}onPointerDown={stopWindowDrag}onClick={()=>runWindowAction('maximize')}><Square size={12}strokeWidth={1.5}/></button>
-      <button type="button" className="window-controls__close" aria-label={t("\u5173\u95ED")}title={t("\u5173\u95ED")}onPointerDown={stopWindowDrag}onClick={()=>runWindowAction('close')}><X size={16}strokeWidth={1.5}/></button>
+    <div className="window-controls" aria-label={t("窗口控制")}>
+      <button type="button" aria-label={t("最小化")} title={t("最小化")} onPointerDown={stopWindowDrag} onClick={()=>runWindowAction('minimize')}><Minus size={16} strokeWidth={1.5}/></button>
+      <button type="button" aria-label={t("最大化或还原")} title={t("最大化或还原")} onPointerDown={stopWindowDrag} onClick={()=>runWindowAction('maximize')}><Square size={12} strokeWidth={1.5}/></button>
+      <button type="button" className="window-controls__close" aria-label={t("关闭")} title={t("关闭")} onPointerDown={stopWindowDrag} onClick={()=>runWindowAction('close')}><X size={16} strokeWidth={1.5}/></button>
     </div>
   </>
 }

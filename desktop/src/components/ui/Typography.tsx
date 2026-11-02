@@ -28,7 +28,7 @@ function Text({ type, strong, code, ellipsis, copyable, children, className, sty
   const tooltip = typeof ellipsis === 'object' ? ellipsis.tooltip : undefined
   return <span {...props} className={classes('ui-typography-text', { type, strong, code, className })} style={{ ...ellipsisStyle(ellipsis), ...style }} title={title ??( typeof tooltip === 'string' ? tooltip : undefined)}>
     {children}
-    {copyable && <button type="button" className="ui-typography-copy" aria-label={t("\u590D\u5236")}onClick={async()=>{await navigator.clipboard.writeText(copyText??String(children??''));setCopied(true);window.setTimeout(()=>setCopied(false),1200)}}>{copied ? <Check size={13}/> : <Copy size={13}/>}</button>}
+    {copyable && <button type="button" className="ui-typography-copy" aria-label={t("复制")} onClick={async()=>{await navigator.clipboard.writeText(copyText??String(children??''));setCopied(true);window.setTimeout(()=>setCopied(false),1200)}}>{copied ? <Check size={13}/> : <Copy size={13}/>}</button>}
   </span>
 }
 

@@ -27,9 +27,9 @@ export function PermissionPromptBar({ prompt }: PermissionPromptBarProps) {
       </span>
       <div className="browser-permission-prompt__body">
         <Typography.Text strong>
-          {originLabel} {t("\u8BF7\u6C42\u4F7F\u7528")} {kindLabel}
+          {originLabel} {t("请求使用")} {kindLabel}
         </Typography.Text>
-        <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12 }}>{t("\u6765\u6E90\uFF1A")}
+        <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12 }}>{t("来源：")}
              {origin}
         </Typography.Text>
       </div>
@@ -38,7 +38,7 @@ export function PermissionPromptBar({ prompt }: PermissionPromptBarProps) {
           size="small"
           icon={<CheckCircleOutlined />}
           onClick={() => void decide('allow-once')}
-        >{t("\u672C\u6B21\u5141\u8BB8")} 
+        >{t("本次允许")} 
 
         </Button>
         {!pending.private &&(
@@ -47,7 +47,7 @@ export function PermissionPromptBar({ prompt }: PermissionPromptBarProps) {
             type="primary"
             icon={<CheckCircleOutlined />}
             onClick={() => void decide('allow-always')}
-          >{t("\u59CB\u7EC8\u5141\u8BB8")} 
+          >{t("始终允许")} 
 
           </Button>)
          }
@@ -56,7 +56,7 @@ export function PermissionPromptBar({ prompt }: PermissionPromptBarProps) {
           danger
           icon={<CloseCircleOutlined />}
           onClick={() => void decide('deny-once')}
-        >{t("\u62D2\u7EDD")} 
+        >{t("拒绝")} 
 
         </Button>
       </Space>

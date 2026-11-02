@@ -26,7 +26,7 @@ export function RecoveryPanel({ open, state, onChoose }: RecoveryPanelProps) {
       title={
         <Space>
           <ExclamationCircleOutlined style={{ color: '#faad14' }} />
-          <span>{t("\u68C0\u6D4B\u5230\u4E0A\u4E00\u6B21\u4F1A\u8BDD\u5F02\u5E38\u9000\u51FA")}</span>
+          <span>{t("检测到上一次会话异常退出")}</span>
         </Space>
       }
       open={open}
@@ -35,17 +35,17 @@ export function RecoveryPanel({ open, state, onChoose }: RecoveryPanelProps) {
       footer={null}
       width={520}
     >
-      <Typography.Paragraph>{t("\u4E0A\u6B21\u4F1A\u8BDD\u7EA6")} 
-              <b>{ageMinutes} {t("\u5206\u949F\u524D")}</b> {t("\u672A\u6B63\u5E38\u7ED3\u675F\uFF08\u5D29\u6E83 / \u5F3A\u6740 / \u65AD\u7535\uFF09\u3002\u8BF7\u9009\u62E9\u5982\u4F55\u6062\u590D\uFF1A")} 
+      <Typography.Paragraph>{t("上次会话约")} 
+              <b>{ageMinutes} {t("分钟前")}</b> {t("未正常结束（崩溃 / 强杀 / 断电）。请选择如何恢复：")} 
       </Typography.Paragraph>
       <Space orientation="vertical" size={8} style={{ width: '100%' }}>
-        <Button block type="primary" onClick={() => onChoose('all')}>{t("\u6062\u590D\u5168\u90E8\u6807\u7B7E")} 
+        <Button block type="primary" onClick={() => onChoose('all')}>{t("恢复全部标签")} 
 
         </Button>
-        <Button block onClick={() => onChoose('pinned')}>{t("\u4EC5\u6062\u590D\u56FA\u5B9A\u6807\u7B7E")} 
+        <Button block onClick={() => onChoose('pinned')}>{t("仅恢复固定标签")} 
 
         </Button>
-        <Button block danger onClick={() => onChoose('discard')}>{t("\u653E\u5F03\u6062\u590D\uFF0C\u4ECE\u65B0\u6807\u7B7E\u5F00\u59CB")} 
+        <Button block danger onClick={() => onChoose('discard')}>{t("放弃恢复，从新标签开始")} 
 
         </Button>
       </Space>

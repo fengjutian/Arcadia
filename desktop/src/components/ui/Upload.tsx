@@ -24,7 +24,7 @@ function Dragger({ accept, beforeUpload, onRemove, fileList = [], children, disa
     <input ref={ref} hidden type="file" accept={accept} disabled={disabled} onChange={event => void receive(event.target.files)}/>
     <UploadCloud className="ui-upload-dragger__icon"/>
     <div>{children}</div>
-    {fileList.map(file => <div className="ui-upload-dragger__file" key={file.uid} onClick={event => event.stopPropagation()}><span>{file.name}</span><button type="button" aria-label={t("\u79FB\u9664 {value0}",{value0:file.name})}onClick={()=>onRemove?.(file)}><X size={14}/></button></div>)}
+    {fileList.map(file => <div className="ui-upload-dragger__file" key={file.uid} onClick={event => event.stopPropagation()}><span>{file.name}</span><button type="button" aria-label={t("移除 {value0}",{value0:file.name})} onClick={()=>onRemove?.(file)}><X size={14}/></button></div>)}
   </div>
 }
 

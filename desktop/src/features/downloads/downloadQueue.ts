@@ -103,11 +103,11 @@ export function queuedAgeMs(entry: QueuedDownload, now = Date.now()): number {
 /** Human-friendly wait time, e.g. "3 秒" / "2 分" / "1 小时". */
 export function formatQueuedAge(entry: QueuedDownload, now: number = Date.now()): string {
   const ms = queuedAgeMs(entry, now)
-  if (ms < 1000) return t("\u521A\u521A")
+  if (ms < 1000) return t("刚刚")
   const sec = Math.floor(ms / 1000)
-  if (sec < 60) return t("{value0} \u79D2",{value0:sec})
+  if (sec < 60) return t("{value0} 秒",{value0:sec})
   const min = Math.floor(sec / 60)
-  if (min < 60) return t("{value0} \u5206",{value0:min})
+  if (min < 60) return t("{value0} 分",{value0:min})
   const hr = Math.floor(min / 60)
-  return t("{value0} \u5C0F\u65F6",{value0:hr})
+  return t("{value0} 小时",{value0:hr})
 }

@@ -34,9 +34,9 @@ function createForm<Values extends Record<string, any>>(): FormInstance<Values> 
       const value = values[name]
       for (const rule of rules.get(name) ?? []) {
         const empty = value == null || String(value).trim() === ''
-        if (rule.required && empty) throw new Error(rule.message ??t("\u8BF7\u586B\u5199{value0}",{value0:name}))
-        if (!empty && rule.type === 'url' && !/^https?:\/\/[^\s]+$/i.test(String(value))) throw new Error(rule.message ??t("\u8BF7\u8F93\u5165\u6709\u6548 URL"))
-        if (!empty && rule.type === 'number' &&                                                                                   (Number.isNaN(Number(value))||(rule.min!=null&&Number(value)<rule.min)||(rule.max!=null&&Number(value)>rule.max)))throw new Error(rule.message??t("\u6570\u503C\u8D85\u51FA\u8303\u56F4"))
+        if (rule.required && empty) throw new Error(rule.message ??t("请填写{value0}",{value0:name}))
+        if (!empty && rule.type === 'url' && !/^https?:\/\/[^\s]+$/i.test(String(value))) throw new Error(rule.message ??t("请输入有效 URL"))
+        if (!empty && rule.type === 'number' &&                                                                                   (Number.isNaN(Number(value))||(rule.min!=null&&Number(value)<rule.min)||(rule.max!=null&&Number(value)>rule.max)))throw new Error(rule.message??t("数值超出范围"))
       }
     }
     return { ...values } as Values

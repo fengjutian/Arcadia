@@ -3,8 +3,8 @@
 // 再以 ESM 形式转出 Astro 需要的接口。
 import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const YAML = require('yaml');
+const nodeRequire = createRequire(import.meta.url);
+const YAML = nodeRequire('yaml');
 
 export const parse = YAML.parse;
 export const parseAllDocuments = YAML.parseAllDocuments;

@@ -15,6 +15,6 @@ function faviconCandidates(favicon: string | undefined, pageUrl: string): string
 export function TabFavicon({ favicon, pageUrl }: { favicon?: string; pageUrl: string }) {
   const candidates = faviconCandidates(favicon, pageUrl)
   const [index, setIndex] = useState(0)
-  if (!candidates[index]) return <GlobalOutlined aria-label={t("\u9ED8\u8BA4\u7F51\u7AD9\u56FE\u6807")}/>
+  if (!candidates[index]) return <GlobalOutlined aria-label={t("默认网站图标")}/>
   return <img src={candidates[index]} alt="" referrerPolicy="no-referrer" onError={() => setIndex(current => current + 1)}/>
 }
