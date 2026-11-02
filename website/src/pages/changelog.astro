@@ -43,9 +43,9 @@ const stats = [
   </section>
 
   <section class="border-b border-[var(--line)] bg-[var(--panel)]">
-    <nav class="shell grid gap-px bg-[var(--line)] sm:grid-cols-2 lg:grid-cols-4" aria-label="版本目录">
+    <nav class="shell grid gap-px bg-[var(--line)] grid-cols-2 lg:grid-cols-4" aria-label="版本目录">
       {releases.map((release) => (
-        <a href={`#${release.anchor}`} class="group flex flex-col justify-between gap-8 bg-[var(--bg)] p-5 transition hover:bg-[var(--subtle)]">
+        <a href={`#${release.anchor}`} class="group flex flex-col justify-between gap-6 bg-[var(--bg)] p-4 transition hover:bg-[var(--subtle)] sm:p-5">
           <span class="flex items-center justify-between gap-3 text-xs muted">
             <time datetime={release.date}>{release.dateLabel}</time>
             <span class:list={[release.status === 'latest' ? 'text-[var(--acid)]' : release.status === 'in-progress' ? 'text-[var(--ink)]' : '']}>{release.statusLabel}</span>

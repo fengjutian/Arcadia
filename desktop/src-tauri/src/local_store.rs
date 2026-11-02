@@ -5608,12 +5608,22 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].id, "archive-1");
 
-        // An update must rewrite the FTS row, not duplicate it.
+        // An update must rewrite the FTS row, not duplicate it. The URL carries
+        // the same keyword as the title, so both have to change.
         let mut renamed = tab.clone();
         renamed.title = "Rust borrowing explained".into();
+        renamed.url = "https://example.com/rust-borrowing".into();
         insert_archived_tab(&database, &renamed).unwrap();
         assert!(query_archived_tabs(&database, "ownership", 10).unwrap().is_empty());
         assert_eq!(query_archived_tabs(&database, "borrowing", 10).unwrap().len(), 1);
+        let indexed: i64 = database
+            .query_row(
+                "SELECT COUNT(*) FROM tab_archive_fts WHERE tab_archive_fts MATCH ?1",
+                params![build_fts5_query("borrowing")],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(indexed, 1, "an archive update must not duplicate FTS rows");
 
         // A delete must remove the FTS row as well.
         database
