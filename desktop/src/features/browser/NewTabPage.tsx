@@ -7,17 +7,7 @@ import { readSearchEngineConfig, SEARCH_ENGINE_PRESETS } from './searchEngine'
 import { classifyNavigationInput, renderSearchTemplate } from './navigation'
 import { QUICK_SITES } from './browserUtils'
 
-type Locale = 'zh' | 'en'
-interface WeatherState { temperature: number; weatherCode: number; place: string }
-
-const copy = {
-  zh: {
-    title:t("今天想探索什么？"),subtitle:t("一次输入，同时搜索互联网、AI 与本地知识库。"),placeholder:t("输入搜索内容或网址"),aiSearch:t("AI 搜索"),aiDetail:t("生成答案并继续追问"),search:t("搜索"),sources:t("参与搜索"),selectEngine:t("选择搜索引擎"),knowledge:t("本地知识库"),knowledgeDetail:t("网页、笔记与标签"),hint:t("搜索引擎、AI 搜索与本地知识库将作为并列来源参与对比查询。"),quickSites:t("常用网站"),tools:t("微软工具"),googleTools:t("Google 应用"),commonTools:t("常用工具"),allApps:'Microsoft 365',allGoogleApps:'Google',currentLocation:t("当前位置"),weatherUnavailable:t("天气暂不可用"),open:t("打开"),
-  },
-  en: {
-    title: 'What would you like to explore?', subtitle: 'Search the web, AI and your local knowledge in one place.', placeholder: 'Search or enter a web address', aiSearch: 'AI Search', aiDetail: 'Answer and follow-up chat', search: 'Search', sources: 'Search with', selectEngine: 'Choose search engines', knowledge: 'Local knowledge', knowledgeDetail: 'Pages, notes and tags', hint: 'Search engines, AI Search and local knowledge are peer sources in one comparison.', quickSites: 'Quick links', tools: 'Microsoft apps', googleTools: 'Google apps', commonTools: 'Useful tools', allApps: 'Microsoft 365', allGoogleApps: 'Google', currentLocation: 'Current location', weatherUnavailable: 'Weather unavailable', open: 'Open',
-  },
-} as const
+type WeatherState = { temperature: number; weatherCode: number; place: string }
 
 const officeIcon = (name: string) => `https://res-1.cdn.office.net/files/fabric-cdn-prod_20230815.002/assets/brand-icons/product/svg/${name}_48x1.svg`
 
@@ -91,15 +81,11 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
   const [engines, setEngines] = useState<string[]>([initialEngine])
   const [searchKnowledge, setSearchKnowledge] = useState(true)
   const [searchAi, setSearchAi] = useState(true)
-  const [locale, setLocale] = useState<Locale>(() => localStorage.getItem('new-tab-locale') === 'en' ? 'en' : 'zh')
   const [toolsOpen, setToolsOpen] = useState<'microsoft' | 'google' | 'common' | null>(null)
   const [weather, setWeather] = useState<WeatherState | null>(null)
   const [weatherFailed, setWeatherFailed] = useState(false)
   const toolsRef = useRef<HTMLDivElement>(null)
-  const text = copy[locale]
   const presets = SEARCH_ENGINE_PRESETS.map(        (item                                 )=>({label:item.label,value:item.id}))
-
-  useEffect(() => { localStorage.setItem('new-tab-locale', locale) }, [locale])
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
@@ -120,11 +106,11 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
         if (active && data.current?.temperature_2m != null && data.current.weather_code != null) setWeather({ temperature: Math.round(data.current.temperature_2m), weatherCode: data.current.weather_code, place })
       } catch { if (active) setWeatherFailed(true) }
     }
-    const fallback = () => void loadWeather(31.23, 121.47, locale === 'zh' ?t("上海"):'Shanghai')
+    const fallback = () => void loadWeather(31.23, 121.47, t("上海"))
     if (!navigator.geolocation) fallback()
-    else navigator.geolocation.getCurrentPosition(position => void loadWeather(position.coords.latitude, position.coords.longitude, text.currentLocation), fallback, { timeout: 3500, maximumAge: 30 * 60 * 1000 })
+    else navigator.geolocation.getCurrentPosition(position => void loadWeather(position.coords.latitude, position.coords.longitude, t("当前位置")), fallback, { timeout: 3500, maximumAge: 30 * 60 * 1000 })
     return () => { active = false }
-  }, [locale, text.currentLocation])
+  }, [])
 
   function templateFor(id: string) { return SEARCH_ENGINE_PRESETS.find(item => item.id === id)?.template ?? SEARCH_ENGINE_PRESETS[0].template }
   function submit() {
@@ -138,37 +124,36 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch }: {
   function toolPanel(items: Array<{ name: string; initial: string; color: string; iconUrl?: string; icon?: ReactNode; transparentIcon?: boolean; url: string }>, title: string, icon: ReactNode, homeUrl?: string, homeLabel?: string) {
     return <section className="new-tab__tools" aria-label={title}>
       <header><span>{icon}<b>{title}</b></span>{homeUrl && <button type="button" onClick={() => { setToolsOpen(null); void navigate(homeUrl) }}>{homeLabel}<ArrowUpRight size={14}/></button>}</header>
-      <div>{items.map(tool => <button key={tool.url} type="button" onClick={() => { setToolsOpen(null); void navigate(tool.url) }} title={`${text.open} ${tool.name}`}><span className={`new-tab__tool-icon${tool.transparentIcon ? ' new-tab__tool-icon--transparent' : ''}`} style={{ '--tool-color': tool.color } as CSSProperties}><span>{tool.icon ?? tool.initial}</span>{tool.iconUrl && <img src={tool.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/>}</span><small>{tool.name}</small></button>)}</div>
+      <div>{items.map(tool => <button key={tool.url} type="button" onClick={() => { setToolsOpen(null); void navigate(tool.url) }} title={`${t("打开")} ${tool.name}`}><span className={`new-tab__tool-icon${tool.transparentIcon ? ' new-tab__tool-icon--transparent' : ''}`} style={{ '--tool-color': tool.color } as CSSProperties}><span>{tool.icon ?? tool.initial}</span>{tool.iconUrl && <img src={tool.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/>}</span><small>{tool.name}</small></button>)}</div>
     </section>
   }
 
   return <div className="new-tab">
     <div className="new-tab__utilities">
-      <div className="new-tab__weather" title={weatherFailed ? text.weatherUnavailable : undefined}><CloudSun size={18}/>{weather ? <><span>{weather.place}</span><b>{weatherSymbol(weather.weatherCode)} {weather.temperature}°C</b></> : <span>{weatherFailed ? text.weatherUnavailable : '···'}</span>}</div>
-      <button className="new-tab__utility" type="button" onClick={() => setLocale(value => value === 'zh' ? 'en' : 'zh')} aria-label="Switch language"><Languages size={18}/><span>{locale === 'zh' ?t("中"):'EN'}</span></button>
+      <div className="new-tab__weather" title={weatherFailed ? t("天气暂不可用") : undefined}><CloudSun size={18}/>{weather ? <><span>{weather.place}</span><b>{weatherSymbol(weather.weatherCode)} {weather.temperature}°C</b></> : <span>{weatherFailed ? t("天气暂不可用") : '···'}</span>}</div>
       <div className="new-tab__launchers" ref={toolsRef}>
         <div className="new-tab__tools-wrap">
-          <button className="new-tab__utility new-tab__utility--google" type="button" onClick={() => setToolsOpen(value => value === 'google' ? null : 'google')} aria-expanded={toolsOpen === 'google'} aria-label={text.googleTools}><b>G</b><span>{text.googleTools}</span></button>
-          {toolsOpen === 'google' && toolPanel(googleTools, text.googleTools, <b className="google-g">G</b>, 'https://www.google.com/intl/zh-CN/about/products', text.allGoogleApps)}
+          <button className="new-tab__utility new-tab__utility--google" type="button" onClick={() => setToolsOpen(value => value === 'google' ? null : 'google')} aria-expanded={toolsOpen === 'google'} aria-label={t("Google 应用")}><b>G</b><span>{t("Google 应用")}</span></button>
+          {toolsOpen === 'google' && toolPanel(googleTools, t("Google 应用"), <b className="google-g">G</b>, 'https://www.google.com/intl/zh-CN/about/products', 'Google')}
         </div>
         <div className="new-tab__tools-wrap">
-          <button className="new-tab__utility" type="button" onClick={() => setToolsOpen(value => value === 'common' ? null : 'common')} aria-expanded={toolsOpen === 'common'} aria-label={text.commonTools}><Wrench size={18}/><span>{text.commonTools}</span></button>
-          {toolsOpen === 'common' && toolPanel(commonTools, text.commonTools, <Wrench size={17}/>)}
+          <button className="new-tab__utility" type="button" onClick={() => setToolsOpen(value => value === 'common' ? null : 'common')} aria-expanded={toolsOpen === 'common'} aria-label={t("常用工具")}><Wrench size={18}/><span>{t("常用工具")}</span></button>
+          {toolsOpen === 'common' && toolPanel(commonTools, t("常用工具"), <Wrench size={17}/>)}
         </div>
         <div className="new-tab__tools-wrap">
-          <button className="new-tab__utility" type="button" onClick={() => setToolsOpen(value => value === 'microsoft' ? null : 'microsoft')} aria-expanded={toolsOpen === 'microsoft'} aria-label={text.tools}><Grid3X3 size={18}/><span>{text.tools}</span></button>
-          {toolsOpen === 'microsoft' && toolPanel(tools, text.tools, <Grid3X3 size={17}/>, 'https://www.microsoft365.com', text.allApps)}
+          <button className="new-tab__utility" type="button" onClick={() => setToolsOpen(value => value === 'microsoft' ? null : 'microsoft')} aria-expanded={toolsOpen === 'microsoft'} aria-label={t("微软工具")}><Grid3X3 size={18}/><span>{t("微软工具")}</span></button>
+          {toolsOpen === 'microsoft' && toolPanel(tools, t("微软工具"), <Grid3X3 size={17}/>, 'https://www.microsoft365.com', 'Microsoft 365')}
         </div>
       </div>
     </div>
     <main className="new-tab__workspace">
-      <div className="new-tab__hero"><Typography.Title>{text.title}</Typography.Title><Typography.Paragraph>{text.subtitle}</Typography.Paragraph></div>
+      <div className="new-tab__hero"><Typography.Title>{t("今天想探索什么？")}</Typography.Title><Typography.Paragraph>{t("一次输入，同时搜索互联网、AI 与本地知识库。")}</Typography.Paragraph></div>
       <div className="new-tab-search">
-        <form onSubmit={event => { event.preventDefault(); submit() }}><Input size="large" autoFocus prefix={<SearchOutlined/>} value={address} onChange={event => setAddress(event.target.value)} placeholder={text.placeholder} suffix={<Button type="primary" htmlType="submit" disabled={engines.length === 0 && !searchKnowledge && !searchAi}>{text.search}</Button>}/></form>
-        <div className="new-tab-search__sources"><div className="search-engine-picker"><span>{text.sources}</span><Select mode="multiple" maxTagCount="responsive" value={engines} onChange={setEngines} options={presets} placeholder={text.selectEngine}/></div><label className="knowledge-search-toggle ai-search-source-toggle"><Switch checked={searchAi} onChange={setSearchAi}/><RobotOutlined size={17}/><span><b>{text.aiSearch}</b><small>{text.aiDetail}</small></span></label><label className="knowledge-search-toggle"><Switch checked={searchKnowledge} onChange={setSearchKnowledge}/><span><b>{text.knowledge}</b><small>{text.knowledgeDetail}</small></span></label></div>
-        <div className="new-tab-search__hint">{text.hint}</div>
+        <form onSubmit={event => { event.preventDefault(); submit() }}><Input size="large" autoFocus prefix={<SearchOutlined/>} value={address} onChange={event => setAddress(event.target.value)} placeholder={t("输入搜索内容或网址")} suffix={<Button type="primary" htmlType="submit" disabled={engines.length === 0 && !searchKnowledge && !searchAi}>{t("搜索")}</Button>}/></form>
+        <div className="new-tab-search__sources"><div className="search-engine-picker"><span>{t("参与搜索")}</span><Select mode="multiple" maxTagCount="responsive" value={engines} onChange={setEngines} options={presets} placeholder={t("选择搜索引擎")}/></div><label className="knowledge-search-toggle ai-search-source-toggle"><Switch checked={searchAi} onChange={setSearchAi}/><RobotOutlined size={17}/><span><b>{t("AI 搜索")}</b><small>{t("生成答案并继续追问")}</small></span></label><label className="knowledge-search-toggle"><Switch checked={searchKnowledge} onChange={setSearchKnowledge}/><span><b>{t("本地知识库")}</b><small>{t("网页、笔记与标签")}</small></span></label></div>
+        <div className="new-tab-search__hint">{t("搜索引擎、AI 搜索与本地知识库将作为并列来源参与对比查询。")}</div>
       </div>
-      <div className="quick-sites"><div className="quick-sites__label">{text.quickSites}</div><div className="quick-sites__grid">{QUICK_SITES.map(site => <button key={site.url} type="button" className="quick-site" title={site.name} aria-label={`${text.open} ${site.name}`} onClick={(event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.blur(); void navigate(site.url) }}><span className="quick-site__mark" style={{ background: site.color }}><span>{site.initial}</span><img src={site.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/></span><span className="quick-site__name">{site.name}</span></button>)}</div></div>
+      <div className="quick-sites"><div className="quick-sites__label">{t("常用网站")}</div><div className="quick-sites__grid">{QUICK_SITES.map(site => <button key={site.url} type="button" className="quick-site" title={site.name} aria-label={`${t("打开")} ${site.name}`} onClick={(event: MouseEvent<HTMLButtonElement>) => { event.currentTarget.blur(); void navigate(site.url) }}><span className="quick-site__mark" style={{ background: site.color }}><span>{site.initial}</span><img src={site.iconUrl} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }}/></span><span className="quick-site__name">{site.name}</span></button>)}</div></div>
     </main>
   </div>
 }

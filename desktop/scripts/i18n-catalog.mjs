@@ -97,7 +97,9 @@ function readExisting(name) {
   let ast
   try {
     ast = parser.parse(`const catalog = ${objectLiteral}`, { sourceType: 'module', plugins: ['typescript'] })
-  } catch {
+  } catch (error) {
+    console.error(`catalog parse failed: ${file}: ${error.message}`)
+    process.exitCode = 1
     return values
   }
   traverse(ast, {
@@ -127,13 +129,18 @@ for (const fragment of FRAGMENTS) {
   const keys = [...keysByFragment.get(fragment)].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   const existing = readExisting(fragment)
   const lines = []
+  let fragmentEmpty = 0
   for (const key of keys) {
     const value = existing.get(key)
     if (value === undefined) {
       missing += 1
+      fragmentEmpty += 1
       if (init) lines.push(`  ${escapeKey(key)}: '',`)
     } else {
-      if (typeof value === 'string' && value.trim() === '') empty += 1
+      if (typeof value === 'string' && value.trim() === '') {
+        empty += 1
+        fragmentEmpty += 1
+      }
       if (typeof value === 'object') lines.push(`  ${escapeKey(key)}: { one: ${escapeKey(value.one)}, other: ${escapeKey(value.other)} },`)
       else lines.push(`  ${escapeKey(key)}: ${escapeKey(value)},`)
     }
@@ -145,7 +152,7 @@ for (const fragment of FRAGMENTS) {
     fs.writeFileSync(path.join(catalogRoot, `${fragment}.ts`), content)
   }
 
-  if (keys.length) console.log(`${fragment.padEnd(9)} ${String(keys.length).padStart(4)} keys`)
+  console.log(`${fragment.padEnd(9)} ${String(keys.length).padStart(4)} keys, ${String(fragmentEmpty).padStart(3)} untranslated`)
 }
 
 console.log(`\n${seen.size} message ids, ${callSites.size} unique, missing ${missing}, empty ${empty}, stale ${stale}`)

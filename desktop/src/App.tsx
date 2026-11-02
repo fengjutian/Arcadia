@@ -6,6 +6,7 @@ import { APPEARANCE_CHANGE_EVENT, IMAGE_THEMES, readAppearancePreference, readIm
 import { loadBingDailyImage, readCachedBingDailyImage } from './features/settings/bingDailyTheme'
 import { readAdvancedSettings } from './features/settings/advanced'
 import { useTaskWorker } from './features/tasks/useTaskWorker'
+import { useLocale } from './i18n'
 
 const PALETTES = {
   green: { primary: '#347851', sider: '#edf2ee', item: '#68766e', hover: '#e3ebe5', hoverText: '#275f3f', selected: '#d9e8dd', selectedText: '#275f3f' },
@@ -23,6 +24,7 @@ const PALETTES = {
 } as const
 
 export default function App() {
+  const locale = useLocale()
   const [preference, setPreference] = useState<ThemePreference>(readThemePreference)
   const [appearance, setAppearance] = useState<AppearancePreference>(readAppearancePreference)
   const [themeKind, setThemeKind] = useState<ThemeKind>(readThemeKind)
@@ -94,5 +96,8 @@ export default function App() {
   }, [])
 
   const palette = PALETTES[resolvedPreference]
-  return <UIProvider><div style={{ '--ui-primary': palette.primary, '--ui-sider': palette.sider, '--ui-item': palette.item, '--ui-hover': palette.hover, '--ui-hover-text': palette.hoverText, '--ui-selected': palette.selected, '--ui-selected-text': palette.selectedText } as CSSProperties}><AppRouter /></div></UIProvider>
+  // The language picker reloads the window, but keying the tree on the locale
+  // also makes programmatic `setLocale` calls take effect immediately (for
+  // example in tests or when language is changed from an external command).
+  return <UIProvider><div key={locale} data-locale={locale} style={{ '--ui-primary': palette.primary, '--ui-sider': palette.sider, '--ui-item': palette.item, '--ui-hover': palette.hover, '--ui-hover-text': palette.hoverText, '--ui-selected': palette.selected, '--ui-selected-text': palette.selectedText } as CSSProperties}><AppRouter /></div></UIProvider>
 }
