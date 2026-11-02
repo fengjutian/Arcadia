@@ -68,12 +68,18 @@ export function planBookmarkImport(imported: readonly ImportedBookmark[], existi
 }
 
 /** Workspace payload so an import can also become a Space. */
-export function importToSpacePayload(imported: readonly ImportedBookmark[]): { version: number; tabs: Array<{ id: string; url: string; title: string; private: boolean }>; activeTabId: string } {
+export function importToSpacePayload(imported: readonly ImportedBookmark[]): {
+  version: number
+  tabs: Array<{ id: string; url: string; title: string; private: boolean; groupId?: string }>
+  activeTabId: string
+} {
   const tabs = imported.map((bookmark, index) => ({
     id: `import-${index + 1}`,
     url: bookmark.url,
     title: bookmark.title,
     private: false,
+    // Imported folders become tab groups so the Space keeps the file's shape.
+    ...(bookmark.folder ? { groupId: `folder:${bookmark.folder}` } : {}),
   }))
   return { version: 2, tabs, activeTabId: tabs[0]?.id ?? '' }
 }

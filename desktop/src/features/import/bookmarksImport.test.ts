@@ -58,6 +58,19 @@ describe('planBookmarkImport', () => {
     expect(payload.activeTabId).toBe('import-1')
     expect(payload.tabs.every(tab => tab.private === false)).toBe(true)
   })
+
+  it('maps bookmark folders to tab groups', () => {
+    const payload = importToSpacePayload([
+      { title: 'A', url: 'https://a.com', folder: 'Work' },
+      { title: 'B', url: 'https://b.com', folder: 'Work' },
+      { title: 'C', url: 'https://c.com', folder: 'Reading' },
+      { title: 'D', url: 'https://d.com' },
+    ])
+    expect(payload.tabs[0].groupId).toBe('folder:Work')
+    expect(payload.tabs[1].groupId).toBe('folder:Work')
+    expect(payload.tabs[2].groupId).toBe('folder:Reading')
+    expect(payload.tabs[3]).not.toHaveProperty('groupId')
+  })
 })
 
 describe('parseTabsJson', () => {

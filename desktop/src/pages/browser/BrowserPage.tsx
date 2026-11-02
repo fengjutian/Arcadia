@@ -235,6 +235,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [sitePanelOpen, setSitePanelOpen] = useState(false)
   const [siteRulesOpen, setSiteRulesOpen] = useState(false)
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
+  const splitTabIdRef = useRef<string | null>(null)
   const [splitRatio, setSplitRatio] = useState(0.5)
   const [splitDocument, setSplitDocument] = useState<KnowledgeDocument | null>(null)
   const [splitChat, setSplitChat] = useState(false)
@@ -987,6 +988,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     if (rect) void resizeNativeTab(active.id, rect).catch(() => undefined)
   }
 
+  useEffect(() => { splitTabIdRef.current = splitTabId }, [splitTabId])
+
   useEffect(() => {
     if (!nativeMode || !splitTabId) return
     if (!tabsRef.current.some(tab => tab.id === splitTabId)) {
@@ -1274,6 +1277,14 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (event.key === 'F12') {
         event.preventDefault()
         if (readAdvancedSettings().developerToolsEnabled && hasNativeTab(activeTabIdRef.current)) void openNativeDevtools(activeTabIdRef.current)
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && event.altKey && splitTabIdRef.current && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault()
+        const left = activeTabIdRef.current
+        const right = splitTabIdRef.current
+        activateTab(right)
+        setSplitTabId(left)
         return
       }
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'l') {
@@ -3053,7 +3064,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
               : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison} onOpenLibrary={onOpenLibrary}/>}
       {splitDocument && <DocumentSplitPane document={splitDocument} onClose={closeDocumentSplit} ratio={splitRatio}/>}
       {splitTabId && <div className="split-pane-head" style={{ left: `${splitRatio * 100}%`, width: `${(1 - splitRatio) * 100}%` }}>
-        <span>{tabs.find(tab => tab.id === splitTabId)?.title ?? ''}</span>
+        <Dropdown menu={{ items: tabs.filter(tab => tab.id !== active.id && !tab.private).slice(0, 12).map(tab => ({ key: tab.id, label: tab.title || tab.url, onClick: () => setSplitTabId(tab.id) })) }} trigger={['click']}>
+          <button type="button" className="split-pane-title" title={translate("切换右侧标签")}>{tabs.find(tab => tab.id === splitTabId)?.title ?? ''} ▾</button>
+        </Dropdown>
         <Button size="small" type="text" onClick={closeSplit}>{translate("关闭分屏")}</Button>
       </div>}
       {splitChat && <div className="split-chat-pane" style={{ width: `${Math.round((1 - splitRatio) * 100)}%` }}>
