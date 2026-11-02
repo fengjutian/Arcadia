@@ -1,6 +1,7 @@
 # Windows CEF 接入方案（wry 保留为 fallback）
 
 > 状态：**T1+T2 spike 已实现并编译通过，运行时未验证**（2026-11-02）。
+> 决策：CEF 列为**远期规划**，近期仍以 wry 为主，不提供界面切换；对比与触发条件见 [页面引擎选型](page-engine-selection.md)。
 > 前置：[PageEngine 抽象](page-engine.md)。决策：只在 Windows 上引入自带 Chromium，
 > 其他平台与非 CEF 构建继续使用系统 WebView。
 >

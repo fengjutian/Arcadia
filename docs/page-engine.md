@@ -2,6 +2,7 @@
 
 > 状态：已完成（2026-11-02）。对应 [开发路线图](roadmap.md) Iteration 7 启动条件第 1 条。
 > 代码：`desktop/src-tauri/src/engine/`。
+> 选型结论：近期以 wry 为主、CEF 列为远期规划，见 [页面引擎选型](page-engine-selection.md)。
 
 ## 为什么有这一层
 

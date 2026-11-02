@@ -95,10 +95,6 @@ fn on_ui<F: FnOnce() + Send + 'static>(f: F) {
 
 // --- CEF application + client --------------------------------------------
 
-cef::wrap_app! {
-    struct ArcadiaApp {}
-    impl App {}
-}
 
 cef::wrap_client! {
     struct ArcadiaClient {
@@ -450,16 +446,23 @@ pub fn initialize() -> std::result::Result<(), String> {
     settings.no_sandbox = 1;
     settings.multi_threaded_message_loop = 1;
     settings.browser_subprocess_path = cef::CefString::from(exe.as_str());
+    // CEF warns when the cache root is left at the default: the default is
+    // keyed by exe path and breaks per-user isolation on shared installs.
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let cache = std::path::Path::new(&local).join("Arcadia").join("cef-cache");
+        settings.root_cache_path = cef::CefString::from(cache.to_string_lossy().as_ref());
+    }
 
     let args = cef::args::Args::new();
-    let mut app = ArcadiaApp::new();
     let code = cef::initialize(
         Some(args.as_main_args()),
         Some(&settings),
-        Some(&mut app),
+        None,
         std::ptr::null_mut(),
     );
-    if code != 0 {
+    // CEF follows the C convention here: non-zero means success. The wrapper
+    // returns the raw cef_initialize result, so 0 is the failure case.
+    if code == 0 {
         return Err(format!("CefInitialize failed with code {code}"));
     }
     Ok(())

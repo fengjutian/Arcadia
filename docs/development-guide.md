@@ -632,6 +632,7 @@ dumpbin /imports <exe>     # 应包含 comctl32.dll!TaskDialogIndirect
 - [系统架构](architecture.md)
 - [开发路线图](roadmap.md)
 - [WebView 原生能力矩阵](browser-native-capability-matrix.md)
+- [页面引擎选型（wry 与 CEF）](page-engine-selection.md)
 - [WASM 插件运行时方案](wasm-plugin-runtime-plan.md)
 - [项目说明](../README.md)
 

@@ -225,7 +225,7 @@
   2. 布局与滚动所有权收口完成，§进行中 关闭。
   3. 数据层（SQLite / FTS5 / RAG / Agent）与 webview 承载层解耦，业务代码不直接调用 Tauri webview API。
   4. 内核能力缺口有书面清单：区分「产品必需」与「有了更好」。
-- 第二阶段做法：以 CEF（或等价的自托管 Chromium）作为 `PageEngine` 的第二个实现，与现有 wry 实现并存，用 feature flag 切换，两套都进 CI。**已收敛为 Windows-only**：CEF 只随 Windows 构建分发，wry 始终保留为回落路径（初始化失败自动降级并上报原因）。详见 [Windows CEF 接入方案](cef-windows-plan.md)。
+- 第二阶段做法（**暂缓，见本节末尾决策**）：以 CEF（或等价的自托管 Chromium）作为 `PageEngine` 的第二个实现，与现有 wry 实现并存，用 feature flag 切换。**已收敛为 Windows-only**：CEF 只随 Windows 构建分发，wry 始终保留为回落路径（初始化失败自动降级并上报原因）。详见 [Windows CEF 接入方案](cef-windows-plan.md)。
 - 启动条件（顺序不可颠倒）：
   1. ~~先把 webview 承载层收口成内部 trait（`create / eval / navigate / set_bounds / capture / focus`），把散落在 `lib.rs` 的 `get_webview`（40 处）与 `.eval()`（15 处）全部收进去。这一步无论最终换不换内核都该做。~~ **已完成（2026-11-02）**：`desktop/src-tauri/src/engine/` 提供 `PageEngine` trait 与 `WryPageEngine` 实现；业务命令只按 tab label 调用，`get_webview` 仅存在于 `engine/wry.rs`（1 处解析 + 2 处存在性检查），平台模块统一走 `with_platform_webview` 逃生口。行为与错误文案保持不变。
   2. 补齐运行时版本探测（`webview_version` / `chromium_major`），作为两套实现的行为基线。已实现，见 `browser_capabilities`。
@@ -233,6 +233,7 @@
 - 什么情况下换 CEF 才划算：需要 Chrome 扩展、需要完整 CDP、需要锁定内核版本、或需要三端同内核。若痛点只是权限事件 / 右键菜单 / 单标签内存，走 `webview2-com` COM 路径即可，不换内核。
 - 验收：实验期功能在 CEF 实现下行为等价；能力矩阵中标为「不支持」的条目逐项转为支持或有明确降级；安装包体积与升级策略有书面结论；两套实现共用同一份前端契约（`services/browserCapabilities.ts`）。
 - 明确不做：不把「换 Chromium」当成能力补齐的捷径——换内核只解决宿主接口问题，不解决产品问题。
+- **决策（2026-11-02）**：CEF 列为**远期规划**，近期以 wry 为主，不提供界面上的引擎切换（发布版不含 CEF 运行时，开关无法兑现）。多路径对比、能力差距与重新评估的触发条件见 [页面引擎选型](page-engine-selection.md)。
 
 ## 进行中
 
@@ -265,4 +266,4 @@
 - 不采用独立进程 JSON-RPC 作为第三方插件运行时（难以在三平台稳定限制文件、网络、子进程和系统调用）；JSON-RPC 仍用于 MCP，但不作为插件安全边界。详见 [WASM 插件运行时方案](wasm-plugin-runtime-plan.md)。
 - 借鉴 Arc 只限交互层（Space、标签生命周期、命令栏、Peek、按站点规则），不沿用其「通用浏览器替代品 + 云账号」路线；理由见 Iteration 6 的「明确不做」。
 - UI 组件层自建（`components/ui/`，API 对齐 Ant Design，底层 `@base-ui/react`），不引入 `antd` 依赖。
-- 实验阶段使用系统 WebView，验证成功后再评估接入自带 Chromium。理由：换内核等于重写 webview 承载层（约 1–2 个月专项 + 永久跟版成本），在产品闭环未验证前投入不划算；且 Windows 上 WebView2 本身已是 Chromium，真正的差距是宿主接口与跨平台一致性。详见 Iteration 7。
+- 实验阶段使用系统 WebView，验证成功后再评估接入自带 Chromium。理由：换内核等于重写 webview 承载层（约 1–2 个月专项 + 永久跟版成本），在产品闭环未验证前投入不划算；且 Windows 上 WebView2 本身已是 Chromium，真正的差距是宿主接口与跨平台一致性。详见 Iteration 7 与 [页面引擎选型](page-engine-selection.md)。
