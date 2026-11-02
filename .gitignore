@@ -11,3 +11,4 @@ desktop/src-tauri/gen/
 .env
 .env.*
 !.env.example
+.tmp/

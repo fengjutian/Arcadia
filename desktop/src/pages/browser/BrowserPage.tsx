@@ -690,7 +690,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         const entry = archivedTabFromBrowserTab(target, 'auto')
         if (!entry) continue
         try {
-          await archiveTab(entry)
+          await archiveTab(entry, settings.retention)
           archived += 1
           closeTab(id)
         } catch { /* keep the tab when the archive write fails */ }
@@ -2104,7 +2104,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       return
     }
     try {
-      await archiveTab(entry)
+      await archiveTab(entry, readAutoArchiveSettings().retention)
       messageApi.success(translate("已归档，可在知识库「归档」中找回"),2)
       closeTab(target.id)
     } catch (error) {

@@ -3737,7 +3737,12 @@ fn archived_tab_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalArchi
 const ARCHIVED_TAB_COLUMNS: &str =
     "id,url,title,favicon,archived_at,visited_at,source,workspace_id";
 
-fn insert_archived_tab(database: &Connection, tab: &LocalArchivedTab) -> Result<(), String> {
+fn insert_archived_tab(
+    database: &Connection,
+    tab: &LocalArchivedTab,
+    retention: i64,
+) -> Result<(), String> {
+    let retention = retention.clamp(100, 50_000);
     // Delete + insert instead of upsert/REPLACE: REPLACE skips DELETE triggers and
     // an ON CONFLICT update does not reliably rewrite the external-content FTS
     // row, so an archived title could keep matching its old keywords.
@@ -3766,8 +3771,8 @@ fn insert_archived_tab(database: &Connection, tab: &LocalArchivedTab) -> Result<
     transaction
         .execute(
             "DELETE FROM tab_archive WHERE id NOT IN
-             (SELECT id FROM tab_archive ORDER BY archived_at DESC LIMIT 2000)",
-            [],
+             (SELECT id FROM tab_archive ORDER BY archived_at DESC LIMIT ?1)",
+            params![retention],
         )
         .map_err(|error| error.to_string())?;
     transaction.commit().map_err(|error| error.to_string())?;
@@ -3824,9 +3829,10 @@ fn query_archived_tabs(
 pub fn local_archive_tab(
     app: tauri::AppHandle,
     tab: LocalArchivedTab,
+    retention: Option<u32>,
 ) -> Result<LocalArchivedTab, String> {
     validate_archived_tab(&tab)?;
-    insert_archived_tab(&connection(&app)?, &tab)?;
+    insert_archived_tab(&connection(&app)?, &tab, i64::from(retention.unwrap_or(2000)))?;
     Ok(tab)
 }
 
@@ -4190,7 +4196,8 @@ fn validate_clip(clip: &LocalClip) -> Result<(), String> {
     Ok(())
 }
 
-const CLIP_COLUMNS: &str = "id,kind,content,title,source_url,source_title,note,collection_id,created_at,updated_at";
+const CLIP_COLUMNS: &str =
+    "id,kind,content,title,source_url,source_title,note,collection_id,created_at,updated_at";
 
 fn clip_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalClip> {
     Ok(LocalClip {
@@ -4240,7 +4247,9 @@ fn insert_clip(database: &Connection, clip: &LocalClip) -> Result<(), String> {
 
 fn query_clips(database: &Connection, limit: i64) -> Result<Vec<LocalClip>, String> {
     let mut statement = database
-        .prepare(&format!("SELECT {CLIP_COLUMNS} FROM clips ORDER BY created_at DESC LIMIT ?1"))
+        .prepare(&format!(
+            "SELECT {CLIP_COLUMNS} FROM clips ORDER BY created_at DESC LIMIT ?1"
+        ))
         .map_err(|error| error.to_string())?;
     let rows = statement
         .query_map(params![limit.clamp(1, 1000)], clip_from_row)
@@ -6220,7 +6229,7 @@ mod tests {
             source: "manual".into(),
             workspace_id: None,
         };
-        insert_archived_tab(&database, &tab).unwrap();
+        insert_archived_tab(&database, &tab, 2000).unwrap();
 
         let hits = query_archived_tabs(&database, "ownership", 10).unwrap();
         assert_eq!(hits.len(), 1);
@@ -6231,7 +6240,7 @@ mod tests {
         let mut renamed = tab.clone();
         renamed.title = "Rust borrowing explained".into();
         renamed.url = "https://example.com/rust-borrowing".into();
-        insert_archived_tab(&database, &renamed).unwrap();
+        insert_archived_tab(&database, &renamed, 2000).unwrap();
         assert!(query_archived_tabs(&database, "ownership", 10)
             .unwrap()
             .is_empty());
@@ -6355,7 +6364,9 @@ mod tests {
         insert_clip(&database, &clip).unwrap();
         assert_eq!(query_clips(&database, 10).unwrap().len(), 1);
         assert_eq!(search_clips(&database, "cosine", 10).unwrap().len(), 1);
-        assert!(search_clips(&database, "unrelated-token", 10).unwrap().is_empty());
+        assert!(search_clips(&database, "unrelated-token", 10)
+            .unwrap()
+            .is_empty());
 
         let mut edited = clip.clone();
         edited.content = "dot product".into();
@@ -6363,9 +6374,15 @@ mod tests {
         insert_clip(&database, &edited).unwrap();
         assert!(search_clips(&database, "cosine", 10).unwrap().is_empty());
         assert_eq!(search_clips(&database, "dot", 10).unwrap().len(), 1);
-        assert_eq!(query_clips(&database, 10).unwrap().len(), 1, "editing must not duplicate");
+        assert_eq!(
+            query_clips(&database, 10).unwrap().len(),
+            1,
+            "editing must not duplicate"
+        );
 
-        database.execute("DELETE FROM clips WHERE id=?1", params!["clip-1"]).unwrap();
+        database
+            .execute("DELETE FROM clips WHERE id=?1", params!["clip-1"])
+            .unwrap();
         let indexed: i64 = database
             .query_row("SELECT COUNT(*) FROM clips_fts", [], |row| row.get(0))
             .unwrap();

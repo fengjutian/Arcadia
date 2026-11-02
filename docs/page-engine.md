@@ -77,6 +77,9 @@ engine.set_bounds(&label, bounds)?;
 
 - `cargo check --all-targets`：通过，无警告。
 - `cargo fmt -- --check`：通过。
-- `npm run test:rust`：269 个用例，268 通过；`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`
+- `npm run test:rust`：271 个用例，270 通过；`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`
   失败，属于拼音检索（commit `9172080`）既有问题，与本次抽象无关。
 - 前端契约未变：`browser_capture_screenshot` 的 `clip`、`browser_create` 的 `bounds` 序列化形状与重构前一致。
+- 第二个实现已接线：`engine/select.rs` 在 `--features cef` 且 Windows 时优先 CEF、失败回落 wry，
+  `browser_capabilities.pageEngine` 回报实际后端。CEF 宿主尚未实现，见
+  [Windows CEF 接入方案](cef-windows-plan.md)。

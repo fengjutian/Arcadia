@@ -668,8 +668,8 @@ export interface ArchivedTab {
   workspaceId?: string | null
 }
 
-export async function archiveTab(tab: ArchivedTab): Promise<void> {
-  if (isTauri()) await invoke('local_archive_tab', { tab })
+export async function archiveTab(tab: ArchivedTab, retention = 2000): Promise<void> {
+  if (isTauri()) await invoke('local_archive_tab', { tab, retention })
 }
 
 export async function listArchivedTabs(query = '', limit = 200): Promise<ArchivedTab[]> {

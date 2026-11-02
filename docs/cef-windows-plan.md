@@ -1,8 +1,21 @@
 # Windows CEF 接入方案（wry 保留为 fallback）
 
-> 状态：**接线完成，宿主实现未开始**（2026-11-02）。
+> 状态：**接线与构建链路已验证，宿主实现未开始**（2026-11-02）。
 > 前置：[PageEngine 抽象](page-engine.md)。决策：只在 Windows 上引入自带 Chromium，
 > 其他平台与非 CEF 构建继续使用系统 WebView。
+
+## 0. 已验证的事实（2026-11-02）
+
+| 项 | 结果 |
+| --- | --- |
+| CEF 二进制 | `156.0.15+gcf671c0+chromium-156.0.8078.80` windows64，标准分发包 350 MB |
+| `cef` crate | `156.3.0+156.0.15`，`cef-dll-sys` 通过 CMake 编译 `libcef_dll_wrapper` |
+| 构建 | `cargo check --features cef --lib` **通过**（冷构建 8m22s，主要耗时在 wrapper 的 C++ 编译） |
+| 默认构建 | `cargo check --all-targets` 通过，**不依赖 CEF**（可选依赖，未启用时不参与构建） |
+| 测试 | 270 通过 / 1 失败，失败项是既有的拼音检索用例，与 CEF 无关 |
+
+尚未验证、必须等宿主实现后才能验证的：CEF 与 winit 消息循环共存、子 HWND 嵌入、
+`libcef.dll` 随包分发后的运行时加载、沙箱开启。
 
 ## 1. 范围与原则
 

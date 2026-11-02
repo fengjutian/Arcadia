@@ -32,6 +32,7 @@ import { HISTORY_CHANGE_EVENT } from '../../features/history/dedupeHistory'
 import { formatArchivedAt, groupArchivedTabs } from '../../features/archive/archive'
 import {
   AUTO_ARCHIVE_HOUR_OPTIONS,
+  AUTO_ARCHIVE_RETENTION_OPTIONS,
   readAutoArchiveSettings,
   writeAutoArchiveSettings,
   type AutoArchiveSettings,
@@ -540,6 +541,13 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
           options={AUTO_ARCHIVE_HOUR_OPTIONS.map(option => ({ label: t(option.label), value: option.value }))}
           value={autoArchive.idleHours}
           onChange={value => updateAutoArchive({ ...autoArchive, idleHours: Number(value) })}
+        />
+        <Select<number>
+          className="library-archive-controls__idle"
+          ariaLabel={t("归档保留上限")}
+          options={AUTO_ARCHIVE_RETENTION_OPTIONS.map(option => ({ label: t(option.label), value: option.value }))}
+          value={autoArchive.retention}
+          onChange={value => updateAutoArchive({ ...autoArchive, retention: Number(value) })}
         />
         <span className="library-result-count">{archived.length} {t("条")}</span>
       </div>

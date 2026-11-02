@@ -9,11 +9,20 @@ export interface AutoArchiveSettings {
   enabled: boolean
   /** Idle window in hours; the startup sweep archives tabs older than this. */
   idleHours: number
+  /** Maximum archived rows kept on disk; older entries are pruned on write. */
+  retention: number
 }
 
 export const AUTO_ARCHIVE_STORAGE_KEY = 'arcadia.archive.settings.v1'
 
-export const AUTO_ARCHIVE_DEFAULT: AutoArchiveSettings = { enabled: true, idleHours: 12 }
+export const AUTO_ARCHIVE_DEFAULT: AutoArchiveSettings = { enabled: true, idleHours: 12, retention: 2000 }
+
+export const AUTO_ARCHIVE_RETENTION_OPTIONS: ReadonlyArray<{ label: string; value: number }> = [
+  { label: '500 条', value: 500 },
+  { label: '2000 条', value: 2000 },
+  { label: '5000 条', value: 5000 },
+  { label: '10000 条', value: 10000 },
+]
 
 export const AUTO_ARCHIVE_HOUR_OPTIONS: ReadonlyArray<{ label: string; value: number }> = [
   { label: '12 小时', value: 12 },
@@ -30,7 +39,11 @@ export function normalizeAutoArchiveSettings(value: unknown): AutoArchiveSetting
   const idleHours = Number.isFinite(rawHours) && rawHours >= 1 && rawHours <= 24 * 30
     ? rawHours
     : AUTO_ARCHIVE_DEFAULT.idleHours
-  return { enabled, idleHours }
+  const rawRetention = typeof record.retention === 'number' ? record.retention : Number(record.retention)
+  const retention = Number.isFinite(rawRetention) && rawRetention >= 100 && rawRetention <= 50_000
+    ? Math.round(rawRetention)
+    : AUTO_ARCHIVE_DEFAULT.retention
+  return { enabled, idleHours, retention }
 }
 
 export function readAutoArchiveSettings(): AutoArchiveSettings {

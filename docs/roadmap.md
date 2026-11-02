@@ -75,7 +75,7 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1`、`6.15` 已完成；`6.2`、`6.3`、`6.6`、`6.13`、`6.14` 部分落地，其余未开始。按性价比排序：`6.2`–`6.3` 不依赖布局收口；`6.4` 起依赖布局收口。
+> 状态以各条目勾选为准：`6.1`、`6.2`、`6.15` 已完成；`6.3`、`6.6`、`6.13`、`6.14` 部分落地，其余未开始。按性价比排序：`6.3` 不依赖布局收口；`6.4` 起依赖布局收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
@@ -91,11 +91,11 @@
 
 ### 6.2 标签生命周期：Today → Archive → Library
 
-- [~] 借鉴：Arc 的 Today 与自动归档——超时标签进入可搜索的 Archive，而不是直接消失。
+- [x] 借鉴：Arc 的 Today 与自动归档——超时标签进入可搜索的 Archive，而不是直接消失。
 - 现状：`closed_tabs` + `RecoveryPanel` 是「恢复」语义，知识库是「保存」语义，缺少「读过但没存」的中间层。
 - 已落地（2026-11-02）：迁移 #31 `tab_archive` + `tab_archive_fts`（触发器同步）；命令 `local_archive_tab` / `local_list_archived_tabs` / `local_delete_archived_tab` / `local_clear_archived_tabs`；标签右键「归档标签页」、命令栏 `~` 归档检索与「归档当前标签页」动作；知识库「归档」页签（按日分组、打开、删除）。Rust 测试 `archive_roundtrips_through_fts`。
-- 已落地（2026-11-02，自动归档）：`BrowserTab.lastActiveAt` 随会话持久化，恢复时旧会话以 `savedAt` 兜底；启动后一次性扫描，按配置的空闲时长归档非固定/非私密/非播放中标签并提示，失败保留原标签。`features/archive/archiveSettings.ts` 提供开关与 12h/24h/3d/7d 阈值（知识库「归档」页签内可改）。SearchPage 新增「浏览痕迹」分组。纯函数 `planAutoArchive`（5 例）、设置读写（5 例）与 `restoreFromSnapshot` 时间戳测试。
-- 待补：归档保留策略与容量上限可配置（当前硬编码 2000 条）、AI 引用指向归档页。
+- 已落地（2026-11-02，自动归档）：`BrowserTab.lastActiveAt` 随会话持久化，恢复时旧会话以 `savedAt` 兜底；启动后一次性扫描，按配置的空闲时长归档非固定/非私密/非播放中标签并提示，失败保留原标签。`features/archive/archiveSettings.ts` 提供开关与 12h/24h/3d/7d 阈值（知识库「归档」页签内可改）。SearchPage 新增「浏览痕迹」分组。RAG 检索把归档页作为额外来源（合成 chunk id `archive:<id>`），AI 回答可引用并打开原文。纯函数 `planAutoArchive`（5 例）、设置读写（5 例）、`extra_source_hits` 与 `restoreFromSnapshot` 时间戳测试。
+- 待补：无（容量上限 500/2000/5000/10000 可在知识库「归档」页签内配置，写入时按上限裁剪）。
 - 做法：临时标签超时（默认 12 小时，可配置）或手动归档；归档写 SQLite 并同步 FTS5；搜索结果新增「浏览痕迹」类型；AI 引用允许指向归档页。
 - 验收：归档后可按标题/URL 找回；私密标签永不归档；保留策略与容量上限可配置；UI 上「恢复」与「归档」语义不混淆。
 - 增补（借 Chrome Journeys）：对历史做「研究轨迹」聚类视图，每簇可保存为集合或直接提问；聚类为纯函数，不新增表。

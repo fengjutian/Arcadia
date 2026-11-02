@@ -594,9 +594,20 @@ fn default_meta(
 }
 
 /// Build a synthetic RetrievalHit for a non-document source (note / clip).
-fn synthetic_hit(kind: &str, id: &str, title: String, url: String, text: String, label: &str) -> RetrievalHit {
+fn synthetic_hit(
+    kind: &str,
+    id: &str,
+    title: String,
+    url: String,
+    text: String,
+    label: &str,
+) -> RetrievalHit {
     let chunk_id = format!("{kind}:{id}");
-    let title = if title.trim().is_empty() { url.clone() } else { title };
+    let title = if title.trim().is_empty() {
+        url.clone()
+    } else {
+        title
+    };
     let end_offset = text.len();
     let token_count = text.chars().count() / 4;
     RetrievalHit {
@@ -653,7 +664,11 @@ fn extra_source_hits(conn: &Connection, query_text: &str, limit: usize) -> Vec<R
             ))
         }) {
             for (id, url, title, quote, comment) in rows.flatten() {
-                let text = if comment.trim().is_empty() { quote } else { format!("{quote}\n\n{comment}") };
+                let text = if comment.trim().is_empty() {
+                    quote
+                } else {
+                    format!("{quote}\n\n{comment}")
+                };
                 hits.push(synthetic_hit("note", &id, title, url, text, "笔记"));
             }
         }
@@ -676,7 +691,11 @@ fn extra_source_hits(conn: &Connection, query_text: &str, limit: usize) -> Vec<R
             ))
         }) {
             for (id, url, title, source_title, content) in rows.flatten() {
-                let label = if title.trim().is_empty() { source_title } else { title };
+                let label = if title.trim().is_empty() {
+                    source_title
+                } else {
+                    title
+                };
                 hits.push(synthetic_hit("clip", &id, label, url, content, "剪藏"));
             }
         }
@@ -797,7 +816,10 @@ mod tests {
 
         let hits = extra_source_hits(&conn, "cosine", 6);
         assert_eq!(hits.len(), 3);
-        let ids: Vec<&str> = hits.iter().map(|hit| hit.chunk.document_id.as_str()).collect();
+        let ids: Vec<&str> = hits
+            .iter()
+            .map(|hit| hit.chunk.document_id.as_str())
+            .collect();
         assert!(ids.contains(&"note:note-1"));
         assert!(ids.contains(&"clip:clip-1"));
         assert!(ids.contains(&"archive:archive-1"));
