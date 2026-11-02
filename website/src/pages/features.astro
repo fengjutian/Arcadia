@@ -1,0 +1,124 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { featureGroups, featureStats, platformMatrix, workflow } from '../lib/site';
+const description = '按能力域了解 Arcadia 0.6.0：原生多标签浏览、Reader 与本地知识库、FTS5 混合检索、可替换 AI Provider、隐私拦截与 WASM 插件。';
+---
+<BaseLayout title="功能介绍" description={description}>
+  <section class="relative overflow-hidden border-b border-[var(--line)]">
+    <div class="grid-lines absolute inset-0 opacity-25 [mask-image:linear-gradient(to_bottom,black,transparent)]"></div>
+    <div class="shell relative grid gap-12 py-20 lg:grid-cols-[1.15fr_.85fr] lg:items-end lg:py-28">
+      <div>
+        <p class="eyebrow">Feature guide · Arcadia 0.6.0</p>
+        <h1 class="display mt-7">功能<span class="text-[var(--acid)]">介绍</span></h1>
+        <p class="muted mt-7 max-w-2xl text-lg">从原生浏览到本地知识库，从混合检索到受控 Agent。这一页按能力域拆开说明，每一项都对应仓库中的实际实现，并标注平台差异。</p>
+      </div>
+      <dl class="grid grid-cols-2 gap-px border border-[var(--line)] bg-[var(--line)]">
+        {featureStats.map((stat) => (
+          <div class="bg-[var(--bg)] p-4 sm:p-5">
+            <dt class="text-xs tracking-[.08em] muted">{stat.label}</dt>
+            <dd class="mt-3 text-3xl font-semibold tracking-tight text-[var(--acid)]">{stat.value}<span class="ml-1 text-sm font-normal text-[var(--ink)]">{stat.unit}</span></dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  </section>
+
+  <section class="border-b border-[var(--line)] bg-[var(--panel)]">
+    <nav class="shell grid gap-px bg-[var(--line)] sm:grid-cols-2 lg:grid-cols-4" aria-label="功能分区">
+      {featureGroups.map((group) => (
+        <a href={`#${group.id}`} class="group flex flex-col justify-between gap-8 bg-[var(--bg)] p-6 transition hover:bg-[var(--subtle)]">
+          <span class="flex items-center justify-between text-xs muted"><span>{group.no}</span><span>{group.items.length} 项能力</span></span>
+          <span class="flex items-end justify-between gap-4">
+            <span class="text-2xl font-semibold tracking-tight">{group.title}</span>
+            <span class="text-[var(--acid)] transition group-hover:translate-y-0.5" aria-hidden="true">↓</span>
+          </span>
+        </a>
+      ))}
+    </nav>
+  </section>
+
+  {featureGroups.map((group) => (
+    <section id={group.id} class="scroll-mt-24 border-b border-[var(--line)]">
+      <div class="shell grid gap-10 py-16 md:py-20 lg:grid-cols-[.62fr_1.38fr] lg:gap-16">
+        <div class="lg:sticky lg:top-28 lg:self-start">
+          <span class="inline-flex items-center gap-3 text-sm text-[var(--acid)]"><span class="h-px w-7 bg-current"></span>{group.no}</span>
+          <h2 class="mt-6 text-4xl font-semibold tracking-[-.04em] md:text-5xl">{group.title}</h2>
+          <p class="muted mt-5 max-w-md">{group.summary}</p>
+          <p class="muted mt-6 max-w-md border-l-2 border-[var(--acid)] pl-4 text-sm">{group.note}</p>
+        </div>
+        <div class="grid gap-px border border-[var(--line)] bg-[var(--line)] sm:grid-cols-2">
+          {group.items.map((item) => (
+            <article class="bg-[var(--bg)] p-6 transition hover:bg-[var(--panel)]">
+              <div class="flex items-start justify-between gap-4">
+                <h3 class="text-lg font-semibold leading-snug">{item.title}</h3>
+                <span class="shrink-0 border border-[var(--line)] px-2 py-0.5 text-[11px] muted">{item.tag}</span>
+              </div>
+              <p class="muted mt-3 text-sm leading-relaxed">{item.body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  ))}
+
+  <section class="shell py-20 md:py-28">
+    <div class="grid gap-8 lg:grid-cols-[.8fr_1.2fr] lg:items-end">
+      <div>
+        <p class="eyebrow">Platform notes</p>
+        <h2 class="section-title mt-6">能力一致，<br/>平台边界不同。</h2>
+      </div>
+      <p class="muted max-w-2xl">Windows 10 / 11 是当前的真实验证平台。其余平台保留完整的跨平台结构，但系统 WebView 未暴露的接口不会被模拟实现填充。</p>
+    </div>
+    <div class="mt-12 overflow-x-auto border border-[var(--line)]">
+      <table class="w-full min-w-[720px] border-collapse text-left text-sm">
+        <thead class="bg-[var(--panel)] text-xs tracking-[.08em] muted">
+          <tr>
+            <th class="p-4 font-semibold" scope="col">能力</th>
+            <th class="p-4 font-semibold" scope="col">Windows 10 / 11</th>
+            <th class="p-4 font-semibold" scope="col">macOS / Linux</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[var(--line)]">
+          {platformMatrix.map((row) => (
+            <tr class="align-top">
+              <th class="p-4 font-medium" scope="row">{row.capability}</th>
+              <td class="p-4 text-[var(--acid)]">{row.windows}</td>
+              <td class="p-4 muted">{row.others}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p class="mt-4 text-xs muted">表格描述 v0.6.0 的实现范围。完整的已知限制见产品说明与仓库 README。</p>
+  </section>
+
+  <section class="border-y border-[var(--line)] bg-[var(--panel)] py-20">
+    <div class="shell">
+      <p class="eyebrow">One continuous loop</p>
+      <h2 class="section-title mt-6 max-w-4xl">功能不是清单，<br/>是一条连续工作流。</h2>
+      <div class="mt-12 grid gap-px bg-[var(--line)] md:grid-cols-4">
+        {workflow.map((item, index) => (
+          <article class="bg-[var(--bg)] p-7">
+            <span class="text-xs text-[var(--acid)]">0{index + 1}</span>
+            <h3 class="mt-10 text-2xl font-semibold">{item.step}</h3>
+            <p class="muted mt-3 text-sm">{item.detail}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-[var(--acid)] py-20 text-[#11150f]">
+    <div class="shell grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+      <div>
+        <p class="text-sm font-bold uppercase tracking-[.16em]">Try the workflow</p>
+        <h2 class="mt-4 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-[-.04em] md:text-6xl">不必逐条记住功能，<br/>打开一个网页就明白。</h2>
+        <p class="mt-6 max-w-2xl text-lg">浏览、阅读、保存、找回。Arcadia 把这条路径留在桌面本地，数据与密钥都由你保管。</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a href="/download/" class="btn border-[#11150f] bg-[#11150f] !text-[var(--acid)]">下载开发预览版</a>
+        <a href="/products/arcadia/" class="btn border-[#11150f]">查看产品说明</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

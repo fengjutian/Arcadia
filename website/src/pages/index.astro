@@ -12,7 +12,7 @@ const products = await getCollection('products', ({data}) => data.featured);
         <p class="eyebrow">Arcadia 0.6.0 · Windows desktop</p>
         <h1 class="display hero-title mt-7"><span>浏览之后，</span><span>留下<span class="text-[var(--acid)]">可用的</span></span><span class="text-[var(--acid)]">知识。</span></h1>
         <p class="hero-description muted mt-7 max-w-2xl text-lg">一个本地优先的桌面知识浏览器。原生多标签浏览、Reader、知识库、全文检索、引用问答与隐私控制，共用一条连续工作流。</p>
-        <div class="mt-9 flex flex-wrap gap-3"><a href="/download/" class="btn btn-primary">查看 0.6.0</a><a href="/products/arcadia/" class="btn">完整功能</a></div>
+        <div class="mt-9 flex flex-wrap gap-3"><a href="/download/" class="btn btn-primary">查看 0.6.0</a><a href="/features/" class="btn">功能介绍</a></div>
         <div class="hero-meta mt-10 grid max-w-2xl grid-cols-1 gap-px bg-[var(--line)] sm:grid-cols-3"><span><b>LOCAL</b>本地 SQLite</span><span><b>AI PROVIDER</b>OpenAI / Ollama</span><span><b>EXTENSIBLE</b>WASM 插件隔离</span></div>
       </div>
       <div class="hero-preview relative mx-auto w-full max-w-[620px] border border-[var(--line)] bg-[var(--panel)] p-3 shadow-2xl shadow-black/15">
@@ -22,7 +22,7 @@ const products = await getCollection('products', ({data}) => data.featured);
     </div>
   </section>
 
-  <section class="shell py-24 md:py-28"><div class="grid gap-10 lg:grid-cols-[.65fr_1.35fr]"><div><p class="eyebrow">Implemented in 0.6.0</p><h2 class="section-title mt-6">不是概念图，<br/>是已经接通的功能。</h2><p class="muted mt-6 max-w-sm">当前版本已越过早期原型阶段。下面的能力均对应仓库中的实际实现。</p></div><div class="grid sm:grid-cols-2">{capabilities.map((item,i)=><article class:list={["min-h-72 border-[var(--line)] p-7", i%2===0?"sm:border-r":"", i<2?"border-b":""]}><span class="text-sm text-[var(--acid)]">{item.no}</span><h3 class="mt-12 text-2xl font-semibold">{item.title}</h3><p class="muted mt-3">{item.body}</p></article>)}</div></div></section>
+  <section class="shell py-24 md:py-28"><div class="grid gap-10 lg:grid-cols-[.65fr_1.35fr]"><div><p class="eyebrow">Implemented in 0.6.0</p><h2 class="section-title mt-6">不是概念图，<br/>是已经接通的功能。</h2><p class="muted mt-6 max-w-sm">当前版本已越过早期原型阶段。下面的能力均对应仓库中的实际实现。</p><a href="/features/" class="mt-6 inline-flex items-center gap-2 text-sm text-[var(--acid)]">查看逐项功能介绍 <span aria-hidden="true">→</span></a></div><div class="grid sm:grid-cols-2">{capabilities.map((item,i)=><article class:list={["min-h-72 border-[var(--line)] p-7", i%2===0?"sm:border-r":"", i<2?"border-b":""]}><span class="text-sm text-[var(--acid)]">{item.no}</span><h3 class="mt-12 text-2xl font-semibold">{item.title}</h3><p class="muted mt-3">{item.body}</p></article>)}</div></div></section>
 
   <section class="border-y border-[var(--line)] bg-[var(--panel)] py-20"><div class="shell"><p class="eyebrow">One continuous loop</p><h2 class="section-title mt-6 max-w-4xl">从打开网页，到再次使用。</h2><div class="mt-12 grid gap-px bg-[var(--line)] md:grid-cols-4">{workflow.map((item,index)=><article class="bg-[var(--bg)] p-7"><span class="text-xs text-[var(--acid)]">0{index+1}</span><h3 class="mt-10 text-2xl font-semibold">{item.step}</h3><p class="muted mt-3 text-sm">{item.detail}</p></article>)}</div></div></section>
 
