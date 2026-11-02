@@ -120,6 +120,7 @@ export function SitePanel({
       </section>
 
       <Space>
+        <Button onClick={() => { window.dispatchEvent(new CustomEvent('arcadia-navigate-view', { detail: 'settings' })); onClose() }}>{t("完整站点设置")}</Button>
         <Button danger onClick={onClearSiteData}>{t("清除共享浏览数据")}</Button>
       </Space>
     </div>

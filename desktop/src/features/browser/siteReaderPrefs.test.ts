@@ -3,7 +3,9 @@ import {
   READER_SITES_STORAGE_KEY,
   clampReaderFontSize,
   clampReaderWidth,
+  hideCssFor,
   isAutoReaderSite,
+  normalizeHideSelectors,
   normalizeReaderHost,
   readReaderSiteStyles,
   readReaderSites,
@@ -70,5 +72,20 @@ describe('reader site styles', () => {
     expect(readReaderSiteStyles()).toEqual({})
     localStorage.setItem('arcadia.reader.siteStyle.v1', '[1]')
     expect(readReaderSiteStyles()).toEqual({})
+  })
+})
+
+describe('reader hide selectors', () => {
+  it('keeps simple selectors and drops declarations or markup', () => {
+    expect(normalizeHideSelectors('.ad, #promo, .share')).toBe('.ad, #promo, .share')
+    expect(normalizeHideSelectors('.ad{display:none}, <script>, .ok')).toBe('.ok')
+    expect(normalizeHideSelectors(', ,')).toBe('')
+  })
+
+  it('builds scoped reader CSS and round-trips through storage', () => {
+    expect(hideCssFor(null)).toBe('')
+    expect(hideCssFor({ hide: '.ad, #promo' })).toBe('.reader-document__body .ad, .reader-document__body #promo { display: none !important; }')
+    writeReaderSiteStyle('example.com', { hide: '.ad' })
+    expect(readerStyleFor('https://example.com')).toMatchObject({ hide: '.ad' })
   })
 })

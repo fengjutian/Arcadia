@@ -430,6 +430,7 @@ export const settings: Messages = {
   'Arcadia 会持续改进浏览、阅读、知识管理和 AI 辅助体验。公开版本可前往项目发布页获取。': 'Arcadia keeps improving browsing, reading, knowledge management, and AI-assisted experiences. Public releases are available on the project releases page.',
   'Arcadia 基于优秀的开源项目构建。以下列出应用使用的主要开源技术。': 'Arcadia is built on excellent open-source projects. The main open-source technologies used by the app are listed below.',
   'Bing 每日一图': 'Bing Daily Image',
+  'Chromium 版本': 'Chromium version',
   'Embedding 模型（可选）': 'Embedding model (optional)',
   'MCP 连接失败：{value0}': 'MCP connection failed: {value0}',
   'MCP 连接已启用': 'MCP connection enabled',
@@ -447,4 +448,7 @@ export const settings: Messages = {
   'RAG 索引': 'RAG index',
   'Rust 端的隐私拦截能力，规则集启用/禁用立即生效；更新规则请前往隐私中心后台任务。': 'Privacy blocking on the Rust side; rule set enable/disable takes effect immediately. To update rules, go to the background task in the privacy center.',
   'stdio 连接需要启动命令': 'stdio connections require a launch command',
+  'Tauri 运行时版本': 'Tauri runtime version',
+  'WebView 版本': 'WebView version',
+  '页面引擎': 'Page engine',
 }

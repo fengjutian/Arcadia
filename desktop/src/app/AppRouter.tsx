@@ -35,6 +35,15 @@ export function AppRouter() {
     })
     setView(next)
   }
+  // Cross-view navigation requested by feature panels (e.g. the site panel).
+  useEffect(() => {
+    const onNavigate = (event: Event) => {
+      const next = (event as CustomEvent<string>).detail
+      if (next === 'browser' || next === 'library' || next === 'search' || next === 'ai' || next === 'mcp' || next === 'settings') changeView(next)
+    }
+    window.addEventListener('arcadia-navigate-view', onNavigate)
+    return () => window.removeEventListener('arcadia-navigate-view', onNavigate)
+  }, [])
   const pages = {
     library: <LibraryPage onOpenBrowser={() => changeView('browser')} />,
     search: <SearchPage initialQuery={knowledgeQuery} onOpenUrl={url => {
@@ -46,7 +55,10 @@ export function AppRouter() {
       window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
       changeView('browser')
     }} />,
-    settings: <SettingsPage />,
+    settings: <SettingsPage onOpenUrl={url => {
+      window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
+      changeView('browser')
+    }} />,
   }
   const secondaryViews: Exclude<View, 'browser'>[] = ['library', 'search', 'ai', 'mcp', 'settings']
   return <AppLayout view={view} onViewChange={changeView}><Suspense fallback={<div className="route-loading"><Spin size="large"/></div>}>

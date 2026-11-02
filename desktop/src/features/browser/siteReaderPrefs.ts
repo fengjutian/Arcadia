@@ -16,6 +16,8 @@ export interface ReaderSiteStyle {
   width?: number
   /** Reader-only palette. */
   theme?: 'light' | 'sepia' | 'dark'
+  /** Comma-separated CSS selectors hidden inside the Reader body. */
+  hide?: string
 }
 
 export const READER_THEMES = [
@@ -88,7 +90,30 @@ function normalizeStyle(raw: unknown): ReaderSiteStyle | null {
   if (typeof record.fontSize === 'number' && Number.isFinite(record.fontSize)) style.fontSize = clampReaderFontSize(record.fontSize)
   if (typeof record.width === 'number' && Number.isFinite(record.width)) style.width = clampReaderWidth(record.width)
   if (record.theme === 'light' || record.theme === 'sepia' || record.theme === 'dark') style.theme = record.theme
-  return style.fontSize || style.width || style.theme ? style : null
+  if (typeof record.hide === 'string') {
+    const hide = normalizeHideSelectors(record.hide)
+    if (hide) style.hide = hide
+  }
+  return style.fontSize || style.width || style.theme || style.hide ? style : null
+}
+
+const MAX_HIDE_SELECTORS = 6
+
+/** Only simple selectors are accepted; declarations and markup are rejected. */
+export function normalizeHideSelectors(input: string): string {
+  return input
+    .split(',')
+    .map(selector => selector.trim())
+    .filter(selector => selector.length > 0 && selector.length <= 120 && !/[{}<>]/.test(selector))
+    .slice(0, MAX_HIDE_SELECTORS)
+    .join(', ')
+}
+
+/** Scoped CSS that hides the selected elements inside the Reader body. */
+export function hideCssFor(style: ReaderSiteStyle | null): string {
+  const selectors = normalizeHideSelectors(style?.hide ?? '')
+  if (!selectors) return ''
+  return selectors.split(', ').map(selector => `.reader-document__body ${selector}`).join(', ') + ' { display: none !important; }'
 }
 
 export function readReaderSiteStyles(): Record<string, ReaderSiteStyle> {

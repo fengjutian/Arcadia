@@ -47,6 +47,7 @@ import { DEFAULT_BROWSER_APPEARANCE, readBrowserAppearance, writeBrowserAppearan
 import { readDownloadSettings, writeDownloadSettings, type DownloadSettings } from '../../features/settings/downloadSettings'
 import { getDefaultDownloadDirectory } from '../../services/downloads'
 import { resetBrowserPreferences } from '../../features/settings/resetSettings'
+import { getBrowserCapabilities, type BrowserCapabilities } from '../../services/browserCapabilities'
 
 const PROVIDER_OPTIONS: { label: string; value: AIProviderType }[] = [
   { label:t("OpenAI 兼容（API Key）"),value:'openai-compatible'},
@@ -580,17 +581,75 @@ function DownloadSettingsPanel() {
   </Card></>
 }
 
-function AboutSettingsPanel() {
+/**
+ * Opens an external page in the in-app browser tab. `target="_blank"` has no
+ * effect inside the Tauri main WebView, so anchors must route through the app
+ * instead of relying on the browser's new-window behaviour.
+ */
+function openExternalUrl(url: string, onOpenUrl?: (url: string) => void) {
+  if (onOpenUrl) { onOpenUrl(url); return }
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+interface BrandVersion { brand: string; version: string }
+interface UserAgentDataLike {
+  getHighEntropyValues?: (hints: string[]) => Promise<{ fullVersionList?: BrandVersion[] }>
+}
+
+/**
+ * Reads the full Chromium version through User-Agent Client Hints. The UA
+ * string only carries `Chrome/<major>.0.0.0` inside WebView2, while the
+ * high-entropy brand list reports the real build number. Returns null when the
+ * host does not support the API, so callers can fall back to the milestone
+ * resolved on the Rust side.
+ */
+async function detectFullChromiumVersion(): Promise<string | null> {
+  const uaData = (navigator as Navigator & { userAgentData?: UserAgentDataLike }).userAgentData
+  try {
+    const values = await uaData?.getHighEntropyValues?.(['fullVersionList'])
+    const chromium = values?.fullVersionList?.find(item => item.brand === 'Chromium' || item.brand === 'Google Chrome')
+    return chromium?.version || null
+  } catch {
+    return null
+  }
+}
+
+function AboutSettingsPanel({ onOpenUrl }: { onOpenUrl?: (url: string) => void }) {
   const [version, setVersion] = useState('0.6.0')
+  const [capabilities, setCapabilities] = useState<BrowserCapabilities | null>(null)
+  const [fullChromiumVersion, setFullChromiumVersion] = useState<string | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
 
   useEffect(() => {
     if ('__TAURI_INTERNALS__' in window) void getVersion().then(setVersion).catch(() => undefined)
   }, [])
 
+  useEffect(() => {
+    void getBrowserCapabilities().then(setCapabilities).catch(() => undefined)
+    void detectFullChromiumVersion().then(setFullChromiumVersion).catch(() => undefined)
+  }, [])
+
+  const pageEngine = capabilities?.pageEngine === 'cef'
+    ? 'CEF'
+    : capabilities?.webviewBackend === 'webview2'
+      ? 'WebView2'
+      : capabilities?.webviewBackend === 'wkwebview'
+        ? 'WKWebView'
+        : capabilities?.webviewBackend === 'webkitgtk'
+          ? 'WebKitGTK'
+          : '\u2014'
+  const webviewVersion = capabilities?.webviewVersion || '\u2014'
+  const chromiumVersion = fullChromiumVersion
+    || (capabilities?.chromiumMajor != null ? String(capabilities.chromiumMajor) : '\u2014')
+  const tauriRuntimeVersion = capabilities?.tauriRuntimeVersion || '\u2014'
+
   const diagnostic = [
     `Arcadia ${version}`,
     `Platform ${navigator.platform || 'unknown'}`,
+    `Page engine ${pageEngine}`,
+    `WebView ${webviewVersion}`,
+    `Chromium ${chromiumVersion}`,
+    `Tauri ${tauriRuntimeVersion}`,
   ].join('\n')
 
   async function copyDiagnostic() {
@@ -609,11 +668,15 @@ function AboutSettingsPanel() {
     <Descriptions className="about-runtime" size="small" bordered column={2} items={[
       { key: 'version', label:t("应用版本"),children:version},
       { key: 'identifier', label:t("应用标识"),children:'com.arcadia.knowledge-browser'},
+      { key: 'engine', label:t("页面引擎"),children:pageEngine},
+      { key: 'webview', label:t("WebView 版本"),children:webviewVersion},
+      { key: 'chromium', label:t("Chromium 版本"),children:chromiumVersion},
+      { key: 'tauri', label:t("Tauri 运行时版本"),children:tauriRuntimeVersion},
     ]}/>
     <div className="about-links">
-      <a href="https://arcadia-browser.netlify.app" target="_blank" rel="noreferrer">{t("产品主页")}</a>
-      <a href="https://github.com/fengjutian/browser" target="_blank" rel="noreferrer">{t("开源项目")}</a>
-      <a href="https://github.com/fengjutian/browser/releases" target="_blank" rel="noreferrer">{t("版本发布")}</a>
+      <a href="https://arcadia-browser.netlify.app" onClick={event=>{event.preventDefault();openExternalUrl('https://arcadia-browser.netlify.app',onOpenUrl)}}>{t("产品主页")}</a>
+      <a href="https://github.com/fengjutian/browser" onClick={event=>{event.preventDefault();openExternalUrl('https://github.com/fengjutian/browser',onOpenUrl)}}>{t("开源项目")}</a>
+      <a href="https://github.com/fengjutian/browser/releases" onClick={event=>{event.preventDefault();openExternalUrl('https://github.com/fengjutian/browser/releases',onOpenUrl)}}>{t("版本发布")}</a>
       <Button size="small" onClick={() => void copyDiagnostic()}>{t("复制诊断信息")}</Button>
     </div>
     <Typography.Paragraph type="secondary" className="about-copyright">© {new Date().getFullYear()} Arcadia contributors.</Typography.Paragraph>
@@ -633,11 +696,11 @@ const OPEN_SOURCE_COMPONENTS = [
   { name: 'Vite', category:t("构建工具"),description:t("开发和构建应用前端资源。"),license:'MIT',url:'https://vite.dev'},
 ]
 
-function OpenSourceSettingsPanel() {
+function OpenSourceSettingsPanel({ onOpenUrl }: { onOpenUrl?: (url: string) => void }) {
   return <Card title={t("开源组件")} className="settings-card open-source-settings-card">
     <Typography.Paragraph type="secondary">{t("Arcadia 基于优秀的开源项目构建。以下列出应用使用的主要开源技术。")}</Typography.Paragraph>
     <div className="open-source-grid">
-      {OPEN_SOURCE_COMPONENTS.map(component => <a key={component.name} className="open-source-item" href={component.url} target="_blank" rel="noreferrer">
+      {OPEN_SOURCE_COMPONENTS.map(component => <a key={component.name} className="open-source-item" href={component.url} onClick={event=>{event.preventDefault();openExternalUrl(component.url,onOpenUrl)}}>
         <div><strong>{component.name}</strong><Tag>{component.category}</Tag></div>
         <p>{component.description}</p>
         <span className="open-source-item__url">{component.url}</span>
@@ -1721,7 +1784,7 @@ function PasswordManagerSettings() {
   </Card></>
 }
 
-export function SettingsPage() {
+export function SettingsPage({ onOpenUrl }: { onOpenUrl?: (url: string) => void } = {}) {
   const panels = [
     [t("通用"),<GeneralSettings/>],
     [t("浏览器"),<BrowserSettings/>],
@@ -1736,8 +1799,8 @@ export function SettingsPage() {
     [t("搜索引擎"),<SearchEngineSettings/>],
     [t("下载"),<DownloadSettingsPanel/>],
     [t("重置设置"),<ResetSettingsPanel/>],
-    [t("关于"),<AboutSettingsPanel/>],
-    [t("开源组件"),<OpenSourceSettingsPanel/>],
+    [t("关于"),<AboutSettingsPanel onOpenUrl={onOpenUrl}/>],
+    [t("开源组件"),<OpenSourceSettingsPanel onOpenUrl={onOpenUrl}/>],
   ] as const
   const items = panels.map(([label, panel]) =>( {
     key: label,

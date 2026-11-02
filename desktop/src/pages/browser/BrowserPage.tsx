@@ -26,7 +26,7 @@ import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
 import { normalizeSleepHost, readSleepExceptions, toggleSleepException, writeSleepExceptions, isSleepExcluded } from '../../features/browser/sleepSettings'
-import { isAutoReaderSite, normalizeReaderHost, readReaderSites, toggleReaderSite, writeReaderSites, READER_FONT_SIZES, READER_WIDTHS, READER_THEMES, clampReaderFontSize, clampReaderWidth, readerStyleFor, writeReaderSiteStyle } from '../../features/browser/siteReaderPrefs'
+import { isAutoReaderSite, normalizeReaderHost, readReaderSites, toggleReaderSite, writeReaderSites, READER_FONT_SIZES, READER_WIDTHS, READER_THEMES, clampReaderFontSize, clampReaderWidth, readerStyleFor, writeReaderSiteStyle, normalizeHideSelectors } from '../../features/browser/siteReaderPrefs'
 import { matchSiteRoute, readSiteRoutes, upsertSiteRoute, writeSiteRoutes, type SiteRoute } from '../../features/browser/siteRoutes'
 import { emitLittleArcResult, listenLittleArcCapture, listenLittleArcOpenMain, openLittleArc } from '../../features/littlearc/littleArc'
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
@@ -238,6 +238,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false)
   const [pickerDocuments, setPickerDocuments] = useState<KnowledgeDocument[]>([])
   const [pickerQuery, setPickerQuery] = useState('')
+  const [hideEditorOpen, setHideEditorOpen] = useState(false)
+  const [hideDraft, setHideDraft] = useState('')
 
   useEffect(() => {
     if (!documentPickerOpen) return
@@ -249,7 +251,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   }, [documentPickerOpen])
 
   useEffect(() => {
-    if (!nativeMode || !splitDocument) return
+    if (!isNativeBrowserAvailable() || !splitDocument) return
     const apply = () => {
       const rect = bounds()
       if (!rect) return
@@ -267,7 +269,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       window.removeEventListener('resize', apply)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nativeMode, splitDocument, active.id])
+  }, [splitDocument, active.id])
 
   function closeDocumentSplit() {
     setSplitDocument(null)
@@ -2761,8 +2763,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       spaces={spaceOptions}
       onChange={updateSiteRoutes}
     />
-    <Modal open={documentPickerOpen} title={translate("选择文档")} onCancel={() => setDocumentPickerOpen(false)} footer={null}>
-      <Input value={pickerQuery} allowClear placeholder={translate("搜索文档")} onChange={event => setPickerQuery(event.target.value)}/>
+    <Modal open={documentPickerOpen} title={translate("选择文档")} onCancel={() => setDocumentPickerOpen(false)} footer={null}>      <Input value={pickerQuery} allowClear placeholder={translate("搜索文档")} onChange={event => setPickerQuery(event.target.value)}/>
       <div className="document-picker-list">
         {pickerDocuments
           .filter(document => !pickerQuery.trim() || document.title.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
@@ -2770,6 +2771,20 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
           .map(document => <button key={document.id} type="button" onClick={() => { setSplitDocument(document); setDocumentPickerOpen(false) }}>{document.title}</button>)}
         {pickerDocuments.filter(document => !pickerQuery.trim() || document.title.toLowerCase().includes(pickerQuery.trim().toLowerCase())).length === 0 && <Typography.Text type="secondary">{translate("没有可并排的文档")}</Typography.Text>}
       </div>
+    </Modal>
+    <Modal
+      open={hideEditorOpen}
+      title={translate("隐藏元素")}
+      onCancel={() => setHideEditorOpen(false)}
+      okText={translate("保存")}
+      onOk={() => {
+        writeReaderSiteStyle(active.url, { ...readerSiteStyle, hide: normalizeHideSelectors(hideDraft) || undefined })
+        setReaderStyleVersion(version => version + 1)
+        setHideEditorOpen(false)
+      }}
+    >
+      <Typography.Paragraph type="secondary">{translate("只对阅读模式生效；只接受简单 CSS 选择器，不执行任何脚本。")}</Typography.Paragraph>
+      <Input value={hideDraft} onChange={event => setHideDraft(event.target.value)} placeholder={translate("隐藏元素选择器（逗号分隔）")}/>
     </Modal>
     <CommandPalette
       open={commandOpen}
@@ -2886,6 +2901,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             <Select<number> size="small" value={readerSiteStyle?.width ?? 760} options={READER_WIDTHS.map(width => ({ label: String(width), value: width }))} onChange={value => { writeReaderSiteStyle(active.url, { ...readerSiteStyle, width: clampReaderWidth(Number(value)) }); setReaderStyleVersion(version => version + 1) }}/>
             <span>{translate("阅读主题")}</span>
             <Select size="small" value={readerSiteStyle?.theme ?? 'light'} options={READER_THEMES.map(theme => ({ label: theme.value === 'light' ? translate("浅色") : theme.value === 'sepia' ? translate("护眼") : translate("深色"), value: theme.value }))} onChange={value => { writeReaderSiteStyle(active.url, { ...readerSiteStyle, theme: value as 'light' | 'sepia' | 'dark' }); setReaderStyleVersion(version => version + 1) }}/>
+            <Button size="small" type="text" onClick={() => { setHideDraft(readerSiteStyle?.hide ?? ''); setHideEditorOpen(true) }}>{translate("隐藏元素")}</Button>
             <Button size="small" type="text" onClick={() => { writeReaderSiteStyle(active.url, null); setReaderStyleVersion(version => version + 1) }}>{translate("重置")}</Button>
           </div>
           <ReaderArticleView article={readerArticle} style={readerSiteStyle}/>
