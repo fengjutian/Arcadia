@@ -40,7 +40,7 @@ describe('interpretShortcut', () => {
   })
 
   it('matches the search palette cluster', () => {
-    expect(interpretShortcut(evt('k', { ctrl: true }))).toBe('openTabSearch')
+    expect(interpretShortcut(evt('k', { ctrl: true }))).toBe('openCommandBar')
     expect(interpretShortcut(evt('A', { ctrl: true, shift: true }))).toBe('openTabSearch')
     expect(interpretShortcut(evt('h', { ctrl: true }))).toBe('openHistorySearch')
     expect(interpretShortcut(evt('O', { ctrl: true, shift: true }))).toBe('openBookmarks')

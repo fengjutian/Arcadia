@@ -76,12 +76,14 @@
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
 > 全部条目未开始。按性价比排序：`6.1`–`6.3` 不依赖布局收口，可在当前工作流结束后立即启动；`6.4` 起依赖布局收口。
+> 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
 
 - [ ] 借鉴：Arc 的 `⌘T` 命令栏把导航、切标签与动作执行合并在一个输入框，动作本身可被搜索（[Command Bar Actions](https://start.arc.net/command-bar-actions)）。
 - 现状：`TabSearchPalette`、`BookmarkSearchPalette`、`HistorySearchPalette`、`BulkSummaryPalette` 是四个独立 Modal；地址栏只负责导航。
 - 做法：新增单一命令栏，前缀分域：`@` 标签、`/` 知识库、`?` 问 AI、`>` 动作；复用 `tabSearchIndex`、`historySearchIndex`、`bookmarkSearchIndex`；动作表映射现有高频 Tauri command。
+- 增补（借 Chrome / Firefox）：`Tab` 就地切换搜索域；域名 + Tab 触发站内搜索，模板复用 `searchEngine.ts`；允许用户自定义 `!` 快捷词。
 - 验收：`Ctrl/Cmd + K` 打开；四类结果同屏分组且键盘可达；动作有成功/失败反馈；旧 palette 入口保留一个版本周期后移除；新增纯函数与交互测试。
 
 ### 6.2 标签生命周期：Today → Archive → Library
@@ -90,6 +92,7 @@
 - 现状：`closed_tabs` + `RecoveryPanel` 是「恢复」语义，知识库是「保存」语义，缺少「读过但没存」的中间层。
 - 做法：临时标签超时（默认 12 小时，可配置）或手动归档；归档写 SQLite 并同步 FTS5；搜索结果新增「浏览痕迹」类型；AI 引用允许指向归档页。
 - 验收：归档后可按标题/URL 找回；私密标签永不归档；保留策略与容量上限可配置；UI 上「恢复」与「归档」语义不混淆。
+- 增补（借 Chrome Journeys）：对历史做「研究轨迹」聚类视图，每簇可保存为集合或直接提问；聚类为纯函数，不新增表。
 
 ### 6.3 笔记/高亮落库并进入检索与 RAG
 
@@ -97,6 +100,7 @@
 - 现状：`features/notes/notes.ts` 把高亮存在 `localStorage`（上限 500 条），不进 SQLite、不进 FTS、不进备份、不参与 RAG。
 - 做法：迁移到 SQLite 并随文档关联；写入 FTS5 与向量索引；保存网页时把该页笔记挂到文档；备份/导出覆盖笔记；一次性迁移旧 `localStorage` 数据。
 - 验收：重启与备份恢复后笔记仍在；可按笔记正文检索；RAG 引用可标注笔记来源；迁移可重复执行且幂等。
+- 增补（借 Chrome highlights）：高亮记录 `quote / prefix / suffix / color`，用文本锚点而非 XPath，保证页面改版后仍可定位。
 
 ### 6.4 Space 化工作区
 
@@ -104,6 +108,7 @@
 - 现状：`workspaces` 表只存 `payload` 快照，入口在设置页点「恢复」；标签仍是顶部横向 Tabs；左侧 64px rail 只切换视图。
 - 做法：Workspace 升级为 Space，绑定知识集合、AI 上下文范围与站点路由（见 6.5）；新标签与保存默认落当前 Space；侧栏提供 Space 切换。
 - 验收：切换 Space 不丢失未保存标签；集合与 AI 上下文按 Space 隔离；会话恢复按 Space 还原；旧 `workspaces` payload 有迁移路径。
+- 增补（借 Edge Workspaces / Chrome 标签组）：支持「整体打开」；命名/颜色/持久化的标签组作为 Space 内的第二层结构。
 - 依赖：布局与滚动所有权收口完成。
 
 ### 6.5 站点路由（Arc ATC 的知识库版）
@@ -155,6 +160,33 @@
 - 做法：把对比布局泛化为「网页 vs 文档、文档 vs 文档、文档 vs 对话」；Rust 侧复用每标签独立 WebView 与尺寸同步。
 - 验收：分屏关闭不关闭标签；焦点与权限提示归属正确；窗口缩放与最小宽度有明确降级。
 - 依赖：布局收口完成。
+
+### 6.13 睡眠标签 UI 与站点例外
+
+- [ ] 借鉴：Chrome Memory Saver / Edge Sleeping Tabs——机制的价值在可见性与可控性，不在回收本身。
+- 现状：`webview_suspend.rs` 已在 Windows 真实调用 `ICoreWebView2_3::TrySuspend`，`lruPolicy.ts` 已保护固定/发声/下载中的标签；但界面没有睡眠态、没有原因说明、没有站点例外。
+- 做法：标签睡眠徽标与 hover 原因；右键「立即休眠 / 唤醒」；站点级「永不自动休眠」；唤醒后的状态恢复提示。
+- 验收：睡眠态可被用户识别；唤醒不丢导航历史；例外规则持久化并即时生效；非 Windows 平台明确降级为不可用而非静默失败。
+
+### 6.14 阅读队列（待读）
+
+- [ ] 借鉴：Chrome Reading List——「稍后读」与「已保存」是两种不同意图。
+- 现状：只有「保存到知识库」，没有轻量的待读队列。
+- 做法：新增阅读队列（`reading_queue` 表或 documents 状态扩展）；入口在地址栏星标旁与知识库「待读」页签；读完可一键转保存或归档。
+- 验收：加入/移除有即时反馈；队列按加入时间排序；重启后保留；与归档（6.2）语义不重叠。
+
+### 6.15 剪藏片段
+
+- [ ] 借鉴：Edge Collections——把选区、图片、链接连同备注收进集合，而不是只能整篇保存。
+- 做法：统一「剪藏」对象（`kind / content / sourceUrl / note / collectionId`），落 SQLite、进 FTS5、可导出；选区来源复用右键菜单「加入笔记」。
+- 验收：四类剪藏均可创建；来源可回溯；导出 Markdown 保留出处；与整篇保存共用一套检索与引用。
+
+### 6.16 统一站点面板
+
+- [ ] 借鉴：三家浏览器的「点地址栏锁图标 → 一个面板看站点数据」。
+- 现状：站点权限、网站封杀、广告过滤、清除站点数据分散在四处。
+- 做法：合并为单一 `<SitePanel>`，分区展示权限、屏蔽规则、过滤统计与清除入口。
+- 验收：一个入口可达全部站点级设置；改动即时生效；不复用旧的四套弹层。
 
 ### 明确不做
 

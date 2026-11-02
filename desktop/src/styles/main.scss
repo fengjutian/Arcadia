@@ -159,3 +159,15 @@ body[data-theme='dark'] .workspaces-editor__desc{color:#9aa69e}
 }
 .notes-panel-toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:34px;height:34px;display:grid;place-items:center;border:1px solid #d8ded9;border-radius:50%;background:#fafbf9;color:var(--accent);cursor:pointer;box-shadow:0 6px 14px rgba(30,64,45,.08);z-index:40}
 .notes-panel-toggle.is-collapsed:hover{background:var(--accent-soft);color:var(--accent-hover)}
+/* Unified command bar (features/command) */
+.command-palette .command-palette__section{margin-top:6px}
+.command-palette__section>header{padding:6px 8px 2px;font-size:11px;letter-spacing:.06em;color:#8a948d}
+.command-row{display:flex;align-items:center;gap:10px;width:100%;padding:7px 10px;border:0;background:transparent;border-radius:8px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.command-row.is-active,.command-row:hover{background:rgba(167,223,189,.22)}
+.command-row__icon{display:grid;place-items:center;flex:none;width:24px;color:#6c7a71}
+.command-row__text{display:flex;flex:1;min-width:0;flex-direction:column;gap:2px}
+.command-row__title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.command-row__sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#748078}
+.command-row kbd{flex:none;padding:1px 5px;border:1px solid #e2e7e3;border-radius:4px;font-size:11px;color:#8a948d}
+.command-row .ui-tag{flex:none}
+.command-palette__mode{font-size:11px;color:#8a948d;white-space:nowrap}

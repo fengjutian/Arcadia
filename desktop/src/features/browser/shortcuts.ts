@@ -17,6 +17,7 @@ export type ShortcutAction =
   | 'reload'
   | 'stop'
   | 'find'
+  | 'openCommandBar'
   | 'openTabSearch'
   | 'openHistorySearch'
   | 'openBookmarks'
@@ -80,7 +81,8 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   { action: 'nextTab',           label: '下一个标签',       hint: 'Ctrl/⌘ + Tab',        default: kbd('Tab') },
   { action: 'prevTab',           label: '上一个标签',       hint: 'Ctrl/⌘ + Shift + Tab',default: kbd('Tab', true, true) },
   { action: 'jumpToTab',         label: '跳转到第 N 个标签',hint: 'Ctrl/⌘ + 1~9',        default: kbd('1') },
-  { action: 'openTabSearch',     label: '打开标签搜索面板', hint: 'Ctrl/⌘ + K /  + Shift+ A', default: kbd('k'), extras: [kbd('a', true, true)] },
+  { action: 'openCommandBar',    label: '打开命令栏',       hint: 'Ctrl/⌘ + K',          default: kbd('k') },
+  { action: 'openTabSearch',     label: '打开标签搜索面板', hint: 'Ctrl/⌘ + Shift + A',  default: kbd('a', true, true) },
   { action: 'openHistorySearch', label: '打开历史搜索面板', hint: 'Ctrl/⌘ + H',          default: kbd('h') },
   { action: 'openBookmarks',     label: '打开收藏夹面板',   hint: 'Ctrl/⌘ + Shift + O',  default: kbd('o', true, true) },
   { action: 'addBookmark',       label: '收藏当前页',       hint: 'Ctrl/⌘ + D',          default: kbd('d') },

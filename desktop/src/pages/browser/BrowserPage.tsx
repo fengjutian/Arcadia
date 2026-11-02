@@ -47,6 +47,7 @@ import { PermissionPromptBar } from '../../features/browser/PermissionPromptBar'
 import { CertificateErrorBar } from '../../features/browser/CertificateErrorBar'
 import { useCertificatePrompt } from '../../features/browser/useCertificatePrompt'
 import { TabSearchPalette } from '../../features/browser/TabSearchPalette'
+import { CommandPalette } from '../../features/command/CommandPalette'
 import { HistorySearchPalette } from '../../features/history/HistorySearchPalette'
 import { BookmarkSearchPalette } from '../../features/bookmarks/BookmarkSearchPalette'
 import { useBookmarks } from '../../features/bookmarks/useBookmarks'
@@ -127,6 +128,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
   const [findOpen, setFindOpen] = useState(false)
   const [pendingShellOpen, setPendingShellOpen] = useState<string | null>(null)
   const [tabSearchOpen, setTabSearchOpen] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
   const [historySearchOpen, setHistorySearchOpen] = useState(false)
   const [bookmarkPaletteOpen, setBookmarkPaletteOpen] = useState(false)
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
@@ -1019,6 +1021,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
           return
         case 'find':
           setFindOpen(true)
+          return
+        case 'openCommandBar':
+          setCommandOpen(true)
           return
         case 'openTabSearch':
           setTabSearchOpen(true)
@@ -2207,6 +2212,30 @@ export function BrowserPage({ visible = true, onSearchKnowledge }: { visible?: b
     {active.private&&<div className="browser-private-bar"><LockOutlined/><strong>私密浏览</strong><span>不会保存历史记录、关闭记录与站点权限</span></div>}
     {findOpen&&<div className="browser-find"><Input autoFocus allowClear prefix={<SearchOutlined/>} value={findQuery} status={findStatus==='missing'?'error':undefined} placeholder="在页面中查找" onChange={event=>{setFindQuery(event.target.value);setFindStatus('idle')}} onPressEnter={event=>void runFind(event.shiftKey)}/><Typography.Text type={findStatus==='missing'?'danger':'secondary'}>{findStatus==='missing'?'未找到':findStatus==='found'?'已定位':''}</Typography.Text><Button type="text" aria-label="上一个匹配项" icon={<ArrowUpOutlined/>} onClick={()=>void runFind(true)}/><Button type="text" aria-label="下一个匹配项" icon={<ArrowDownOutlined/>} onClick={()=>void runFind(false)}/><Button type="text" aria-label="关闭查找" icon={<CloseOutlined/>} onClick={closeFind}/></div>}
     <PermissionPromptBar prompt={permissionPrompt} />
+    <CommandPalette
+      open={commandOpen}
+      onClose={() => setCommandOpen(false)}
+      tabs={tabs}
+      activeId={activeTabId}
+      history={history}
+      bookmarks={bookmarkActions.bookmarks}
+      onActivateTab={id => activateTab(id)}
+      onCloseTab={id => closeTab(id)}
+      onNavigate={url => void navigate(url)}
+      onAskAi={question => {
+        setAiInitialQuestion(question)
+        setAiInitialMode('ask')
+        setAiTranslationSource('')
+        setAiOpen(true)
+      }}
+      onNewTab={() => openNewTab()}
+      onSavePage={() => void save()}
+      onBookmarkPage={() => void addCurrentAsBookmark()}
+      onToggleAi={toggleAiAssistant}
+      onToggleNotes={() => setNotesOpen(value => !value)}
+      onBulkSummary={() => setBulkSummaryOpen(true)}
+      onSaveWorkspace={() => void saveAsWorkspace()}
+    />
     <TabSearchPalette
       open={tabSearchOpen}
       tabs={tabs}
