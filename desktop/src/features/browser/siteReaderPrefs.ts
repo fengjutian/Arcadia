@@ -14,7 +14,15 @@ export interface ReaderSiteStyle {
   fontSize?: number
   /** Article max width in CSS pixels. */
   width?: number
+  /** Reader-only palette. */
+  theme?: 'light' | 'sepia' | 'dark'
 }
+
+export const READER_THEMES = [
+  { value: 'light', label: '浅色' },
+  { value: 'sepia', label: '护眼' },
+  { value: 'dark', label: '深色' },
+] as const
 
 export const READER_FONT_SIZES = [14, 16, 18, 20, 22, 24] as const
 export const READER_WIDTHS = [640, 760, 900, 1040] as const
@@ -79,7 +87,8 @@ function normalizeStyle(raw: unknown): ReaderSiteStyle | null {
   const style: ReaderSiteStyle = {}
   if (typeof record.fontSize === 'number' && Number.isFinite(record.fontSize)) style.fontSize = clampReaderFontSize(record.fontSize)
   if (typeof record.width === 'number' && Number.isFinite(record.width)) style.width = clampReaderWidth(record.width)
-  return style.fontSize || style.width ? style : null
+  if (record.theme === 'light' || record.theme === 'sepia' || record.theme === 'dark') style.theme = record.theme
+  return style.fontSize || style.width || style.theme ? style : null
 }
 
 export function readReaderSiteStyles(): Record<string, ReaderSiteStyle> {

@@ -7,8 +7,11 @@ import {
   currentSpaceNamespace,
   documentInScope,
   readCurrentSpace,
+  readSpaceIdentities,
   readSpaceScopes,
+  spaceColorFor,
   writeCurrentSpace,
+  writeSpaceIdentity,
   writeSpaceScope,
 } from './spaces'
 
@@ -86,5 +89,16 @@ describe('space knowledge scopes', () => {
     clearCurrentSpace()
     expect(readCurrentSpace()).toBeNull()
     expect(currentSpaceNamespace()).toBe('default')
+  })
+
+  it('stores a known identity color and ignores invalid ones', () => {
+    expect(readSpaceIdentities()).toEqual({})
+    writeSpaceIdentity('w1', { color: '#3b6fd4' })
+    expect(spaceColorFor('w1')).toBe('#3b6fd4')
+    expect(spaceColorFor('w2')).toBeNull()
+    writeSpaceIdentity('w1', { color: 'red' })
+    expect(readSpaceIdentities()).toEqual({})
+    writeSpaceIdentity('w1', null)
+    expect(spaceColorFor('w1')).toBeNull()
   })
 })

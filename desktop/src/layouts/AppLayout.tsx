@@ -1,5 +1,5 @@
 import { t } from '../i18n'
-import { useEffect, useLayoutEffect, useState, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState, type PointerEvent, type ReactNode } from 'react'
 import { Avatar, Badge, Dropdown, Layout, Space, Tooltip, Typography } from '../components/ui'
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui/icons'
 import { BookOpen, Boxes, Globe2, Layers, Minus, Search, Settings, Sparkles, Square, X } from 'lucide-react'
@@ -9,7 +9,7 @@ import { TopBarPortalProvider } from '../app/TopBarPortal'
 import { diagnosticLog } from '../shared/diagnostics'
 import { listWorkspaces, type WorkspaceSummary } from '../services/workspaces'
 import { listCollections, type Collection } from '../api'
-import { SPACE_CHANGED_EVENT, SPACE_SCOPE_EVENT, clearCurrentSpace, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
+import { SPACE_CHANGED_EVENT, SPACE_SCOPE_EVENT, SPACE_COLORS, clearCurrentSpace, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, spaceColorFor, writeSpaceIdentity, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label:t("浏览器")},{key:'library',icon:<BookOpen/>,label:t("知识库")},{key:'search',icon:<Search/>,label:t("搜索")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const
 
@@ -22,6 +22,7 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
   const [spaces, setSpaces] = useState<WorkspaceSummary[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [currentSpace, setCurrentSpace] = useState<CurrentSpace | null>(() => readCurrentSpace())
+  const [identityVersion, setIdentityVersion] = useState(0)
   const collapsed = true
 
   async function refreshSpaces() {
@@ -61,6 +62,11 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
     ? spaces.map(space => ({ key: space.id, label: `${space.name} · ${space.tabCount}`, onClick: () => dispatchSpaceRestore(space.id) }))
     : [{ key: 'empty', label: t("还没有已保存的 Space"), disabled: true }]
   const activeScope = currentSpace ? readSpaceScopes()[currentSpace.id] ?? null : null
+  const spaceColor = useMemo(
+    () => (currentSpace ? spaceColorFor(currentSpace.id) : null),
+    // `identityVersion` re-reads storage after a color change.
+    [currentSpace, identityVersion],
+  )
   function applyScope(collectionId: string | null) {
     if (!currentSpace) return
     writeSpaceScope(currentSpace.id, collectionId)
@@ -85,6 +91,18 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
       { key: 'manage', label: t("管理 Space"), onClick: () => onViewChange('settings') },
       ...(currentSpace ? [{ key: 'leave', label: t("不使用 Space"), onClick: () => clearCurrentSpace() }] : []),
       ...(currentSpace ? [{ type: 'divider' as const }, { key: 'scope', label: t("知识范围"), children: scopeItems }] : []),
+      ...(currentSpace ? [{
+        key: 'space-color',
+        label: t("Space 颜色"),
+        children: [
+          { key: 'space-color:default', label: `${t("默认")}${spaceColor ? '' : ' ✓'}`, onClick: () => { writeSpaceIdentity(currentSpace.id, null); setIdentityVersion(version => version + 1) } },
+          ...SPACE_COLORS.map(color => ({
+            key: `space-color:${color.value}`,
+            label: `${color.value === '#3c8a5c' ? t("绿色") : color.value === '#3b6fd4' ? t("蓝色") : color.value === '#8a5cd6' ? t("紫色") : color.value === '#d4823b' ? t("橙色") : color.value === '#d14b6a' ? t("红色") : t("灰色")}${spaceColor === color.value ? ' ✓' : ''}`,
+            onClick: () => { writeSpaceIdentity(currentSpace.id, { color: color.value }); setIdentityVersion(version => version + 1) },
+          })),
+        ],
+      }] : []),
     ],
   }
   const spaceLabel = currentSpace ? t("Space：{value0}", { value0: currentSpace.name }) : t("切换 Space")
@@ -108,7 +126,7 @@ export function AppLayout({ view, onViewChange, children }: { view: View; onView
         <div className="app-topbar__slot" ref={setTopBarSlot}/>
       </header>
       <Layout className="app-body">
-        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}><Dropdown menu={spaceMenu} trigger={['click']} placement="bottomLeft" onOpenChange={open => { if (open) { void refreshSpaces(); try { void listCollections().then(setCollections).catch(() => setCollections([])) } catch { setCollections([]) } } }}><button type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel}><Layers size={18} strokeWidth={1.6}/></button></Dropdown></Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
+        <Layout.Sider width={SIDER_WIDTH} collapsedWidth={SIDER_WIDTH} collapsed={collapsed} trigger={null} className={`app-sider${collapsed ? ' app-sider--collapsed' : ''}`}><div className="space-switch"><Tooltip title={spaceLabel} placement="right" mouseEnterDelay={0.15}><Dropdown menu={spaceMenu} trigger={['click']} placement="bottomLeft" onOpenChange={open => { if (open) { void refreshSpaces(); try { void listCollections().then(setCollections).catch(() => setCollections([])) } catch { setCollections([]) } } }}><button type="button" className={`space-switch__button${currentSpace ? ' is-active' : ''}`} aria-label={spaceLabel} style={spaceColor ? { borderColor: spaceColor, color: spaceColor } : undefined}><Layers size={18} strokeWidth={1.6}/></button></Dropdown></Tooltip></div><nav className="rail-nav rail-nav--primary" aria-label={t("主导航")}>{items.map(navButton)}</nav><div className="sider-spacer"/><div className="privacy-status"><Space><SafetyCertificateOutlined/><b>{t("保护已开启")}</b></Space><Typography.Text>{t("已拦截 43 个请求")}</Typography.Text></div><nav className="rail-nav rail-nav--utility" aria-label={t("辅助导航")}>{navButton({key:'settings',icon:<Settings/>,label:t("设置")})}</nav><div className="user-card"><Badge dot color="#65c98b"><Avatar>CF</Avatar></Badge><span><b>Charles</b><small>{t("本地工作区")}</small></span></div></Layout.Sider>
         <Layout.Content className="app-content">{children}</Layout.Content>
       </Layout>
     </Layout>

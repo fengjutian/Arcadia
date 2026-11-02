@@ -75,7 +75,7 @@
 ## Iteration 6：交互遗产与知识沉淀（借鉴 Arc，规划中）
 
 > 触发：[Arc 于 2026-12-22 停服](https://arc.net)，其交互模式已被 Dia 与主流浏览器吸收。本节只保留对「知识浏览器」定位成立的条目，目标不是成为 Arc 替代品，而是把 Arc 验证过的组织方式嫁接到「浏览 → 保存 → 检索 → 引用」闭环上。
-> 状态以各条目勾选为准：`6.1`、`6.2`、`6.3`、`6.4`、`6.6`、`6.8`、`6.13`、`6.14`、`6.15` 已完成；`6.9` 部分落地；其余未开始。布局与滚动所有权已收口。
+> 状态以各条目勾选为准：`6.1`、`6.2`、`6.3`、`6.4`、`6.6`、`6.8`、`6.13`、`6.14`、`6.15` 已完成；`6.5`、`6.9`、`6.10` 部分落地；其余未开始。布局与滚动所有权已收口。
 > 三大浏览器的补充模式（Omnibox 前缀、历史聚类、Collections、Immersive Reader、睡眠标签、容器与插件权限）见 [主流浏览器借鉴分析](browser-borrowing-analysis.md)。
 
 ### 6.1 统一命令栏
@@ -127,7 +127,9 @@
 
 ### 6.5 站点路由（Arc ATC 的知识库版）
 
-- [ ] 借鉴：Arc 的 Air Traffic Control 按域名把页面路由到固定 Space/Profile（[ZDNET](https://www.zdnet.com/article/arcs-air-traffic-control-is-a-great-way-to-keep-your-browser-organized/)）。
+- [~] 借鉴：Arc 的 Air Traffic Control 按域名把页面路由到固定 Space/Profile（[ZDNET](https://www.zdnet.com/article/arcs-air-traffic-control-is-a-great-way-to-keep-your-browser-organized/)）。
+- 已落地（2026-11-02，V1）：host → 集合 / 自动 Reader 的站点规则（`arcadia.site.routes.v1`，最长 host 后缀匹配，`docs.example.com` 继承 `example.com` 但 `notexample.com` 不匹配）；浏览器菜单「此站点保存到集合」可设/清除；命中规则的页面保存时自动加入集合，规则含 `autoReader` 时页面加载完成自动进 Reader。规则在渲染层匹配，不触达 WebView2 回调线程。
+- 待补：路由到 Space、规则管理页（暂停/删除/优先级可视化）、导航前拦截的 Rust 内存快照。
 - 做法：新增 `site_routing` 表（host → Space / 集合 / 是否默认进 Reader）；导航前匹配；沿用 `site_blacklist` 的内存快照 + 写路径整体替换模式，避免在 WebView2 回调线程上访问 SQLite。
 - 验收：命中规则自动归位；规则可暂停、删除、即时生效；不阻塞导航线程；规则冲突（多条命中）有确定优先级。
 
@@ -158,13 +160,17 @@
 
 - [~] 借鉴：Arc 的 Boosts 支持按站点定制外观，但本项目只取不执行脚本的部分。
 - 已落地（2026-11-02，V1）：站点级「自动进入阅读模式」——`arcadia.reader.sites.v1` 保存 host 列表，浏览器菜单可添加/取消；页面加载完成后按 host 自动打开 Reader，同一 URL 只尝试一次，私密标签不触发。纯函数 `siteReaderPrefs` 覆盖 host 归一化、去重、容错与 toggle。
-- 待补：站点级字号/宽度/主题覆盖、纯 CSS 隐藏元素（需插件 grant）。
+- 已落地（2026-11-02，V2）：站点级 Reader 字号与宽度覆盖——Reader 顶部新增字号（14–24）与宽度（640–1040）选择，按 host 存到 `arcadia.reader.siteStyle.v1`；通过容器上的 `--reading-font-size` / `--reader-width` 生效，仅影响阅读视图，可一键重置。全局排版仍是默认值，站点覆盖优先。
+- 已落地（2026-11-02，V3）：站点级 Reader 主题（浅色 / 护眼 / 深色）随字号、宽度一起按 host 保存，阅读容器只换配色不换布局。
+- 待补：纯 CSS 隐藏元素（需插件 grant）。
 - 做法：站点级 Reader 偏好（字号、宽度、主题、是否自动进 Reader）与纯 CSS 隐藏元素；后者走插件 grant，与 `browserAppearance`、`typography` 衔接。
 - 验收：站点级覆盖优先于全局；只注入 CSS，不执行站点提供的脚本；可一键恢复默认。
 
 ### 6.10 Space 视觉身份
 
-- [ ] 借鉴：Arc 给 Space 配图标与颜色，让「位置感」可被一眼识别。
+- [~] 借鉴：Arc 给 Space 配图标与颜色，让「位置感」可被一眼识别。
+- 已落地（2026-11-02，V1）：Space 颜色身份（`arcadia.space.identity.v1`，6 个预设色，非法值丢弃）；rail Space 按钮按所选颜色着色，Space 菜单「Space 颜色」可切换或恢复默认。
+- 待补：Space 图标、标签自定义命名、保存完成的「沉淀」微动效。
 - 做法：Space 颜色/图标、标签自定义命名、保存完成的「沉淀」微动效；沿用现有米色纸张体系。
 - 验收：与现有视觉语言一致；不引入 `antd`；正文与控件对比度满足 WCAG AA；动效可被「减少动态效果」关闭。
 
@@ -251,7 +257,7 @@
 
 ## 测试现状
 
-`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **96 个文件 / 689 用例全部通过**（含 i18n 完整性、布局契约、Space 范围/命名空间/迁移、站点阅读偏好、睡眠规则与新标签页模型）。Rust 侧最近一次全量：269 通过、1 个既有的 CJK 拼音索引用例在本机环境失败（`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`，与近期改动无关）。
+`npm run test:rust` 是 Windows 上的 Rust 测试入口。前端当前 **97 个文件 / 698 用例全部通过**（含 i18n 完整性、布局契约、Space 范围/身份/命名空间/迁移、站点路由与阅读偏好、睡眠规则与新标签页模型）。Rust 侧最近一次全量：269 通过、1 个既有的 CJK 拼音索引用例在本机环境失败（`local_store::tests::cjk_index_matches_title_by_pinyin_and_initials`，与近期改动无关）。
 
 直接用 `cargo test` 会让测试二进制在加载阶段以 `0xC0000139`（`STATUS_ENTRYPOINT_NOT_FOUND`）退出：`tauri` 默认特性 `common-controls-v6` 与 `tauri-plugin-dialog` 固定启用的 `rfd/common-controls-v6` 都会静态导入 `comctl32!TaskDialogIndirect`，该导出只存在于 comctl32 v6 组件，需要应用清单声明 `Microsoft.Windows.Common-Controls`。应用主程序由 `tauri-build` 注入清单，测试 harness 没有。
 

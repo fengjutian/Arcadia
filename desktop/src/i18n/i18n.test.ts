@@ -37,6 +37,8 @@ const CHINESE_DATA_FILES = new Set([
   'features/archive/archiveSettings.ts',
   'features/browser/sleepSettings.ts',
   'features/browser/spaces.ts',
+  'features/browser/siteRoutes.ts',
+  'features/browser/siteReaderPrefs.ts',
   'features/clips/clips.ts',
   'features/command/siteSearch.ts',
 ])

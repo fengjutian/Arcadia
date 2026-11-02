@@ -1,11 +1,11 @@
 import { translate } from '../../i18n'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AutoComplete, Badge, Button, Dropdown, Input, message, Modal, Popover, Space, Tabs, Tag, Tooltip, Typography, UI_MODAL_OVERLAY_EVENT, type InputRef, type MenuProps } from '../../components/ui'
+import { AutoComplete, Badge, Button, Dropdown, Input, message, Modal, Popover, Select, Space, Tabs, Tag, Tooltip, Typography, UI_MODAL_OVERLAY_EVENT, type InputRef, type MenuProps } from '../../components/ui'
 import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlined, AudioMutedOutlined, BookOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, CloseOutlined, CopyOutlined, DownloadOutlined, FullscreenOutlined, LoadingOutlined, MoonOutlined, MoreOutlined, PlusOutlined, PrinterOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SoundOutlined, StarFilled, StarOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined, WarningOutlined } from '../../components/ui/icons'
 import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
-import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue, saveClip, listReadingQueue, removeFromReadingQueue } from '../../api'
+import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue, saveClip, listReadingQueue, removeFromReadingQueue, addToCollection, listCollections } from '../../api'
 import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
@@ -26,7 +26,8 @@ import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
 import { normalizeSleepHost, readSleepExceptions, toggleSleepException, writeSleepExceptions } from '../../features/browser/sleepSettings'
-import { isAutoReaderSite, normalizeReaderHost, readReaderSites, toggleReaderSite, writeReaderSites, READER_FONT_SIZES, READER_WIDTHS, clampReaderFontSize, clampReaderWidth, readerStyleFor, writeReaderSiteStyle } from '../../features/browser/siteReaderPrefs'
+import { isAutoReaderSite, normalizeReaderHost, readReaderSites, toggleReaderSite, writeReaderSites, READER_FONT_SIZES, READER_WIDTHS, READER_THEMES, clampReaderFontSize, clampReaderWidth, readerStyleFor, writeReaderSiteStyle } from '../../features/browser/siteReaderPrefs'
+import { matchSiteRoute, readSiteRoutes, upsertSiteRoute, writeSiteRoutes, type SiteRoute } from '../../features/browser/siteRoutes'
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
 import { scheduleExtrasSync } from '../../features/search/extrasSync'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
@@ -140,6 +141,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const sleepExceptionsRef = useRef<string[]>(sleepExceptions)
   const [readerSites, setReaderSites] = useState<string[]>(readReaderSites)
   const readerSitesRef = useRef<string[]>(readerSites)
+  const [siteRoutes, setSiteRoutes] = useState<SiteRoute[]>(readSiteRoutes)
+  const siteRoutesRef = useRef<SiteRoute[]>(siteRoutes)
+  const [routeCollections, setRouteCollections] = useState<Array<{ id: string; name: string }>>([])
   const autoReaderAttemptsRef = useRef<Set<string>>(new Set())
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
@@ -188,6 +192,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [comparison, setComparison] = useState<ComparisonSession | null>(null)
   const [toolbarOverlay, setToolbarOverlay] = useState<ToolbarOverlay | null>(null)
   const [modalOverlayCount, setModalOverlayCount] = useState(0)
+  // Still frame of the page painted underneath a host overlay while the native
+  // WebView is hidden, so opening a menu does not blank the content area.
+  const [frozenFrame, setFrozenFrame] = useState<string | null>(null)
+  const freezeSessionRef = useRef(0)
   const [sourceView, setSourceView] = useState<{ url: string; html: string } | null>(null)
   const [clearSiteDataOpen, setClearSiteDataOpen] = useState(false)
   const [passwordCandidate, setPasswordCandidate] = useState<(PasswordCandidate & { existingId?: string }) | null>(null)
@@ -215,6 +223,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const lruSweepRunningRef = useRef(false)
   const floatingAssistantOpenedRef = useRef(false)
   const active = tabs.find(tab => tab.id === activeTabId) ?? tabs[0]
+  const [readerStyleVersion, setReaderStyleVersion] = useState(0)
+  const readerSiteStyle = useMemo(() => readerStyleFor(active.url), [active.url, readerArticle, readerStyleVersion])
   const nativeMode = hasNativeTab(active.id)
 
   useEffect(() => {
@@ -362,15 +372,54 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
 
   useEffect(() => {
     let cancelled = false
-    if (!hasNativeTab(active.id)) return
+    if (!hasNativeTab(active.id)) {
+      frozenForRef.current = null
+      setFrozenFrame(null)
+      return
+    }
     // The native child WebView paints above the React surface, so any error
     // view (site block, crash, load failure) must hide it.
     if (!visible || readerArticle || active.error) {
+      frozenForRef.current = null
+      setFrozenFrame(null)
       void hideNativeTab(active.id)
       return
     }
     if (modalOverlayCount > 0 || toolbarOverlay === 'tab-menu' || toolbarOverlay === 'menu') {
-      void hideNativeTab(active.id)
+      // A host overlay (Space menu, tab menu, select, dialog) cannot paint over
+      // the native page, so the WebView has to go away while it is open.
+      // Hiding it alone leaves the content area blank, which looks like the
+      // page was closed. Capture the visible page first and paint that still
+      // under the overlay instead: the menu then appears to float over an
+      // unchanged page, and the still is dropped as soon as the page returns.
+      const tabId = active.id
+      // A second overlay (select inside a dialog) must keep the still captured
+      // by the first: the page is already hidden, so capturing again would
+      // paint a blank frame over a perfectly good one.
+      if (frozenForRef.current === tabId) {
+        void hideNativeTab(tabId)
+        return
+      }
+      frozenForRef.current = tabId
+      void (async () => {
+        const frame = await Promise.race([
+          captureNativeScreenshot(tabId, false)
+            .then(data => `data:image/png;base64,${data}`)
+            .catch(() => null),
+          // Never keep the overlay waiting on a slow capture: fall back to
+          // hiding the page, which is the old behaviour.
+          new Promise<null>(resolve => window.setTimeout(() => resolve(null), 400)),
+        ])
+        if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId) return
+        if (frame) {
+          setFrozenFrame(frame)
+          // Let React paint the still before the WebView disappears, otherwise
+          // one frame of the blank host surface shows through.
+          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+          if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId) return
+        }
+        await hideNativeTab(tabId)
+      })()
       return
     }
     const next = bounds()
@@ -379,6 +428,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (next) await resizeNativeTab(active.id, inset > 0 ? { ...next, width: Math.max(1, next.width - inset) } : next)
       if (cancelled || activeTabIdRef.current !== active.id || !visibleRef.current) return
       await showNativeTab(active.id)
+      // Drop the still only after the native page is visible again; clearing it
+      // first would flash the blank host surface for a frame.
+      if (!cancelled && frozenForRef.current === active.id) {
+        frozenForRef.current = null
+        setFrozenFrame(null)
+      }
     }            )()
     return () => { cancelled = true }
   }, [active.error, active.id, modalOverlayCount, readerArticle, toolbarOverlay, visible])
@@ -900,7 +955,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       // finishes loading, never for private tabs and never twice.
       if (typeof patch.url === 'string' && patch.loading === false && !patch.error
         && !readerArticle && !autoReaderAttemptsRef.current.has(patch.url)
-        && isAutoReaderSite(patch.url, readerSitesRef.current)) {
+        && (matchSiteRoute(siteRoutesRef.current, patch.url)?.autoReader || isAutoReaderSite(patch.url, readerSitesRef.current))) {
         autoReaderAttemptsRef.current.add(patch.url)
         void openReader()
       }
@@ -1357,6 +1412,12 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     writeReaderSites(next)
   }
 
+  function updateSiteRoutes(next: SiteRoute[]) {
+    siteRoutesRef.current = next
+    setSiteRoutes(next)
+    writeSiteRoutes(next)
+  }
+
   /** Explicit "sleep this tab now": keep the record, release the WebView. */
   async function suspendTabNow(tab: BrowserTab) {
     if (!hasNativeTab(tab.id) || isNativeTabSuspended(tab.id)) return
@@ -1510,9 +1571,15 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     return () => { disposed = true; unlisten?.() }
   }, [active.id, bookmarkActions.bookmarks, mediaResources])
 
-  const browserMenu: MenuProps['items'] = ([
+  const browserMenu: MenuProps['items'] = (() => {
+    const activeRoute = matchSiteRoute(siteRoutes, active.url)
+    return ([
     { key: 'find', label:translate("在页面中查找"),extra:'Ctrl+F',onClick:()=>runBrowserMenuAction('find')},
     { key: 'reader-auto', label: isAutoReaderSite(active.url, readerSites) ? translate("取消此站点自动阅读") : translate("此站点自动进入阅读模式"), disabled: !normalizeReaderHost(active.url), onClick: () => updateReaderSites(toggleReaderSite(readerSites, active.url)) },
+    { key: 'site-route', label: translate("此站点保存到集合"), disabled: !normalizeReaderHost(active.url), children: [
+      { key: 'site-route:none', label: `${translate("不自动归入")}${activeRoute?.collectionId ? '' : ' ✓'}`, onClick: () => updateSiteRoutes(upsertSiteRoute(siteRoutes, active.url, { collectionId: null })) },
+      ...routeCollections.map(collection => ({ key: `site-route:${collection.id}`, label: `${collection.name}${activeRoute?.collectionId === collection.id ? ' ✓' : ''}`, onClick: () => updateSiteRoutes(upsertSiteRoute(siteRoutes, active.url, { collectionId: collection.id })) })),
+    ] },
     { key: 'tab-search', label:translate("命令栏"),extra:'Ctrl+K',onClick:()=>runBrowserMenuAction('tab-search')},
     { key: 'history-search', label:translate("查找历史与收藏"),onClick:()=>runBrowserMenuAction('history-search')},
     { key: 'bookmark-add', label:translate("收藏当前页"),extra:'Ctrl+D',onClick:()=>runBrowserMenuAction('bookmark-add')},
@@ -1536,7 +1603,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     { key: 'zoom', label: <Space><Button size="small" onClick={event => { event.stopPropagation(); changeZoom(active.id, -0.1) }}>−</Button><span className="browser-zoom-value">{Math.round((zoomLevels[active.id] ?? browserAppearance.defaultZoom) * 100)}%</span><Button size="small" onClick={event => { event.stopPropagation(); changeZoom(active.id, 0.1) }}>+</Button></Space> },
     { key: 'zoom-reset', label:translate("重置缩放"),extra:'Ctrl+0',onClick:()=>setZoom(active.id,1)},
   ]) as MenuProps['items']
+  })()
 
+  useEffect(() => {
+    void listCollections().then(items => setRouteCollections(items.map(item => ({ id: item.id, name: item.name })))).catch(() => setRouteCollections([]))
+  }, [])
   const bookmarkBarPanel =(
     <div className="bookmark-bar-panel" role="menu">
       {bookmarkActions.bookmarks.length === 0
@@ -2342,6 +2413,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (!article?.markdown?.trim()) throw new Error('reader_content_not_found')
       const created = await saveDocument({ title: article.title || active.title, url: active.url || 'about:blank', markdown: article.markdown, tags: ['Inbox'] })
       setStarredDocId(created.id)
+      const route = matchSiteRoute(siteRoutesRef.current, active.url)
+      if (route?.collectionId) void addToCollection(route.collectionId, created.id).catch(() => undefined)
       void dequeueUrl(active.url)
       for (let attempt = 0; attempt < 30; attempt++) {
         const document = await getDocument(created.id)
@@ -2536,7 +2609,18 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     <div className="browser-content"><div className={`web-surface${nativeSurfaceVisible ? ' web-surface--native' : ''}`} ref={surfaceRef}>{comparison && comparison.hostTabId === active.id
       ? <SearchComparisonWorkspace query={comparison.query} sources={comparison.sources} visibleIds={comparison.visibleIds} onShow={showComparisonSource} onSearch={searchAgainInComparison} onClose={closeComparison}/>
       : readerArticle
-      ? <ReaderArticleView article={readerArticle}/>
+      ? <>
+          <div className="reader-site-controls">
+            <span>{translate("阅读字号")}</span>
+            <Select<number> size="small" value={readerSiteStyle?.fontSize ?? 18} options={READER_FONT_SIZES.map(size => ({ label: String(size), value: size }))} onChange={value => { writeReaderSiteStyle(active.url, { ...readerSiteStyle, fontSize: clampReaderFontSize(Number(value)) }); setReaderStyleVersion(version => version + 1) }}/>
+            <span>{translate("阅读宽度")}</span>
+            <Select<number> size="small" value={readerSiteStyle?.width ?? 760} options={READER_WIDTHS.map(width => ({ label: String(width), value: width }))} onChange={value => { writeReaderSiteStyle(active.url, { ...readerSiteStyle, width: clampReaderWidth(Number(value)) }); setReaderStyleVersion(version => version + 1) }}/>
+            <span>{translate("阅读主题")}</span>
+            <Select size="small" value={readerSiteStyle?.theme ?? 'light'} options={READER_THEMES.map(theme => ({ label: theme.value === 'light' ? translate("浅色") : theme.value === 'sepia' ? translate("护眼") : translate("深色"), value: theme.value }))} onChange={value => { writeReaderSiteStyle(active.url, { ...readerSiteStyle, theme: value as 'light' | 'sepia' | 'dark' }); setReaderStyleVersion(version => version + 1) }}/>
+            <Button size="small" type="text" onClick={() => { writeReaderSiteStyle(active.url, null); setReaderStyleVersion(version => version + 1) }}>{translate("重置")}</Button>
+          </div>
+          <ReaderArticleView article={readerArticle} style={readerSiteStyle}/>
+        </>
       : active.crashed
         ? <BrowserErrorView tab={{...active, error:{kind:'load-failed',message:translate("此标签页的底层视图已停止响应，可点击\"重新打开\"恢复。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
         : active.error
@@ -2547,7 +2631,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             ? <div className="web-surface__loading"><LoadingOutlined spin/></div>
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:translate("当前环境暂时无法打开此网页。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
-              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison} onOpenLibrary={onOpenLibrary}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+              : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison} onOpenLibrary={onOpenLibrary}/>}
+      {nativeMode && frozenFrame && <img className="web-surface__still" src={frozenFrame} alt="" aria-hidden="true"/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{

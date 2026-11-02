@@ -8,7 +8,7 @@ export function ReaderArticleView({ article, style }: { article: ReaderArticle; 
   const cssVars: Record<string, string> = {}
   if (style?.fontSize) cssVars['--reading-font-size'] = `${style.fontSize}px`
   if (style?.width) cssVars['--reader-width'] = `${style.width}px`
-  return <article className="reader-document" style={cssVars as CSSProperties}>
+  return <article className="reader-document" data-reader-theme={style?.theme} style={cssVars as CSSProperties}>
     <Typography.Text className="eyebrow">{t("阅读模式 \xB7")} {article.wordCount.toLocaleString()} {t("字词")}</Typography.Text>
     <Typography.Title>{article.title}</Typography.Title>
     {article.byline && <Typography.Text type="secondary">{article.byline}</Typography.Text>}

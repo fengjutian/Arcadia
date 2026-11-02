@@ -1561,7 +1561,21 @@ body[data-theme='dark'] {
 // A native child WebView (including Edge's print preview) owns its scrolling.
 // Prevent the empty React host beneath it from exposing a second scrollbar.
 .web-surface--native {
+  position: relative;
   overflow: hidden;
+}
+
+// Still frame of the page, painted while a host overlay (Space menu, tab menu,
+// dialog) hides the native WebView. Without it the content area would go blank
+// the moment the menu opens; with it the page appears to stay put underneath.
+.web-surface__still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
 }
 
 body[data-theme-kind='image'] {
@@ -1638,6 +1652,38 @@ body[data-theme='dark'][data-theme-kind='image'] {
     content: '';
   }
 }
+
+.reader-document {
+  max-width: var(--reader-width, 760px);
+}
+
+.reader-document[data-reader-theme='sepia'] {
+  border-radius: 14px;
+  background: #f7f0df;
+  color: #3d3325;
+}
+
+.reader-document[data-reader-theme='dark'] {
+  border-radius: 14px;
+  background: #141b17;
+  color: #dbe5de;
+}
+
+.reader-site-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: var(--reader-width, 760px);
+  margin: 10px auto -10px;
+  padding: 0 6px;
+  color: #6f7c74;
+  font-size: 12px;
+
+  .ui-select { min-width: 74px; }
+}
+
+body[data-theme='dark'] .reader-site-controls { color: #9aa69e; }
 
 .new-tab__context {
   display: grid;

@@ -13,6 +13,20 @@ export const SPACE_CHANGED_EVENT = 'arcadia-space-changed'
 export const SPACE_SCOPE_EVENT = 'arcadia-space-scope-changed'
 export const SPACE_STORAGE_KEY = 'arcadia.space.current.v1'
 export const SPACE_SCOPE_STORAGE_KEY = 'arcadia.space.scope.v1'
+export const SPACE_IDENTITY_STORAGE_KEY = 'arcadia.space.identity.v1'
+
+export interface SpaceIdentity {
+  color?: string
+}
+
+export const SPACE_COLORS = [
+  { value: '#3c8a5c', label: '绿色' },
+  { value: '#3b6fd4', label: '蓝色' },
+  { value: '#8a5cd6', label: '紫色' },
+  { value: '#d4823b', label: '橙色' },
+  { value: '#d14b6a', label: '红色' },
+  { value: '#6b7280', label: '灰色' },
+] as const
 
 export interface CurrentSpace {
   id: string
@@ -115,4 +129,39 @@ export function clearCurrentSpace(): void {
   writeCurrentSpace(null)
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(SPACE_CHANGED_EVENT, { detail: null }))
+}
+
+export function readSpaceIdentities(): Record<string, SpaceIdentity> {
+  if (typeof localStorage === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(SPACE_IDENTITY_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const known = new Set<string>(SPACE_COLORS.map(color => color.value))
+    const identities: Record<string, SpaceIdentity> = {}
+    for (const [spaceId, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object') continue
+      const color = (value as Record<string, unknown>).color
+      if (typeof color === 'string' && known.has(color)) identities[spaceId] = { color }
+    }
+    return identities
+  } catch {
+    return {}
+  }
+}
+
+export function writeSpaceIdentity(spaceId: string, identity: SpaceIdentity | null): void {
+  if (typeof localStorage === 'undefined' || !spaceId) return
+  try {
+    const identities = readSpaceIdentities()
+    if (identity?.color && SPACE_COLORS.some(color => color.value === identity.color)) identities[spaceId] = { color: identity.color }
+    else delete identities[spaceId]
+    localStorage.setItem(SPACE_IDENTITY_STORAGE_KEY, JSON.stringify(identities))
+  } catch { /* storage full: identity stays per-session */ }
+}
+
+export function spaceColorFor(spaceId: string | null | undefined): string | null {
+  if (!spaceId) return null
+  return readSpaceIdentities()[spaceId]?.color ?? null
 }
