@@ -70,6 +70,7 @@ import { readSitePermissions, writeSitePermissions, normalizeOrigin, setKind, ty
 import { SitePanel } from '../../features/browser/SitePanel'
 import { SiteRulesDialog } from '../../features/browser/SiteRulesDialog'
 import { DocumentSplitPane } from '../../features/documents/DocumentSplitPane'
+import { DocumentPairView } from '../../features/documents/DocumentPairView'
 import { listDocuments } from '../../api'
 import type { Document as KnowledgeDocument } from '../../types'
 import { SPLIT_MIN_WIDTH, splitBounds } from '../../features/browser/splitView'
@@ -238,6 +239,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [splitDocument, setSplitDocument] = useState<KnowledgeDocument | null>(null)
   const [splitChat, setSplitChat] = useState(false)
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false)
+  const [documentPickerMode, setDocumentPickerMode] = useState<'split' | 'pair'>('split')
+  const [pairSelection, setPairSelection] = useState<string[]>([])
+  const [docPair, setDocPair] = useState<{ left: KnowledgeDocument; right: KnowledgeDocument } | null>(null)
   const [pickerDocuments, setPickerDocuments] = useState<KnowledgeDocument[]>([])
   const [pickerQuery, setPickerQuery] = useState('')
   const [hideEditorOpen, setHideEditorOpen] = useState(false)
@@ -282,6 +286,11 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     setSplitChat(false)
     const rect = bounds()
     if (rect) void resizeNativeTab(active.id, rect).catch(() => undefined)
+  }
+
+  function closeDocPair() {
+    setDocPair(null)
+    void showNativeTab(active.id).catch(() => undefined)
   }
 
   function startSplitDrag(event: { preventDefault: () => void; clientX: number }) {
@@ -2446,8 +2455,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         : splitTabId
           ? { key: 'split-close', label: translate("取消分屏"), onClick: closeSplit }
           : { key: 'split-next', label: translate("与下一个标签并排"), disabled: !nativeMode || !tabs.some(item => item.id !== tab.id && !item.private && Boolean(item.url)), onClick: () => { const next = tabs.find(item => item.id !== tab.id && !item.private && Boolean(item.url)); if (next) openSplit(next.id) } },
-      ...(tab.id === active.id ? [{ key: 'split-document', label: translate("与文档并排"), disabled: !nativeMode, onClick: () => { setSplitTabId(null); setSplitChat(false); setDocumentPickerOpen(true) } }] : []),
+      ...(tab.id === active.id ? [{ key: 'split-document', label: translate("与文档并排"), disabled: !nativeMode, onClick: () => { setSplitTabId(null); setSplitChat(false); setDocumentPickerMode('split'); setDocumentPickerOpen(true) } }] : []),
       ...(tab.id === active.id ? [{ key: 'split-chat', label: translate("与 AI 对话并排"), disabled: !nativeMode, onClick: () => { setSplitTabId(null); setSplitDocument(null); setSplitChat(true) } }] : []),
+      ...(tab.id === active.id ? [{ key: 'document-pair', label: translate("两个文档对比"), onClick: () => { setDocumentPickerMode('pair'); setPairSelection([]); setDocumentPickerOpen(true) } }] : []),
       { key: 'rename-tab', label: translate("重命名标签页"), onClick: () => { setRenameTabId(tab.id); setRenameDraft(tab.title) } },
       { key: 'queue', label:translate("稍后读"),disabled:!tab.url||tab.private,onClick:()=>{void queueTabForLater(tab)}},
       { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
@@ -2849,14 +2859,31 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       spaces={spaceOptions}
       onChange={updateSiteRoutes}
     />
-    <Modal open={documentPickerOpen} title={translate("选择文档")} onCancel={() => setDocumentPickerOpen(false)} footer={null}>      <Input value={pickerQuery} allowClear placeholder={translate("搜索文档")} onChange={event => setPickerQuery(event.target.value)}/>
+    <Modal open={documentPickerOpen} title={documentPickerMode === 'pair' ? translate("选择两篇文档") : translate("选择文档")} onCancel={() => setDocumentPickerOpen(false)} footer={null}>      <Input value={pickerQuery} allowClear placeholder={translate("搜索文档")} onChange={event => setPickerQuery(event.target.value)}/>
       <div className="document-picker-list">
         {pickerDocuments
           .filter(document => !pickerQuery.trim() || document.title.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
           .slice(0, 30)
-          .map(document => <button key={document.id} type="button" onClick={() => { setSplitDocument(document); setDocumentPickerOpen(false) }}>{document.title}</button>)}
+          .map(document => <button key={document.id} type="button" className={pairSelection.includes(document.id) ? 'is-selected' : undefined} onClick={() => {
+            if (documentPickerMode === 'pair') {
+              setPairSelection(current => current.includes(document.id) ? current.filter(id => id !== document.id) : [...current, document.id].slice(-2))
+              return
+            }
+            setSplitDocument(document)
+            setDocumentPickerOpen(false)
+          }}>{pairSelection.includes(document.id) ? '✓ ' : ''}{document.title}</button>)}
         {pickerDocuments.filter(document => !pickerQuery.trim() || document.title.toLowerCase().includes(pickerQuery.trim().toLowerCase())).length === 0 && <Typography.Text type="secondary">{translate("没有可并排的文档")}</Typography.Text>}
       </div>
+      {documentPickerMode === 'pair' && <div className="document-pair-confirm"><Button type="primary" disabled={pairSelection.length !== 2} onClick={() => {
+        const chosen = pairSelection.map(id => pickerDocuments.find(document => document.id === id)).filter((document): document is KnowledgeDocument => Boolean(document))
+        if (chosen.length !== 2) return
+        setDocPair({ left: chosen[0], right: chosen[1] })
+        setSplitDocument(null)
+        setSplitChat(false)
+        setSplitTabId(null)
+        void hideNativeTab(active.id).catch(() => undefined)
+        setDocumentPickerOpen(false)
+      }}>{translate("开始对比")}</Button></div>}
     </Modal>
     <Modal
       open={hideEditorOpen}
@@ -3032,7 +3059,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       {splitChat && <div className="split-chat-pane" style={{ width: `${Math.round((1 - splitRatio) * 100)}%` }}>
         <AssistantPanel close={() => setSplitChat(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>
       </div>}
-      {(splitTabId || splitDocument || splitChat) && <div className="split-divider" style={{ left: `${splitRatio * 100}%` }} onPointerDown={startSplitDrag}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+      {(splitTabId || splitDocument || splitChat) && <div className="split-divider" style={{ left: `${splitRatio * 100}%` }} onPointerDown={startSplitDrag}/>}
+      {docPair && <DocumentPairView left={docPair.left} right={docPair.right} onClose={closeDocPair}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{
