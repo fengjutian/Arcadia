@@ -59,7 +59,7 @@ import type { AIProvider, Document, View } from '../../types'
 import { compactChatHistory, restoreConversation } from '../../features/ai/conversation'
 import { hasUsableAnswerCitations, reciprocalRankFusion, stripModelReasoning, stripSourceBlocks, validateAnswerCitations } from '../../features/ai/rag'
 import { applyReranker, rrfReranker } from '../../features/ai/reranker'
-import { defaultAgentDeps, runResearchAgent } from '../../features/ai/agentLoop'
+import { defaultAgentDeps, runResearchAgent, type McpApprovalRequest } from '../../features/ai/agentLoop'
 import { listAgentRuns, type AgentRun } from '../../api'
 import { AgentRunHistory } from '../../features/ai/AgentRunHistory'
 import { KnowledgeAttachmentAdapter } from '../../features/ai/knowledgeAttachmentAdapter'
@@ -202,6 +202,8 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
   const [conversationTitleDraft, setConversationTitleDraft] = useState('')
   const [agentBusy, setAgentBusy] = useState(false)
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([])
+  const [mcpApproval, setMcpApproval] = useState<McpApprovalRequest | null>(null)
+  const mcpApprovalResolver = useRef<((approved: boolean) => void) | null>(null)
   const [conversationHistory, setConversationHistory] = useState<SavedConversation[]>([])
   const [historyHydrated, setHistoryHydrated] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -681,6 +683,21 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
     await listAgentRuns(20).then(setAgentRuns).catch(() => setAgentRuns([]))
   }
 
+  /** Ask the user before the research agent executes an MCP tool. */
+  function requestMcpApproval(request: McpApprovalRequest): Promise<boolean> {
+    return new Promise(resolve => {
+      mcpApprovalResolver.current = resolve
+      setMcpApproval(request)
+    })
+  }
+
+  function settleMcpApproval(approved: boolean) {
+    const resolve = mcpApprovalResolver.current
+    mcpApprovalResolver.current = null
+    setMcpApproval(null)
+    resolve?.(approved)
+  }
+
   /** Run the bounded research agent and surface its answer as a normal turn. */
   async function runAgent() {
     const trimmed = question.trim()
@@ -699,7 +716,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
     setTurns(current => [...current, userTurn, pendingTurn])
     setQuestion('')
     try {
-      const result = await runResearchAgent(defaultAgentDeps, trimmed, { providerId })
+      const result = await runResearchAgent(defaultAgentDeps, trimmed, { providerId, requestApproval: requestMcpApproval })
       const content = result.stopped && !result.answer
         ?t("研究未完成：{value0}",{value0:result.stopped.message})
         : result.stopped
@@ -712,6 +729,13 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
       patchTurn(pendingTurn.id, { content:text, pending:false, error:text })
       messageApi.error(text)
     } finally {
+      // A cancelled/failed run must not leave a dangling approval promise.
+      if (mcpApprovalResolver.current) {
+        const resolve = mcpApprovalResolver.current
+        mcpApprovalResolver.current = null
+        setMcpApproval(null)
+        resolve(false)
+      }
       busyRef.current = false
       setAgentBusy(false)
     }
