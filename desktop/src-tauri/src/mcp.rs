@@ -2890,6 +2890,39 @@ rl.on('line', line => {
 
     /// Manual compatibility check against a public Streamable HTTP server:
     /// `cargo test --lib smoke_real_deepwiki_http_server -- --ignored --nocapture`
+    /// Manual compatibility check against Playwright MCP (browser tools).
+    /// Only initialize + tools/list are exercised; no browser is launched.
+    /// `cargo test --lib smoke_real_playwright_server -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "requires network and npx"]
+    async fn smoke_real_playwright_server() {
+        let config = ServerConfig {
+            transport: "stdio".into(),
+            url: None,
+            command: Some("npx".into()),
+            args: vec!["-y".into(), "@playwright/mcp@latest".into()],
+            env: HashMap::new(),
+            headers: HeaderMap::new(),
+        };
+        let session = Session::new(config, "playwright".into()).expect("spawn playwright server");
+        let tools = tokio::time::timeout(
+            Duration::from_secs(120),
+            session.call("tools/list", json!({}), None),
+        )
+        .await
+        .expect("playwright tools/list timed out")
+        .expect("playwright tools/list failed");
+        let names: Vec<&str> = tools["tools"]
+            .as_array()
+            .map(|items| items.iter().filter_map(|tool| tool.get("name").and_then(Value::as_str)).collect())
+            .unwrap_or_default();
+        assert!(
+            names.iter().any(|name| name.starts_with("browser_")),
+            "unexpected playwright tools: {names:?}"
+        );
+        session.shutdown();
+    }
+
     /// Manual compatibility check against the official "everything" server
     /// (tools + resources + prompts, no credentials):
     /// `cargo test --lib smoke_real_everything_server -- --ignored --nocapture`

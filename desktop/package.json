@@ -22,7 +22,7 @@
     "@assistant-ui/react": "^0.15.32",
     "@base-ui/react": "^1.8.0",
     "@mozilla/readability": "^0.6.0",
-    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/api": "^2.12.4",
     "lucide-react": "^1.47.0",
     "mammoth": "^1.13.0",
     "pdfjs-dist": "^6.4.299",
@@ -33,7 +33,7 @@
     "turndown": "^7.2.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/turndown": "^5.0.5",

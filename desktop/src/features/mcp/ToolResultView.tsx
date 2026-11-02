@@ -46,13 +46,42 @@ function BlockView({ block }: { block: ToolResultBlock }) {
 }
 
 /** Renders MCP `content` blocks and keeps the raw JSON one click away. */
-export function ToolResultView({ value, compact = false }: { value: unknown; compact?: boolean }) {
+export function ToolResultView({ value, compact = false, downloadName }: { value: unknown; compact?: boolean; downloadName?: string }) {
   const parsed = useMemo(() => parseToolResult(value), [value])
   const [raw, setRaw] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  async function copyRaw() {
+    try {
+      await navigator.clipboard.writeText(stringify(value))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch { /* clipboard can be blocked outside Tauri */ }
+  }
+
+  function downloadRaw() {
+    const blob = new Blob([stringify(value)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = downloadName ?? 'mcp-result.json'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return <div className={`mcp-tool-result${compact ? ' is-compact' : ''}`}>
     {!compact && <div className="mcp-tool-result__toolbar">
       <span>{t("渲染结果")}</span>
-      <Button size="small" onClick={() => setRaw(current => !current)}>{raw ? t("渲染结果") : t("原始 JSON")}</Button>
+      <span className="mcp-tool-result__actions">
+        <Button size="small" onClick={() => void copyRaw()}>{copied ? t("已复制") : t("复制")}</Button>
+        <Button size="small" onClick={downloadRaw}>{t("下载 JSON")}</Button>
+        <Button size="small" onClick={() => setRaw(current => !current)}>{raw ? t("渲染结果") : t("原始 JSON")}</Button>
+      </span>
+    </div>}
+    {compact && <div className="mcp-tool-result__compact-actions">
+      <Button size="small" onClick={() => void copyRaw()}>{copied ? t("已复制") : t("复制")}</Button>
     </div>}
     {parsed.isError && <Alert type="error" showIcon message={t("工具返回错误")}/>}
     {!compact && raw

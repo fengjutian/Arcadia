@@ -35,6 +35,7 @@ export const mcp: Messages = {
   '检索': 'Search',
   'MCP 工具': 'MCP tool',
   '回答': 'Answer',
+  '下载 JSON': 'Download JSON',
   '渲染结果': 'Rendered result',
   '原始 JSON': 'Raw JSON',
   '工具返回错误': 'The tool returned an error',

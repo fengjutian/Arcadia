@@ -2142,10 +2142,10 @@ pub fn run() {
                 let supervisor = std::sync::Arc::new(rag::indexer::RagSupervisor::new());
                 supervisor.spawn(database_arc.clone(), provider_ids);
 
-                // The backend-driven agent supervisor is intentionally not
-                // started: the product agent runs in the frontend over
+                // The backend-driven agent runtime was removed: the product
+                // research agent runs in the frontend over
                 // `local_record_agent_run` / `local_update_agent_run_status`.
-                // Its modules stay available for a future backend agent.
+                // Only the agent security helpers remain in `agent/`.
             }
             Ok(())
         })

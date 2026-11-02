@@ -489,3 +489,25 @@ Agent/用户提出调用
 - 本机 2.21 秒通过，补上了此前只用 mock 覆盖的 resources / prompts 真实链路。
 - 真实兼容矩阵现为：本地 stdio filesystem、本地 stdio everything（tools+resources+prompts）、远程 Streamable HTTP DeepWiki；Rust 296 通过 + 3 项忽略冒烟。
 
+### 12.20 第二十批：Playwright MCP 真实冒烟（2026-11-02）
+
+- 新增 `smoke_real_playwright_server`（`#[ignore]`，需网络）：拉起 `npx -y @playwright/mcp@latest`，只执行 `initialize` + `tools/list`，不启动浏览器。
+- 本机 21.25 秒通过，返回的 `browser_*` 工具列表正常，验证了大型 Node Stdio Server 的启动与握手。
+- 真实兼容矩阵补齐为：filesystem（文件）、everything（tools/resources/prompts）、Playwright（浏览器）、DeepWiki（远程 HTTP）。
+- Rust 全量 296 通过 + 4 项忽略冒烟。
+
+### 12.21 第二十一批：删除后端 Agent 死代码（2026-11-02）
+
+- 删除 `agent/` 下未接入的运行时模块：`runtime`、`supervisor`、`tools`、`approval`、`budget`、`checkpoint`、`commands`、`types`（共 8 个文件）。
+- 保留并明确职责：`mcp_security`（MCP URL 校验，被 `mcp.rs` 使用）、`security`（提示注入检测）、`security_commands`（两个 Tauri 命令）。
+- 同步移除 `agent/mod.rs` 的模块声明与 re-export，`lib.rs` 不再引用已删除模块。
+- 产品研究 Agent 仍由前端 `agentLoop` 驱动，运行记录走 `local_record_agent_run` / `local_update_agent_run_status`，行为无变化。
+- 测试：随死代码移除 28 个 Rust 用例；Rust **268 通过 + 4 项忽略冒烟**，前端 761 通过。
+
+### 12.22 第二十二批：工具结果复制与下载（2026-11-02）
+
+- 工作台与助手研究过程的工具结果都支持复制原始 JSON；调用结果工具栏额外提供“下载 JSON”。
+- 研究过程的 compact 视图只保留一个“复制”按钮，避免嵌套工具栏过重。
+- 复制使用 Clipboard API，失败时静默（非 Tauri/浏览器权限受限场景）。
+- 测试：行为无变化；Rust 268 通过 + 4 项忽略，前端全量 108 文件 / 769 用例通过（含并行新增的 McpPage 用例）。
+
