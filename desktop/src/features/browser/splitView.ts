@@ -14,13 +14,19 @@ export interface SplitRect {
 /** Below this width the two panes would be too narrow to read. */
 export const SPLIT_MIN_WIDTH = 900
 const MIN_PANE_WIDTH = 320
+export const MIN_SPLIT_RATIO = 0.3
+export const MAX_SPLIT_RATIO = 0.7
 
-export function splitBounds(rect: SplitRect): { left: SplitRect; right: SplitRect } | null {
+export function splitBounds(rect: SplitRect, ratio = 0.5, gap = 0): { left: SplitRect; right: SplitRect } | null {
   if (!Number.isFinite(rect.width) || rect.width < SPLIT_MIN_WIDTH) return null
-  const rightWidth = Math.max(MIN_PANE_WIDTH, Math.floor(rect.width / 2))
-  if (rect.width - rightWidth < MIN_PANE_WIDTH) return null
+  const clamped = Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, Number.isFinite(ratio) ? ratio : 0.5))
+  const splitAt = Math.round(rect.width * clamped)
+  const safeGap = Math.max(0, Math.round(gap))
+  const leftWidth = splitAt - Math.floor(safeGap / 2)
+  const rightWidth = rect.width - splitAt - Math.ceil(safeGap / 2)
+  if (leftWidth < MIN_PANE_WIDTH || rightWidth < MIN_PANE_WIDTH) return null
   return {
-    left: { ...rect, width: rect.width - rightWidth },
-    right: { ...rect, x: rect.x + rect.width - rightWidth, width: rightWidth },
+    left: { ...rect, width: leftWidth },
+    right: { ...rect, x: rect.x + splitAt + Math.ceil(safeGap / 2), width: rightWidth },
   }
 }

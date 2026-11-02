@@ -24,4 +24,17 @@ describe('splitBounds', () => {
     expect(result!.left.width).toBeGreaterThanOrEqual(320)
     expect(result!.right.width).toBeGreaterThanOrEqual(320)
   })
+
+  it('respects the drag ratio and leaves a gap for the divider', () => {
+    const result = splitBounds(rect, 0.65, 8)
+    expect(result!.left.width).toBeGreaterThan(result!.right.width)
+    expect(result!.right.x).toBe(rect.x + Math.round(rect.width * 0.65) + 4)
+    // 8px gap stays uncovered between the panes.
+    expect(result!.left.width + result!.right.width).toBe(rect.width - 8)
+  })
+
+  it('clamps extreme ratios back into the readable range', () => {
+    const result = splitBounds(rect, 0.95)
+    expect(result!.left.width).toBe(Math.round(rect.width * 0.7))
+  })
 })

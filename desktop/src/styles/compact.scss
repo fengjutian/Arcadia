@@ -1,4 +1,4 @@
-.page {
+﻿.page {
   padding: 24px clamp(22px, 3vw, 44px);
 }
 
@@ -4017,3 +4017,38 @@ body[data-theme='dark'] .split-document-pane {
     &:hover { border-color: var(--accent); background: #f4f8f5; }
   }
 }
+
+.reader-hide-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.browser-content {
+  position: relative;
+}
+
+.split-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 6;
+  width: 10px;
+  margin-left: -5px;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+}
+
+.split-divider::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: color-mix(in srgb, var(--accent) 35%, #d8ded9);
+  content: '';
+}
+
+.split-divider:hover::after { background: var(--accent); }

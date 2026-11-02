@@ -151,6 +151,8 @@ export const iteration6: Messages = {
   '完整站点设置': 'Full site settings',
   '隐藏元素': 'Hide elements',
   '隐藏元素选择器（逗号分隔）': 'Element selectors to hide (comma separated)',
+  '重命名标签页': 'Rename tab',
+  '标签页名称': 'Tab name',
   '同时应用到网页（仅本地 CSS）': 'Also apply to the page (local CSS only)',
   '只对阅读模式生效；只接受简单 CSS 选择器，不执行任何脚本。': 'Reader only; simple CSS selectors, no scripts.',
   '搜索文档': 'Search documents',

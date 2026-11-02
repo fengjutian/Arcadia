@@ -234,6 +234,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [sitePanelOpen, setSitePanelOpen] = useState(false)
   const [siteRulesOpen, setSiteRulesOpen] = useState(false)
   const [splitTabId, setSplitTabId] = useState<string | null>(null)
+  const [splitRatio, setSplitRatio] = useState(0.5)
   const [splitDocument, setSplitDocument] = useState<KnowledgeDocument | null>(null)
   const [documentPickerOpen, setDocumentPickerOpen] = useState(false)
   const [pickerDocuments, setPickerDocuments] = useState<KnowledgeDocument[]>([])
@@ -241,6 +242,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [hideEditorOpen, setHideEditorOpen] = useState(false)
   const [hideDraft, setHideDraft] = useState('')
   const [hideLiveDraft, setHideLiveDraft] = useState(false)
+  const [renameTabId, setRenameTabId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
 
   useEffect(() => {
     if (!documentPickerOpen) return
@@ -256,7 +259,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     const apply = () => {
       const rect = bounds()
       if (!rect) return
-      const panes = splitBounds(rect)
+      const panes = splitBounds(rect, splitRatio, 8)
       if (!panes) return
       void resizeNativeTab(active.id, panes.left).catch(() => undefined)
       void showNativeTab(active.id).catch(() => undefined)
@@ -270,12 +273,27 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       window.removeEventListener('resize', apply)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splitDocument, active.id])
+  }, [splitDocument, active.id, splitRatio])
 
   function closeDocumentSplit() {
     setSplitDocument(null)
     const rect = bounds()
     if (rect) void resizeNativeTab(active.id, rect).catch(() => undefined)
+  }
+
+  function startSplitDrag(event: { preventDefault: () => void; clientX: number }) {
+    const rect = surfaceRef.current?.getBoundingClientRect()
+    if (!rect || rect.width <= 0) return
+    event.preventDefault()
+    const move = (moveEvent: PointerEvent) => {
+      setSplitRatio(Math.min(0.7, Math.max(0.3, (moveEvent.clientX - rect.left) / rect.width)))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
   }
   const siteOrigin = useMemo(() => normalizeOrigin(active.url || ''), [active.url])
   const siteRule = useMemo(
@@ -970,7 +988,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     const apply = () => {
       const rect = bounds()
       if (!rect) return
-      const panes = splitBounds(rect)
+      const panes = splitBounds(rect, splitRatio, 8)
       if (!panes) return
       void resizeNativeTab(active.id, panes.left).catch(() => undefined)
       void resizeNativeTab(splitTabId, panes.right).catch(() => undefined)
@@ -986,7 +1004,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       window.removeEventListener('resize', apply)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nativeMode, splitTabId, active.id, tabs.length])
+  }, [nativeMode, splitTabId, active.id, tabs.length, splitRatio])
 
   function closeComparison() {
     const current = comparisonRef.current
@@ -1090,7 +1108,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (blocked) void hideNativeTab(active.id)
       setTabs(current => current.map(tab => {
         if (tab.id !== active.id) return tab
-        if (!blocked) return { ...tab, ...patch, crashed: false }
+        if (!blocked) return { ...tab, ...patch, ...(tab.titleLocked ? { title: tab.title } : {}), crashed: false }
         return {
           ...tab,
           ...patch,
@@ -2029,11 +2047,28 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   }
 
   async function applyWorkspaceRestore(workspace: WorkspaceRecord) {
-    const result = restoreTabsFromWorkspace(tabs, workspace)
+    // Read the live tab list, not this render's snapshot: restoring is often
+    // triggered from a long-lived event listener.
+    const current = tabsRef.current
+    const result = restoreTabsFromWorkspace(current, workspace)
     if (result.tabs.length === 0) {
       messageApi.warning(translate("工作区为空"))
       return
     }
+    const kept = new Set(result.tabs.map(tab => tab.id))
+    const previousActive = activeTabIdRef.current
+    // Tabs the workspace does not contain are dropped from the strip, but their
+    // native WebViews would keep painting above the restored page. Close them,
+    // and hide the previous tab when it is kept but no longer active.
+    for (const tab of current) {
+      if (!kept.has(tab.id) && hasNativeTab(tab.id)) void closeNativeTab(tab.id)
+    }
+    if (previousActive && previousActive !== result.activeTabId && kept.has(previousActive) && hasNativeTab(previousActive)) {
+      void hideNativeTab(previousActive)
+    }
+    // The visibility effect compares against the ref, which only syncs after a
+    // render; without this the restored active tab never gets shown.
+    activeTabIdRef.current = result.activeTabId
     setTabs(result.tabs)
     setActiveTabId(result.activeTabId)
     // Re-create native tabs for the entries that did not previously exist
@@ -2378,6 +2413,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
           ? { key: 'split-close', label: translate("取消分屏"), onClick: closeSplit }
           : { key: 'split-next', label: translate("与下一个标签并排"), disabled: !nativeMode || !tabs.some(item => item.id !== tab.id && !item.private && Boolean(item.url)), onClick: () => { const next = tabs.find(item => item.id !== tab.id && !item.private && Boolean(item.url)); if (next) openSplit(next.id) } },
       ...(tab.id === active.id ? [{ key: 'split-document', label: translate("与文档并排"), disabled: !nativeMode, onClick: () => { setSplitTabId(null); setDocumentPickerOpen(true) } }] : []),
+      { key: 'rename-tab', label: translate("重命名标签页"), onClick: () => { setRenameTabId(tab.id); setRenameDraft(tab.title) } },
       { key: 'queue', label:translate("稍后读"),disabled:!tab.url||tab.private,onClick:()=>{void queueTabForLater(tab)}},
       { key: 'mute', label: tab.muted ?translate("取消静音此标签页"):translate("静音此标签页"),onClick:()=>toggleMuted(tab.id)},
       { type: 'divider' },
@@ -2799,6 +2835,20 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         <span>{translate("同时应用到网页（仅本地 CSS）")}</span>
       </label>
     </Modal>
+    <Modal
+      open={Boolean(renameTabId)}
+      title={translate("重命名标签页")}
+      onCancel={() => setRenameTabId(null)}
+      okText={translate("保存")}
+      onOk={() => {
+        const name = renameDraft.trim()
+        if (!name || !renameTabId) return
+        setTabs(current => current.map(tab => tab.id === renameTabId ? { ...tab, title: name, titleLocked: true } : tab))
+        setRenameTabId(null)
+      }}
+    >
+      <Input autoFocus value={renameDraft} maxLength={120} onChange={event => setRenameDraft(event.target.value)} placeholder={translate("标签页名称")}/>
+    </Modal>
     <CommandPalette
       open={commandOpen}
       onClose={() => setCommandOpen(false)}
@@ -2930,7 +2980,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:translate("当前环境暂时无法打开此网页。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
               : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison} onOpenLibrary={onOpenLibrary}/>}
-      {splitDocument && <DocumentSplitPane document={splitDocument} onClose={closeDocumentSplit}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
+      {splitDocument && <DocumentSplitPane document={splitDocument} onClose={closeDocumentSplit} ratio={splitRatio}/>}
+      {(splitTabId || splitDocument) && <div className="split-divider" style={{ left: `${splitRatio * 100}%` }} onPointerDown={startSplitDrag}/>}</div>{aiOpen&&!nativeMode&&<AssistantPanel close={()=>setAiOpen(false)} saveToLibrary={save} currentUrl={active.url} currentTabId={active.id} readerArticle={readerArticle ?? aiArticle} pageContextPending={aiContextPending} pageContextError={aiContextError} pdfArticle={pdfArticle} pdfContextError={pdfContextError} initialQuestion={aiInitialQuestion} initialMode={aiInitialMode} translationSource={aiTranslationSource}/>}</div>
     <ContextMenu
       surfaceRef={surfaceRef}
       capabilities={{

@@ -10,6 +10,7 @@ import { listBrowserHistory, listDocuments, listReadingQueue } from '../../api'
 import { buildVisitStats, filterVisitsByRange } from '../history/visitStats'
 import { SPACE_CHANGED_EVENT, dispatchSpaceSave, readCurrentSpace } from './spaces'
 import { buildNewTabContext, type NewTabContext } from '../newtab/newTabContext'
+import { diagnosticLog } from '../../shared/diagnostics'
 
 type WeatherState = { temperature: number; weatherCode: number; place: string }
 
@@ -92,6 +93,15 @@ export function NewTab({ address, setAddress, navigate, onCompareSearch, onOpenL
   const toolsRef = useRef<HTMLDivElement>(null)
   const [context, setContext] = useState<NewTabContext>({ cards: [], isEmpty: true })
   const presets = SEARCH_ENGINE_PRESETS.map(        (item                                 )=>({label:item.label,value:item.id}))
+
+  // First interactive paint budget: measured once per new-tab mount.
+  useEffect(() => {
+    const started = performance.now()
+    const frame = requestAnimationFrame(() => {
+      diagnosticLog('newtab.first-interactive', 'info', { ms: Math.round(performance.now() - started) })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [])
 
   useEffect(() => {
     let active = true

@@ -5,9 +5,9 @@ import { Button } from '../../components/ui'
 import type { Document } from '../../types'
 
 /** Markdown pane shown beside a live web page in split view. */
-export function DocumentSplitPane({ document, onClose }: { document: Document; onClose: () => void }) {
+export function DocumentSplitPane({ document, onClose, ratio = 0.5 }: { document: Document; onClose: () => void; ratio?: number }) {
   const markdown = document.markdown?.trim() || document.summary?.trim() || ''
-  return <div className="split-document-pane">
+  return <div className="split-document-pane" style={{ width: `${Math.round((1 - ratio) * 100)}%` }}>
     <header className="split-document-pane__head">
       <b title={document.title}>{document.title}</b>
       <Button size="small" type="text" onClick={onClose}>{t("关闭")}</Button>
