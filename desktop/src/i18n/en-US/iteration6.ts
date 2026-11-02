@@ -192,7 +192,6 @@ export const iteration6: Messages = {
   '保存时自动加入集合：{value0}': 'Saved into collection: {value0}',
   '保存时不自动加入集合': 'No automatic collection',
   '清除': 'Clear',
-  '随手收（小窗）': 'Quick capture (small window)',
   '随手收（小窗，Ctrl+Shift+L）': 'Quick capture (small window, Ctrl+Shift+L)',
   '随手收': 'Quick capture',
   '粘贴链接，回车保存': 'Paste a link, press Enter to save',

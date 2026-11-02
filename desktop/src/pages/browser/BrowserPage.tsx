@@ -1797,7 +1797,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       ...routeCollections.map(collection => ({ key: `site-route:${collection.id}`, label: `${collection.name}${activeRoute?.collectionId === collection.id ? ' ✓' : ''}`, onClick: () => updateSiteRoutes(upsertSiteRoute(siteRoutes, active.url, { collectionId: collection.id })) })),
     ] },
     { key: 'tab-search', label:translate("命令栏"),extra:'Ctrl+K',onClick:()=>runBrowserMenuAction('tab-search')},
-    { key: 'little-arc', label: translate("随手收（小窗）"), onClick: () => { void openLittleArc(/^https?:/i.test(active.url) ? active.url : '') } },
+    { key: 'little-arc', label: translate("随手收（小窗，Ctrl+Shift+L）"), onClick: () => { void openLittleArc(/^https?:/i.test(active.url) ? active.url : '') } },
     { key: 'history-search', label:translate("查找历史与收藏"),onClick:()=>runBrowserMenuAction('history-search')},
     { key: 'bookmark-add', label:translate("收藏当前页"),extra:'Ctrl+D',onClick:()=>runBrowserMenuAction('bookmark-add')},
     { key: 'bookmarks', label:translate("在知识库中管理收藏"),onClick:()=>runBrowserMenuAction('bookmarks')},
