@@ -19,6 +19,7 @@ export const LITTLE_ARC_CAPTURE_EVENT = 'little-arc://capture'
 export const LITTLE_ARC_OPEN_EVENT = 'little-arc://open'
 export const LITTLE_ARC_OPEN_MAIN_EVENT = 'little-arc://open-main'
 export const LITTLE_ARC_RESULT_EVENT = 'little-arc://result'
+export const LITTLE_ARC_HOTKEY_EVENT = 'little-arc://hotkey'
 
 export interface LittleArcCaptureRequest {
   url: string
@@ -135,6 +136,12 @@ export function emitLittleArcResult(result: LittleArcResult): Promise<void> {
 export function listenLittleArcResult(handler: (result: LittleArcResult) => void): Promise<UnlistenFn> {
   if (!tauri()) return Promise.resolve(() => undefined)
   return listen<LittleArcResult>(LITTLE_ARC_RESULT_EVENT, event => handler(event.payload))
+}
+
+/** Global shortcut pressed (registered on the Rust side). */
+export function listenLittleArcHotkey(handler: () => void): Promise<UnlistenFn> {
+  if (!tauri()) return Promise.resolve(() => undefined)
+  return listen(LITTLE_ARC_HOTKEY_EVENT, () => handler())
 }
 
 export function listenLittleArcOpen(handler: (url: string) => void): Promise<UnlistenFn> {

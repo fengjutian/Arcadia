@@ -1997,6 +1997,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let _ = tauri::Emitter::emit_to(app, "main", "little-arc://hotkey", ());
+                    }
+                })
+                .build(),
+        )
         .manage(NavStacks::default())
         .manage(ToolbarMenuTokens::default())
         .manage(DownloadIndex::default())
@@ -2009,6 +2018,13 @@ pub fn run() {
         .manage(PermissionWaiters::default())
         .manage(session_lock::SessionBootState::default())
         .setup(|app| {
+            {
+                use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+                let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyL);
+                if let Err(error) = app.global_shortcut().register(shortcut) {
+                    eprintln!("little-arc hotkey unavailable: {error}");
+                }
+            }
             // Install the tab-hosting engine before the first command can run.
             // `select` prefers CEF when the feature is compiled in and degrades
             // to wry (recording why) when it cannot start.
@@ -2119,6 +2135,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             bing::bing_daily_image,
+            bing::bing_daily_images,
             web_search::web_search,
             browser_create,
             browser_set_ad_blocking,

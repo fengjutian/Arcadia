@@ -24,6 +24,7 @@ commands.allow = [
   "ai_embed",
   "ai_test_provider",
   "bing_daily_image",
+  "bing_daily_images",
   "bookmark_add",
   "bookmark_get",
   "bookmark_list",

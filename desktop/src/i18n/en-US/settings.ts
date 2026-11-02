@@ -150,6 +150,8 @@ export const settings: Messages = {
   '快速访问已收藏的页面': 'Quick access to bookmarked pages',
   '历史总拦截': 'Total blocked',
   '历史总拦截和按站点数据都会被清除。': 'All-time block totals and per-site data will be cleared.',
+  '历史图片': 'Image history',
+  '保留之前加载过的每日一图，点击可切换。': 'Keeps previously loaded daily images; click one to switch.',
   '立即刷新': 'Refresh Now',
   '例如：\n-y\n@modelcontextprotocol/server-filesystem': 'For example:\n-y\n@modelcontextprotocol/server-filesystem',
   '连接': 'Connect',

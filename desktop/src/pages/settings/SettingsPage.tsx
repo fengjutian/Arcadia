@@ -13,7 +13,7 @@ import { TaskPanel } from '../../features/tasks/TaskPanel'
 import { SiteBlacklistPanel } from '../../features/privacy/SiteBlacklistPanel'
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../features/settings/theme'
 import { IMAGE_THEMES, readAppearancePreference, readImageTheme, readThemeKind, writeAppearancePreference, writeImageTheme, writeThemeKind, type AppearancePreference, type ImageThemeId, type ThemeKind } from '../../features/settings/visualTheme'
-import { loadBingDailyImage, readBingDailyRefresh, readCachedBingDailyImage, writeBingDailyRefresh, type BingDailyImage } from '../../features/settings/bingDailyTheme'
+import { loadBingDailyImage, readBingDailyHistory, readBingDailyRefresh, readCachedBingDailyImage, selectBingDailyImage, writeBingDailyRefresh, type BingDailyImage } from '../../features/settings/bingDailyTheme'
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS, writeSearchEngineConfig } from '../../features/browser/searchEngine'
 import { isSearchTemplateValid } from '../../features/browser/navigation'
 import { HISTORY_CHANGE_EVENT, type HistoryEntry } from '../../features/history/dedupeHistory'
@@ -111,6 +111,10 @@ const THEME_OPTIONS: Array<{
   { value: 'violet', label:t("紫罗兰"),description:t("精致沉静的紫色界面"),swatch:['#e7def3','#7352ad']},
 ]
 
+function bingDailyDate(value: string) {
+  return /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : value
+}
+
 function GeneralSettings() {
   const initialTheme = readThemePreference()
   const [theme, setTheme] = useState<ThemePreference>(initialTheme === 'dark' || initialTheme === 'system' ? 'green' : initialTheme)
@@ -118,12 +122,16 @@ function GeneralSettings() {
   const [themeKind, setThemeKind] = useState<ThemeKind>(readThemeKind)
   const [imageTheme, setImageTheme] = useState<ImageThemeId>(readImageTheme)
   const [bingImage, setBingImage] = useState<BingDailyImage | null>(readCachedBingDailyImage)
+  const [bingHistory, setBingHistory] = useState<BingDailyImage[]>(readBingDailyHistory)
   const [bingLoading, setBingLoading] = useState(false)
   const [bingDailyRefresh, setBingDailyRefresh] = useState(readBingDailyRefresh)
 
   useEffect(() => {
     if (themeKind !== 'image') return
-    void loadBingDailyImage().then(image => { if (image) setBingImage(image) })
+    void loadBingDailyImage().then(image => {
+      if (image) setBingImage(image)
+      setBingHistory(readBingDailyHistory())
+    })
   }, [themeKind])
 
   function changeTheme(next: string | number) {
@@ -160,6 +168,13 @@ function GeneralSettings() {
     const image = await loadBingDailyImage(force)
     setBingLoading(false)
     if (image) setBingImage(image)
+    setBingHistory(readBingDailyHistory())
+    changeImageTheme('bing')
+  }
+
+  function applyBingHistoryImage(image: BingDailyImage) {
+    selectBingDailyImage(image)
+    setBingImage(image)
     changeImageTheme('bing')
   }
 
@@ -235,6 +250,25 @@ function GeneralSettings() {
           >{bingImage ? <img src={bingImage.url} alt=""/> : <span className="image-theme-card__placeholder"><PictureOutlined/></span>}<span><strong>{bingLoading ?t("正在获取\u2026"):bingImage?.title??t("Bing 每日一图")}</strong><small>{bingImage?.copyright??t("联网后自动获取 Bing 当日壁纸")}</small></span></button>
           <div className="image-theme-daily-copy"><span>{t("图片来源：Bing")}</span><span>{bingImage?.date?t("壁纸日期：{value0}",{value0:bingImage.date}):t("尚未获取今日图片")}</span><Button size="small" loading={bingLoading} onClick={()=>void selectBingTheme(true)}>{t("立即刷新")}</Button></div>
         </div>
+        {bingHistory.length > 1 && <div className="image-theme-daily-history">
+          <div className="image-theme-daily-history__heading">
+            <div><strong>{t("历史图片")}</strong><small>{t("保留之前加载过的每日一图，点击可切换。")}</small></div>
+          </div>
+          <div className="image-theme-daily-history__grid" role="listbox" aria-label={t("历史图片")}>
+            {bingHistory.map(image => {
+              const active = imageTheme === 'bing' && bingImage?.url === image.url
+              return <button
+                key={image.url}
+                type="button"
+                role="option"
+                aria-selected={active}
+                title={`${image.title} — ${image.copyright}`}
+                className={`image-theme-daily-history__item${active ? ' is-active' : ''}`}
+                onClick={() => applyBingHistoryImage(image)}
+              ><img src={image.url} alt=""/><span>{bingDailyDate(image.date)}</span></button>
+            })}
+          </div>
+        </div>}
       </section>
       <section className="image-theme-section">
         <div className="image-theme-section__heading"><div><strong>{t("默认图片")}</strong><small>{t("内置于应用，不会随日期变化。")}</small></div></div>

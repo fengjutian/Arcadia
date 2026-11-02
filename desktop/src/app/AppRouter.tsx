@@ -4,6 +4,7 @@ import { AppLayout } from '../layouts/AppLayout'
 import { takeViewAfterReload } from './returnView'
 import { scheduleExtrasSync } from '../features/search/extrasSync'
 import { SPACE_CHANGED_EVENT, currentSpaceNamespace } from '../features/browser/spaces'
+import { listenLittleArcHotkey, openLittleArc } from '../features/littlearc/littleArc'
 import type { View } from '../types'
 
 const BrowserPage=lazy(()=>import('../pages/browser/BrowserPage').then(module=>({default:module.BrowserPage})))
@@ -43,6 +44,12 @@ export function AppRouter() {
     }
     window.addEventListener('arcadia-navigate-view', onNavigate)
     return () => window.removeEventListener('arcadia-navigate-view', onNavigate)
+  }, [])
+  // Global quick-capture hotkey from the Rust side.
+  useEffect(() => {
+    let dispose: (() => void) | undefined
+    void listenLittleArcHotkey(() => { void openLittleArc() }).then(stop => { dispose = stop })
+    return () => dispose?.()
   }, [])
   const pages = {
     library: <LibraryPage onOpenBrowser={() => changeView('browser')} />,

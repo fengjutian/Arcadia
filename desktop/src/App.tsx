@@ -3,7 +3,7 @@ import { UIProvider } from './components/ui'
 import { AppRouter } from './app/AppRouter'
 import { readThemePreference, THEME_CHANGE_EVENT, type ThemePreference } from './features/settings/theme'
 import { APPEARANCE_CHANGE_EVENT, IMAGE_THEMES, readAppearancePreference, readImageTheme, readThemeKind, VISUAL_THEME_CHANGE_EVENT, type AppearancePreference, type ImageThemeId, type ThemeKind } from './features/settings/visualTheme'
-import { loadBingDailyImage, readCachedBingDailyImage } from './features/settings/bingDailyTheme'
+import { BING_DAILY_CHANGE_EVENT, loadBingDailyImage, readCachedBingDailyImage, type BingDailyImage } from './features/settings/bingDailyTheme'
 import { readAdvancedSettings } from './features/settings/advanced'
 import { useTaskWorker } from './features/tasks/useTaskWorker'
 import { useLocale } from './i18n'
@@ -58,6 +58,15 @@ export default function App() {
       window.removeEventListener(APPEARANCE_CHANGE_EVENT, handleAppearance)
       window.removeEventListener(VISUAL_THEME_CHANGE_EVENT, handleVisualTheme)
     }
+  }, [])
+
+  useEffect(() => {
+    const handleBingDaily = (event: Event) => {
+      const next = (event as CustomEvent<BingDailyImage>).detail
+      if (next) setBingImage(next)
+    }
+    window.addEventListener(BING_DAILY_CHANGE_EVENT, handleBingDaily)
+    return () => window.removeEventListener(BING_DAILY_CHANGE_EVENT, handleBingDaily)
   }, [])
 
   useEffect(() => {
