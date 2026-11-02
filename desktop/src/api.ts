@@ -748,6 +748,42 @@ export async function clearReadingQueue(): Promise<void> {
   if (isTauri()) await invoke('local_clear_reading_queue')
 }
 
+export type ClipKind = 'selection' | 'link' | 'image' | 'page'
+
+/** A captured fragment: selected text, a link or an image, plus provenance. */
+export interface Clip {
+  id: string
+  kind: ClipKind
+  content: string
+  title: string
+  sourceUrl: string
+  sourceTitle: string
+  note: string
+  collectionId?: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export async function listClips(): Promise<Clip[]> {
+  return isTauri() ? invoke('local_list_clips') : []
+}
+
+export async function searchClips(query: string, limit = 50): Promise<Clip[]> {
+  return isTauri() ? invoke('local_search_clips', { query, limit }) : []
+}
+
+export async function saveClip(clip: Clip): Promise<void> {
+  if (isTauri()) await invoke('local_save_clip', { clip })
+}
+
+export async function deleteClip(id: string): Promise<void> {
+  if (isTauri()) await invoke('local_delete_clip', { id })
+}
+
+export async function clearClips(): Promise<void> {
+  if (isTauri()) await invoke('local_clear_clips')
+}
+
 /** True inside the Tauri shell; false in the browser-only preview build. */
 export function isDesktopRuntime(): boolean {
   return isTauri()

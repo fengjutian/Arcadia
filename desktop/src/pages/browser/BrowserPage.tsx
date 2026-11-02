@@ -5,7 +5,7 @@ import { ArrowDownOutlined, ArrowLeftOutlined, ArrowRightOutlined, ArrowUpOutlin
 import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
-import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue } from '../../api'
+import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue, saveClip } from '../../api'
 import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
@@ -25,6 +25,7 @@ import { archivedTabFromBrowserTab } from '../../features/archive/archive'
 import { planAutoArchive } from '../../features/archive/autoArchive'
 import { idleMsFor, readAutoArchiveSettings } from '../../features/archive/archiveSettings'
 import { readingQueueEntryFromTab } from '../../features/reading-queue/readingQueue'
+import { clipFromImage, clipFromLink, clipFromSelection } from '../../features/clips/clips'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
 import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '../../features/ai/floatingAssistant'
 import { listen } from '@tauri-apps/api/event'
@@ -1792,6 +1793,26 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     void persistPageNote(entry).catch(error => messageApi.error(translate("笔记保存失败：{value0}",{value0:String(error)})))
     setNotesOpen(true)
     messageApi.success(translate("已加入笔记"),2)
+    return
+  }
+
+  if (action === 'clip-selection' || action === 'clip-link' || action === 'clip-image') {
+    const context = { url: active.url, title: active.title }
+    const clip = action === 'clip-selection'
+      ? clipFromSelection(request.selectionText ?? '', context)
+      : action === 'clip-link'
+        ? clipFromLink(request.linkUrl ?? '', context)
+        : clipFromImage(request.imageUrl ?? '', context)
+    if (!clip) {
+      messageApi.warning(translate("没有可剪藏的内容"))
+      return
+    }
+    try {
+      await saveClip(clip)
+      messageApi.success(translate("已剪藏，可在知识库「剪藏」中查看"), 2)
+    } catch (error) {
+      messageApi.error(translate("剪藏失败：{value0}", { value0: String(error) }))
+    }
     return
   }
     switch (action) {

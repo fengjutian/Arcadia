@@ -10,15 +10,18 @@ import {
   createCollection,
   deleteArchivedTab,
   deleteBrowserHistory,
+  deleteClip,
   deleteCollection,
   listArchivedTabs,
   listBrowserHistory,
+  listClips,
   listCollections,
   listReadingQueue,
   removeFromReadingQueue,
   saveDocument,
   toggleStarred,
   type ArchivedTab,
+  type Clip,
   type Collection,
   type ReadingQueueEntry,
 } from '../../api'
@@ -33,6 +36,7 @@ import {
   type AutoArchiveSettings,
 } from '../../features/archive/archiveSettings'
 import { formatQueuedAt, queueHost } from '../../features/reading-queue/readingQueue'
+import { CLIP_KIND_LABEL, clipPreview, clipSourceHost } from '../../features/clips/clips'
 import { trackDownload, type DownloadEntry } from '../../features/downloads/trackDownload'
 import { useDownloadCenter } from '../../features/downloads/useDownloadCenter'
 import { DownloadCenter } from '../../features/downloads/DownloadCenter'
@@ -78,6 +82,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
   const [bookmarkDraft, setBookmarkDraft] = useState({ title: '', folder: '', note: '' })
   const [archived, setArchived] = useState<ArchivedTab[]>([])
   const [queue, setQueue] = useState<ReadingQueueEntry[]>([])
+  const [clips, setClips] = useState<Clip[]>([])
   const [autoArchive, setAutoArchive] = useState<AutoArchiveSettings>(readAutoArchiveSettings)
   const [downloads, setDownloads] = useState<DownloadEntry[]>([])
   const [query, setQuery] = useState('')
@@ -111,6 +116,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         listBrowserHistory().then(setHistory),
         listArchivedTabs().then(setArchived),
         listReadingQueue().then(setQueue),
+        listClips().then(setClips),
         listBookmarks().then(setBookmarks),
         downloadCenter.refresh(),
       ])
@@ -127,6 +133,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     void listBrowserHistory().then(setHistory)
     void listArchivedTabs().then(setArchived)
     void listReadingQueue().then(setQueue)
+    void listClips().then(setClips)
     void listBookmarks().then(setBookmarks)
     void refreshCollections()
   }, [])
@@ -305,8 +312,22 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     }
   }
 
-  async function saveBookmarkEdit() {
-    if (!editingBookmark) return
+  function openClip(clip: Clip) {
+    window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url: clip.sourceUrl } }))
+    onOpenBrowser?.()
+  }
+
+  async function removeClip(clip: Clip) {
+    try {
+      await deleteClip(clip.id)
+      setClips(items => items.filter(item => item.id !== clip.id))
+      messageApi.success(t("已删除剪藏"))
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : t("删除剪藏失败"))
+    }
+  }
+
+  async function saveBookmarkEdit() {    if (!editingBookmark) return
     const title = bookmarkDraft.title.trim()
     if (!title) {
       messageApi.error(t("收藏标题不能为空"))
@@ -576,6 +597,35 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
         </div>}
   </div>
 
+  const clipContent = <div className="library-module">
+    <div className="library-section-head">
+      <div>
+        <h2>{t("剪藏")}</h2>
+        <p>{t("从网页里截下来的文字、链接和图片，保留来源，可直接跳回原文。")}</p>
+      </div>
+      <span className="library-result-count">{clips.length} {t("条")}</span>
+    </div>
+    {clips.length === 0
+      ? <div className="library-empty-state library-empty-state--compact">
+          <span className="library-empty-state__icon"><FileTextOutlined/></span>
+          <h3>{t("还没有剪藏")}</h3>
+          <p>{t("在网页里选中文字、右键链接或图片，选择「剪藏」即可收进这里。")}</p>
+        </div>
+      : <div className="library-activity-list">
+          {clips.map(clip => <div className="library-archive-row" key={clip.id}>
+            <button type="button" className="library-activity" onClick={() => openClip(clip)}>
+              <span className="library-activity__icon"><FileTextOutlined/></span>
+              <span className="library-activity__body">
+                <strong title={clip.title || clip.content}>{clip.title || clipPreview(clip)}</strong>
+                <small><span>{CLIP_KIND_LABEL[clip.kind]}</span><span>{clipSourceHost(clip)}</span><span>{formatQueuedAt(clip.createdAt)}</span></small>
+              </span>
+              <RightOutlined className="library-activity__arrow"/>
+            </button>
+            <Button type="text" size="small" danger icon={<DeleteOutlined/>} aria-label={t("删除剪藏")} onClick={() => void removeClip(clip)}/>
+          </div>)}
+        </div>}
+  </div>
+
   const downloadContent = <div className="library-module">
     <div className="library-section-head">
       <div>
@@ -649,6 +699,7 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
             { key: 'archive', label: <TabLabel label={t("归档")} count={archived.length}/>,children:archiveContent},
             { key: 'queue', label: <TabLabel label={t("待读")} count={queue.length}/>, children: queueContent },
             { key: 'bookmarks', label: <TabLabel label={t("收藏")} count={bookmarks.length}/>, children: bookmarkContent },
+            { key: 'clips', label: <TabLabel label={t("剪藏")} count={clips.length}/>, children: clipContent },
             { key: 'downloads', label: <TabLabel label={t("下载记录")} count={downloadCenter.records.length}/>,children:downloadContent},
           ]}
         />

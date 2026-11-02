@@ -28,6 +28,9 @@ export type ContextMenuAction =
   | 'translate-selection'
   | 'screenshot-selection'
   | 'add-to-notes'
+  | 'clip-selection'
+  | 'clip-link'
+  | 'clip-image'
   | 'open-link-current'
   | 'open-link-new'
   | 'open-link-external'
@@ -112,6 +115,7 @@ function buildSelectionSections(request: ContextMenuRequest, cap: ContextMenuCap
         { action: 'copy', label:t("复制"),shortcut:'Ctrl+C',enabled:ALWAYS_ENABLED},
         { action: 'search-selection', label:t("用搜索引擎搜索所选内容"),enabled:ALWAYS_ENABLED},
         { action: 'add-to-notes', label:t("加入笔记"),enabled:hasSelection,disabledReason:hasSelection?undefined:t("请先选中文本")},
+        { action: 'clip-selection', label:t("剪藏选中文字"),enabled:hasSelection,disabledReason:hasSelection?undefined:t("请先选中文本")},
         { action: 'ask-ai', label:t("向 AI 提问"),enabled:cap.canAskAi,disabledReason:cap.canAskAi?undefined:t("AI 功能尚未配置")},
         { action: 'translate-selection', label:t("翻译选中内容"),enabled:cap.canAskAi&&hasSelection,disabledReason:cap.canAskAi?undefined:t("AI 功能尚未配置")},
         { action: 'screenshot-selection', label:t("截取选中区域"),enabled:!!request.selectionRect},
@@ -131,6 +135,7 @@ function buildLinkSections(request: ContextMenuRequest, cap: ContextMenuCapabili
         { action: 'open-link-new', label:t("在新标签打开"),enabled:allowed,disabledReason:allowed?undefined:t("链接协议不安全")},
         { action: 'open-link-external', label:t("在系统应用中打开"),enabled:shell.shellOpenable,disabledReason:shell.shellOpenable?undefined:t("链接协议不支持")},
         { action: 'copy-link', label:t("复制链接地址"),enabled:ALWAYS_ENABLED},
+        { action: 'clip-link', label:t("剪藏此链接"),enabled:ALWAYS_ENABLED},
       ],
     },
     {
@@ -150,6 +155,7 @@ function buildImageSections(request: ContextMenuRequest, cap: ContextMenuCapabil
         { action: 'open-image-new', label:t("在新标签打开图片"),enabled:allowed,disabledReason:allowed?undefined:t("图片地址协议不安全")},
         { action: 'copy-image', label:t("复制图片地址"),enabled:ALWAYS_ENABLED},
         { action: 'save-image', label:t("保存图片到下载中心"),enabled:allowed,disabledReason:allowed?undefined:t("图片地址协议不安全")},
+        { action: 'clip-image', label:t("剪藏此图片"),enabled:allowed,disabledReason:allowed?undefined:t("图片地址协议不安全")},
       ],
     },
   ]
