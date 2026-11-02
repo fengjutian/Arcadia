@@ -1,8 +1,14 @@
 # Windows CEF 接入方案（wry 保留为 fallback）
 
-> 状态：**接线与构建链路已验证，宿主实现未开始**（2026-11-02）。
+> 状态：**T1+T2 spike 已实现并编译通过，运行时未验证**（2026-11-02）。
 > 前置：[PageEngine 抽象](page-engine.md)。决策：只在 Windows 上引入自带 Chromium，
 > 其他平台与非 CEF 构建继续使用系统 WebView。
+>
+> 当前 CEF 后端覆盖：进程模型（`main.rs` 子进程分流 + `execute_process`）、
+> `CefInitialize`、每标签子 HWND、`navigate/reload/stop/url`、`set_bounds/size/visible/focus`、
+> `eval`（`ExecuteJavaScript`）、`close`。未覆盖：`eval_value`（需 T4 MessageRouter）、
+> `capture`、`clear_site_data`、`with_platform_webview`（返回 `Unsupported`）。
+> 由于尚未到能力等价，CEF 仅在 `ARCADIA_PAGE_ENGINE=cef` 时启用，否则一律 wry。
 
 ## 0. 已验证的事实（2026-11-02）
 

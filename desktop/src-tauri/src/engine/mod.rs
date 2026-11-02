@@ -30,7 +30,7 @@ use url::Url;
 pub mod select;
 pub mod wry;
 
-#[cfg(feature = "cef")]
+#[cfg(all(feature = "cef", target_os = "windows"))]
 pub mod cef;
 
 pub use wry::WryPageEngine;

@@ -22,9 +22,22 @@ pub struct Selection {
 }
 
 /// Pick the best available backend for this process.
+///
+/// A CEF build is opt-in per launch (`ARCADIA_PAGE_ENGINE=cef`) until the engine
+/// reaches parity: a partially implemented backend must never silently replace
+/// a working browser.
 pub fn select(app: &AppHandle) -> Selection {
     #[cfg(all(target_os = "windows", feature = "cef"))]
     {
+        if !cef_requested() {
+            return Selection {
+                kind: EngineKind::Wry,
+                engine: Arc::new(WryPageEngine::new(app.clone())),
+                fallback_reason: Some(
+                    "CEF backend compiled in; set ARCADIA_PAGE_ENGINE=cef to use it".to_string(),
+                ),
+            };
+        }
         match super::cef::try_create(app) {
             Ok(engine) => {
                 return Selection {
@@ -57,4 +70,12 @@ pub fn select(app: &AppHandle) -> Selection {
             fallback_reason,
         }
     }
+}
+
+/// Whether this launch explicitly asked for the CEF backend.
+#[cfg(all(target_os = "windows", feature = "cef"))]
+fn cef_requested() -> bool {
+    std::env::var("ARCADIA_PAGE_ENGINE")
+        .map(|value| value.eq_ignore_ascii_case("cef"))
+        .unwrap_or(false)
 }

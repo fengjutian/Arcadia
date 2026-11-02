@@ -3832,7 +3832,11 @@ pub fn local_archive_tab(
     retention: Option<u32>,
 ) -> Result<LocalArchivedTab, String> {
     validate_archived_tab(&tab)?;
-    insert_archived_tab(&connection(&app)?, &tab, i64::from(retention.unwrap_or(2000)))?;
+    insert_archived_tab(
+        &connection(&app)?,
+        &tab,
+        i64::from(retention.unwrap_or(2000)),
+    )?;
     Ok(tab)
 }
 
