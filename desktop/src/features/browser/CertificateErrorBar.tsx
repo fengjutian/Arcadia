@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Alert, Button, Space, Typography } from '../../components/ui'
-import { SafetyCertificateOutlined } from '../../components/ui/icons'
+import { Alert, Button, Space, Typography } from '@arcadia/ui'
+import { SafetyCertificateOutlined } from '@arcadia/ui/icons'
 import type { CertificateErrorPayload } from '../../services/nativeBrowser'
 
 export interface CertificateErrorBarProps {

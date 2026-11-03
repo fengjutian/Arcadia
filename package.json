@@ -11,8 +11,17 @@
     "dev": "npm run dev -w @arcadia/desktop",
     "build": "npm run build -w @arcadia/desktop",
     "test": "npm run test --workspaces --if-present",
+    "test:rust": "npm run test:rust -w @arcadia/desktop",
     "tauri:dev": "npm run tauri:dev -w @arcadia/desktop",
-    "tauri:build": "npm run tauri:build -w @arcadia/desktop",
-    "test:rust": "npm run test:rust -w @arcadia/desktop"
+    "tauri:build": "npm run tauri:build -w @arcadia/desktop"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "happy-dom": "^20.14.5",
+    "sass": "^1.92.0",
+    "typescript": "~5.7.2",
+    "vitest": "^2.1.8"
   }
 }

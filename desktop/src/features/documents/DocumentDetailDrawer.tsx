@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Button, Descriptions, Drawer, Empty, Input, message, Popconfirm, Space, Tag, Tooltip, Typography } from '../../components/ui'
-import { CopyOutlined, DeleteOutlined, ExportOutlined, InboxOutlined, LinkOutlined, PlusOutlined } from '../../components/ui/icons'
+import { Button, Descriptions, Drawer, Empty, Input, message, Popconfirm, Space, Tag, Tooltip, Typography } from '@arcadia/ui'
+import { CopyOutlined, DeleteOutlined, ExportOutlined, InboxOutlined, LinkOutlined, PlusOutlined } from '@arcadia/ui/icons'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useEffect, useMemo, useState } from 'react'

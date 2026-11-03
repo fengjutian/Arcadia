@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Alert, Button, Empty, Space, Table, Tag, Typography, message } from '../../components/ui'
-import { ReloadOutlined } from '../../components/ui/icons'
+import { Alert, Button, Empty, Space, Table, Tag, Typography, message } from '@arcadia/ui'
+import { ReloadOutlined } from '@arcadia/ui/icons'
 import { useCallback, useEffect, useState } from 'react'
 import { getMigrationStatus, listStoredSitePermissions, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragReindexExtras, ragRetryJob, replaceSitePermissions, type MigrationStatus, type RagIndexStatus, type RagJobRow, listAIProviders } from '../../api'
 import type { AIProvider } from '../../types'

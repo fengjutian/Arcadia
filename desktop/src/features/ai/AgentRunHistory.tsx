@@ -1,5 +1,5 @@
 import { t } from '@arcadia/i18n'
-import { Empty, List, Tag, Typography } from '../../components/ui'
+import { Empty, List, Tag, Typography } from '@arcadia/ui'
 import type { AgentRun } from '../../api'
 
 const STATUS_COLOR: Record<string, string> = {

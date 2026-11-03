@@ -209,3 +209,6 @@ body[data-theme='dark'] .workspaces-editor__desc{color:#9aa69e}
 /* Clip collection picker */
 .library-clip-collection{min-width:120px}
 .library-clip-filter{min-width:130px}
+
+// Colour dot used by the Space menu's colour rows (host dropdown fallback).
+.space-color-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }

@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Input, Modal, Tag, Typography, type InputRef } from '../../components/ui'
+import { Input, Modal, Tag, Typography, type InputRef } from '@arcadia/ui'
 import {
   ClockCircleOutlined,
   FileTextOutlined,
@@ -9,7 +9,7 @@ import {
   SearchOutlined,
   StarOutlined,
   ThunderboltOutlined,
-} from '../../components/ui/icons'
+} from '@arcadia/ui/icons'
 import type { BrowserTab } from '../../types'
 import type { HistoryEntry } from '../history/dedupeHistory'
 import type { BookmarkRecord } from '../../services/bookmarks'

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Spin } from '../components/ui'
+import { Spin } from '@arcadia/ui'
 import { AppLayout } from '../layouts/AppLayout'
 import { takeViewAfterReload } from './returnView'
 import { scheduleExtrasSync } from '../features/search/extrasSync'

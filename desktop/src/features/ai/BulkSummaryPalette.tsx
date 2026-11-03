@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
 import { useMemo, useState } from 'react'
-import { Alert, Button, Input, List, Modal, Progress, Segmented, Space, Tag, Typography } from '../../components/ui'
+import { Alert, Button, Input, List, Modal, Progress, Segmented, Space, Tag, Typography } from '@arcadia/ui'
 import type { BulkProgressEntry } from './bulkSummary'
 import { summaryKindLabelSafe } from './bulkSummary'
 import type { SummaryKind } from './summarize'

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { t } from '@arcadia/i18n'
-import { Button, Input, Modal, Space, Switch, Typography } from '../../components/ui'
+import { Button, Input, Modal, Space, Switch, Typography } from '@arcadia/ui'
 import { addBookmark, removeBookmark } from '../../services/bookmarks'
 import { saveWorkspace } from '../../services/workspaces'
 import { importToSpacePayload, parseBookmarksHtml, parseTabsJson, planBookmarkImport, type BookmarkImportPlan } from './bookmarksImport'

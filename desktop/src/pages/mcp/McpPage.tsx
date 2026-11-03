@@ -54,7 +54,7 @@ import {
   type McpServerStatus,
   type McpTransport,
 } from '../../api'
-import { Alert, Button, Card, Drawer, Input, Modal, Popconfirm, Segmented, Spin, Switch, Tag, Typography, message } from '../../components/ui'
+import { Alert, Button, Card, Drawer, Input, Modal, Popconfirm, Segmented, Spin, Switch, Tag, Typography, message } from '@arcadia/ui'
 import { formatStringMap, parseArguments, parseStringMap } from '../../features/mcp/config'
 import { initialArguments, validateArguments, type ArgumentIssue } from '../../features/mcp/schema'
 import { ToolArgumentsEditor } from '../../features/mcp/ToolArgumentsEditor'

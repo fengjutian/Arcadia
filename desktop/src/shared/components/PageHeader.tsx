@@ -1,5 +1,5 @@
-import { Button, Typography } from '../../components/ui'
-import { PlusOutlined } from '../../components/ui/icons'
+import { Button, Typography } from '@arcadia/ui'
+import { PlusOutlined } from '@arcadia/ui/icons'
 import type { ReactNode } from 'react'
 
 export function PageHeader({ eyebrow, title, description, action, extra }: { eyebrow?: string; title: string; description?: string; action?: string; extra?: ReactNode }) {

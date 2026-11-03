@@ -12,7 +12,7 @@ import {
   Tag,
   Typography,
   message,
-} from '../../components/ui'
+} from '@arcadia/ui'
 import type { SiteBlacklistEntry, SiteBlacklistEvent, SiteBlacklistImportResult, SiteBlacklistSummary } from '../../api'
 import {
   addBlockedSite,

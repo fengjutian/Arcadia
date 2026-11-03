@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { UIProvider } from './components/ui'
+import { UIProvider } from '@arcadia/ui'
 import { AppRouter } from './app/AppRouter'
 import { readThemePreference, THEME_CHANGE_EVENT, type ThemePreference } from './features/settings/theme'
 import { APPEARANCE_CHANGE_EVENT, GLASS_EFFECT_CHANGE_EVENT, IMAGE_THEMES, applyGlassEffect, readAppearancePreference, readBackgroundImageEnabled, readGlassEffectEnabled, readImageTheme, VISUAL_THEME_CHANGE_EVENT, type AppearancePreference, type ImageThemeId, type VisualThemeChangeDetail } from './features/settings/visualTheme'

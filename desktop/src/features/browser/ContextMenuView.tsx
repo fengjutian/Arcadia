@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Menu, type MenuComponentProps } from '../../components/ui'
+import { Menu, type MenuComponentProps } from '@arcadia/ui'
 import { onNativeContextMenu, type ContextMenuRequest } from '../../services/nativeBrowser'
 import { buildContextMenu, type ContextMenuAction, type ContextMenuCapabilities } from './contextMenu'
 

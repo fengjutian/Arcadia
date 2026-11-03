@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Button, Space, Typography } from '../../components/ui'
-import { CheckCircleOutlined, CopyOutlined, LockOutlined, PlusOutlined, ReloadOutlined } from '../../components/ui/icons'
+import { Button, Space, Typography } from '@arcadia/ui'
+import { CheckCircleOutlined, CopyOutlined, LockOutlined, PlusOutlined, ReloadOutlined } from '@arcadia/ui/icons'
 import type { BrowserTab } from '../../types'
 
 export function BrowserErrorView({ tab, onRetry, onNewTab, onCopy, onUnblock }: {

@@ -14,7 +14,7 @@ import {
   Space,
   Spin,
   Tag,
-} from '../../components/ui'
+} from '@arcadia/ui'
 import {
   ArrowRightOutlined,
   ArrowUpOutlined,
@@ -32,7 +32,7 @@ import {
   SettingOutlined,
   UserOutlined,
   WarningOutlined,
-} from '../../components/ui/icons'
+} from '@arcadia/ui/icons'
 import { useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef } from 'react'
 import {
   ActionBarPrimitive,

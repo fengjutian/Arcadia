@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { t } from '@arcadia/i18n'
-import { Button } from '../../components/ui'
+import { Button } from '@arcadia/ui'
 import type { Document } from '../../types'
 
 function Pane({ document }: { document: Document }) {

@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Alert, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, List, message, Popconfirm, Segmented, Select, Space, Spin, Statistic, Switch, Tabs, Tag, Typography } from '../../components/ui'
-import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, MonitorOutlined, MoonOutlined, PictureOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '../../components/ui/icons'
+import { Alert, Button, Card, Descriptions, Drawer, Form, Input, InputNumber, List, message, Popconfirm, Segmented, Select, Space, Spin, Statistic, Switch, Tabs, Tag, Typography } from '@arcadia/ui'
+import { BgColorsOutlined, CheckCircleOutlined, DeleteOutlined, KeyOutlined, MonitorOutlined, MoonOutlined, PictureOutlined, ReloadOutlined, SafetyCertificateOutlined, SaveOutlined, SearchOutlined, SunOutlined, ThunderboltOutlined } from '@arcadia/ui/icons'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getVersion } from '@tauri-apps/api/app'
 import appLogo from '../../assets/app-logo-humanist.png'

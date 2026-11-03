@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
 import { useState } from 'react'
-import { GlobalOutlined } from '../../components/ui/icons'
+import { GlobalOutlined } from '@arcadia/ui/icons'
 
 function faviconCandidates(favicon: string | undefined, pageUrl: string): string[] {
   const candidates: string[] = []

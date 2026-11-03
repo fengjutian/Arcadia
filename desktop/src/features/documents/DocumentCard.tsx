@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Button, Card, Dropdown, Input, message, Popconfirm, Popover, Space, Tag, Tooltip, Typography } from '../../components/ui'
-import { ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderAddOutlined, InboxOutlined, MoreOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
+import { Button, Card, Dropdown, Input, message, Popconfirm, Popover, Space, Tag, Tooltip, Typography } from '@arcadia/ui'
+import { ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderAddOutlined, InboxOutlined, MoreOutlined, StarFilled, StarOutlined } from '@arcadia/ui/icons'
 import { useEffect, useState, type MouseEvent } from 'react'
 import type { Document } from '../../types'
 import { addToCollection, archiveDocument, createCollection, deleteDocument, listCollections, type Collection } from '../../api'

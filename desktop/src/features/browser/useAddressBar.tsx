@@ -1,4 +1,4 @@
-import type { InputRef } from '../../components/ui/Input'
+import type { InputRef } from '@arcadia/ui/Input'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildSuggestions, type SuggestionItem } from './suggestionProvider'
 import { trimSuggestions } from './suggestionProvider'

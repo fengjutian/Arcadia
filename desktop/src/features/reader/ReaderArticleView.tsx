@@ -1,5 +1,5 @@
 import { t } from '@arcadia/i18n'
-import { Typography } from '../../components/ui'
+import { Typography } from '@arcadia/ui'
 import type { CSSProperties } from 'react'
 import type { ReaderArticle } from '../reader/types'
 import type { ReaderSiteStyle } from '../browser/siteReaderPrefs'

@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Button, Input, message, Modal, Popconfirm, Segmented, Select, Skeleton, Switch, Tabs, Tag, Typography, Upload } from '../../components/ui'
-import { BookOutlined, ClockCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '../../components/ui/icons'
+import { Button, Input, message, Modal, Popconfirm, Segmented, Select, Skeleton, Switch, Tabs, Tag, Typography, Upload } from '@arcadia/ui'
+import { BookOutlined, ClockCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, FileTextOutlined, FolderOpenOutlined, FolderOutlined, GlobalOutlined, PlusOutlined, ReloadOutlined, RightOutlined, SearchOutlined, StarOutlined, UploadOutlined } from '@arcadia/ui/icons'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DocumentCard } from '../../features/documents/DocumentCard'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'

@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Button, message, Table, Tag, Tooltip, Typography } from '../../components/ui'
-import { ReloadOutlined, SyncOutlined } from '../../components/ui/icons'
+import { Button, message, Table, Tag, Tooltip, Typography } from '@arcadia/ui'
+import { ReloadOutlined, SyncOutlined } from '@arcadia/ui/icons'
 import { useEffect, useState } from 'react'
 import type { Task } from '../../types'
 import { listRecentTasks, recoverStaleTasks, retryTask } from '../../api'

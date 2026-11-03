@@ -17,7 +17,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: bridge.invoke }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: bridge.listen }))
 
 const { McpPage } = await import('./McpPage')
-const { t } = await import('../../i18n')
+const { t } = await import('@arcadia/i18n')
 
 const SERVERS_COMMAND = 'local_list_mcp_servers'
 const PREVIEW_COMMAND = 'mcp_preview_config'

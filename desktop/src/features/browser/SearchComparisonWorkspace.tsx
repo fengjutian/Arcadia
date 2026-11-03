@@ -1,7 +1,7 @@
 import { t } from '@arcadia/i18n'
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, Spin, Typography } from '../../components/ui'
-import { CloseOutlined, SearchOutlined } from '../../components/ui/icons'
+import { Button, Spin, Typography } from '@arcadia/ui'
+import { CloseOutlined, SearchOutlined } from '@arcadia/ui/icons'
 import { searchDocuments, type DocumentSearchHit } from '../../api'
 import { AssistantPage } from '../../pages/assistant/AssistantPage'
 

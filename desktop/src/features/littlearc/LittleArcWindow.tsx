@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
 import { useEffect, useRef, useState } from 'react'
-import { Button, Input, Select, Space, Typography } from '../../components/ui'
+import { Button, Input, Select, Space, Typography } from '@arcadia/ui'
 import { listCollections, type Collection } from '../../api'
 import {
   closeLittleArc,

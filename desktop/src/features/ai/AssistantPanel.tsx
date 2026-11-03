@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
-import { Alert, Button, Card, Empty, Input, message, Segmented, Select, Space, Spin, Tag, Typography } from '../../components/ui'
-import { ArrowRightOutlined, BookOutlined, CloseOutlined, CopyOutlined, GlobalOutlined, RobotOutlined, SaveOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined } from '../../components/ui/icons'
+import { Alert, Button, Card, Empty, Input, message, Segmented, Select, Space, Spin, Tag, Typography } from '@arcadia/ui'
+import { ArrowRightOutlined, BookOutlined, CloseOutlined, CopyOutlined, GlobalOutlined, RobotOutlined, SaveOutlined, StopOutlined, ThunderboltOutlined, TranslationOutlined } from '@arcadia/ui/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { aiChat, findDocumentByUrl, getSession, listAIProviders, setSession, updateDocument } from '../../api'
 import type { AIProvider } from '../../types'

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { t } from '@arcadia/i18n'
-import { Button, Input, Modal, Space, Tag, Typography } from '../../components/ui'
-import { DeleteOutlined, PlusOutlined } from '../../components/ui/icons'
+import { Button, Input, Modal, Space, Tag, Typography } from '@arcadia/ui'
+import { DeleteOutlined, PlusOutlined } from '@arcadia/ui/icons'
 import { SITE_SEARCH_SHORTCUTS, validateCustomShortcut, type SiteSearchShortcut } from './siteSearch'
 
 /**

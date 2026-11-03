@@ -2,7 +2,7 @@ import { t } from '@arcadia/i18n'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ArrowUpRight, BadgeCheck, Download, Search, Sparkles, Star, Store } from 'lucide-react'
 import { searchSkillHub, type SkillHubSkill } from '../../api'
-import { Button, Input, Spin, Tag, Typography, message } from '../../components/ui'
+import { Button, Input, Spin, Tag, Typography, message } from '@arcadia/ui'
 
 function compactNumber(value: number): string {
   return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { t } from '@arcadia/i18n'
-import { Alert, Button, Card, Space, Tag, Typography, message } from '../../components/ui'
-import { StarOutlined, UploadOutlined } from '../../components/ui/icons'
+import { Alert, Button, Card, Space, Tag, Typography, message } from '@arcadia/ui'
+import { StarOutlined, UploadOutlined } from '@arcadia/ui/icons'
 import { listBookmarks, type BookmarkRecord } from '../../services/bookmarks'
 import { BookmarkImportDialog } from '../import/BookmarkImportDialog'
 

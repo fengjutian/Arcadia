@@ -1,6 +1,6 @@
 import { formatNumber, getLocale, t } from '@arcadia/i18n'
-import { AutoComplete, Button, Input, message, Modal, Popconfirm, Select, Spin, Tabs, Tag, Typography, type InputRef } from '../../components/ui'
-import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, InboxOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
+import { AutoComplete, Button, Input, message, Modal, Popconfirm, Select, Spin, Tabs, Tag, Typography, type InputRef } from '@arcadia/ui'
+import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, InboxOutlined, SearchOutlined, StarFilled, StarOutlined } from '@arcadia/ui/icons'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'

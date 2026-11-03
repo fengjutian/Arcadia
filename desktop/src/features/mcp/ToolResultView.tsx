@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Alert, Button } from '../../components/ui'
+import { Alert, Button } from '@arcadia/ui'
 import { t } from '@arcadia/i18n'
 import { parseToolResult, type ResourceBlock, type ToolResultBlock } from './result'
 
