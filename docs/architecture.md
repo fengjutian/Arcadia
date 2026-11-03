@@ -2,11 +2,22 @@
 
 ## 组件边界
 
+代码按“应用 / 独立包”两层组织，仓库根目录是 npm workspaces 与 Cargo 多包布局：
+
+```text
+packages/i18n            @arcadia/i18n          语言目录与 locale 运行时（无业务依赖）
+packages/ui              @arcadia/ui            设计系统：Button / Modal / Table … + ui.scss
+packages/browser-core    @arcadia/browser-core  标签、导航、会话、工作区、站点规则、WebView 桥
+crates/page-engine       page-engine            PageEngine trait、wry 实现、可选 CEF 实现
+desktop                  @arcadia/desktop       React 应用与 Tauri 主程序
+```
+
 ```text
 React UI（Browser / Library / Search / Assistant / Settings）
   │ 179 个 typed Tauri commands
 Tauri + Rust
-  ├── engine/         PageEngine trait + WryPageEngine（唯一持有 tauri::Webview 的层）
+  ├── page-engine/    PageEngine trait + WryPageEngine（唯一持有 tauri::Webview 的层）
+  │                   native 处理器由 app 的 PagePlatformHooks 注入
   ├── browser/        导航校验、URL 规范化、页面脚本文本
   ├── local_store.rs  SQLite + 26 个顺序迁移 + FTS5 + 备份恢复
   ├── rag/            chunker / indexer / lexical / vector / fusion / reranker / citation / evaluator
@@ -34,21 +45,25 @@ desktop/src/
 ├── app/            # 视图路由（AppRouter）
 ├── layouts/        # 应用外壳和跨页面布局
 ├── pages/          # 路由级页面：Browser / Library / Search / Assistant / Settings
-├── components/ui/  # 自建 UI 组件层，API 对齐 Ant Design 用法
-├── features/       # 领域模块：browser / ai / rag / reader / downloads / history /
-│                   # bookmarks / notes / privacy / plugins / tasks / settings / search
-├── services/       # Tauri command、会话、原生浏览器、下载等适配器
+├── features/       # 领域模块：ai / rag / reader / downloads / history / bookmarks /
+│                   # notes / privacy / plugins / tasks / settings / search，
+│                   # 以及浏览器视图（NewTabPage、SitePanel、ContextMenuView …）
+├── services/       # 非浏览器域的适配器（下载、默认浏览器、引擎偏好等）
 ├── shared/         # 无业务依赖的通用 hooks 与工具
 ├── styles/         # SCSS 变量、主题和全局样式
-├── api.ts          # 桌面本地数据与命令访问入口
-└── types.ts        # 前端共享类型
+├── api.ts          # 知识库 / AI / 任务等 Tauri command 入口
+└── types.ts        # 前端共享类型（浏览器 Tab 类型从 @arcadia/browser-core 再导出）
 ```
 
-UI 组件层位于 `components/ui/`：对外暴露与 Ant Design 一致的组件名和 props（`Button`、`Modal`、`Table`、`Form`、`message` 等），内部由 `@base-ui/react` 提供交互原语，图标统一来自 `lucide-react`。项目**不依赖** `antd` 包；新增组件应加在这一层，页面不直接引用 `@base-ui/react`。
+UI 组件层已经抽到 `packages/ui`（`@arcadia/ui`）：对外暴露与 Ant Design 一致的组件名和 props（`Button`、`Modal`、`Table`、`Form`、`message` 等），内部由 `@base-ui/react` 提供交互原语，图标统一来自 `lucide-react`。项目**不依赖** `antd` 包；新增组件应加在这个包，页面不直接引用 `@base-ui/react`。样式入口是 `@arcadia/ui/styles.scss`，组件依赖宿主提供 `--accent*` 等主题变量。
+
+浏览器领域逻辑位于 `packages/browser-core`（`@arcadia/browser-core`）：标签/会话/工作区/站点规则/导航校验等纯逻辑、`nativeBrowser` 的 Tauri 子 WebView 封装，以及对应的单元测试。`desktop/src/features/browser` 只保留 React 视图和浏览器页面专用 hook，视图通过包路径引用逻辑。
+
+`@arcadia/browser-core` 不导入桌面应用：唯一的宿主决策（是否启用广告拦截）通过 `setAdBlockEnabledProvider` 在 `main.tsx` 注入；站点权限的持久化命令由包内 `browserApi.ts` 负责。
 
 页面不能直接依赖具体网络实现，应通过 feature/service 层访问数据。五个视图（`browser` / `library` / `search` / `ai` / `settings`）由 `AppRouter` 用本地 state 管理，已挂载的视图用 `mountedViews` 保活，不使用 URL Router。
 
-浏览器页面通过 `services/nativeBrowser.ts` 管理 Tauri 子 WebView。React 负责计算内容区域的逻辑坐标、Tab 生命周期与显示状态；Rust command 负责协议校验、导航、刷新和历史操作。非 Tauri 开发环境自动使用内置预览，不会因缺少原生 API 崩溃。
+浏览器页面通过 `@arcadia/browser-core/nativeBrowser` 管理 Tauri 子 WebView。React 负责计算内容区域的逻辑坐标、Tab 生命周期与显示状态；Rust command 负责协议校验、导航、刷新和历史操作。非 Tauri 开发环境自动使用内置预览，不会因缺少原生 API 崩溃。
 
 ## 模块依赖规则
 

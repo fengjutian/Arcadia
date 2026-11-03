@@ -60,9 +60,18 @@ Arcadia 是一款以浏览器为入口、以本地知识库为核心的桌面阅
 
 桌面端：Tauri 2、Rust、React 19、TypeScript、Vite 6、SCSS。
 
+仓库结构：npm workspaces（`desktop` + `packages/*`）加独立 Rust crate（`crates/page-engine`）。共享代码不再放在应用目录里：
+
+| 包 | 位置 | 职责 |
+| --- | --- | --- |
+| `@arcadia/i18n` | `packages/i18n` | 语言目录与 locale 运行时 |
+| `@arcadia/ui` | `packages/ui` | 设计系统组件、图标与 `ui.scss` |
+| `@arcadia/browser-core` | `packages/browser-core` | 标签、导航、会话、工作区、站点规则、WebView 桥 |
+| `page-engine` | `crates/page-engine` | `PageEngine` trait、wry 实现、可选 CEF 实现 |
+
 界面语言：内置简体中文与英文，可在 **设置 → 通用 → 语言** 切换，详见 [国际化方案](docs/internationalization.md)。
 
-UI 组件：`desktop/src/components/ui/` 是自建组件层，对外 API 对齐 Ant Design 的用法，底层由 `@base-ui/react` 提供交互原语，图标统一使用 `lucide-react`。项目**不依赖** `antd` 包。
+UI 组件：`packages/ui` 是自建组件层，对外 API 对齐 Ant Design 的用法，底层由 `@base-ui/react` 提供交互原语，图标统一使用 `lucide-react`。项目**不依赖** `antd` 包。
 
 内容处理：`@mozilla/readability`、Turndown、`react-markdown` + `remark-gfm`。
 
@@ -83,7 +92,8 @@ Provider 与网络：`reqwest` + `rustls-tls`，流式响应。
 └────────────────────────┬─────────────────────────────┘
                          │ Tauri commands（179 个）
 ┌────────────────────────▼─────────────────────────────┐
-│ Tauri / Rust                                         │
+│ Tauri / Rust（desktop/src-tauri）                     │
+│  page-engine/    PageEngine trait、wry / CEF 实现     │
 │  browser/        WebView 生命周期、导航、安全边界     │
 │  local_store.rs  SQLite + 26 个顺序迁移 + FTS5        │
 │  rag/            分块、索引、词法/向量召回、融合、引用 │
@@ -104,28 +114,34 @@ Provider 与网络：`reqwest` + `rustls-tls`，流式响应。
 
 远程网页运行在独立子 WebView 中。网页内容不能直接调用应用的高权限命令；React UI 通过受控的 Tauri command 完成导航、页面快照和 SQLite 操作。
 
-页面承载层收敛在 `desktop/src-tauri/src/engine/`：命令层只按 tab label 调用 `PageEngine` trait，唯一持有 `tauri::Webview` 的是 `WryPageEngine`。这是日后接入自带 Chromium（CEF）的替换点，接入时业务代码不需要改动。
+页面承载层收敛在独立 crate `crates/page-engine`：命令层只按 tab label 调用 `PageEngine` trait，唯一持有 `tauri::Webview` 的是 `WryPageEngine`。证书校验、请求过滤、权限提示、进程失败与挂起属于应用策略，通过 `PagePlatformHooks` 在 `desktop/src-tauri/src/page_engine_hooks.rs` 注入。这是日后接入自带 Chromium（CEF）的替换点，接入时业务代码不需要改动。
 
 ## 项目目录
 
 ```text
 .
+├── package.json                     # npm workspaces 根配置
+├── packages/
+│   ├── i18n/                        # @arcadia/i18n：消息目录与 locale 运行时
+│   ├── ui/                          # @arcadia/ui：设计系统组件、图标、ui.scss
+│   └── browser-core/                # @arcadia/browser-core：浏览器领域逻辑与原生 WebView 桥
+├── crates/
+│   └── page-engine/                 # PageEngine trait + WryPageEngine + 可选 CEF
 ├── desktop/
 │   ├── src/                         # React / TypeScript UI
 │   │   ├── app/                     # 视图路由
-│   │   ├── components/ui/           # 自建 UI 组件层（对齐 Ant Design 用法）
-│   │   ├── features/                # 浏览器、AI、RAG、下载、隐私等领域模块
+│   │   ├── features/                # AI、RAG、下载、隐私等领域模块 + 浏览器视图
 │   │   ├── layouts/                 # 应用外壳
 │   │   ├── pages/                   # Browser / Library / Search / Assistant / Settings
-│   │   ├── services/                # 原生浏览器、会话、下载等适配器
+│   │   ├── services/                # 非浏览器域的 Tauri 适配器
 │   │   ├── shared/                  # 通用工具与 hooks
-│   │   ├── styles/                  # 全局与紧凑布局样式
-│   │   ├── api.ts                   # 桌面本地数据与命令访问入口
-│   │   └── types.ts                 # 前端共享类型
+│   │   ├── styles/                  # 全局与紧凑布局样式（组件样式在 packages/ui）
+│   │   ├── api.ts                   # 知识库 / AI / 任务等命令入口
+│   │   └── types.ts                 # 前端共享类型（Tab 类型从 browser-core 再导出）
 │   └── src-tauri/
 │       ├── capabilities/            # 主窗口最小权限
-│       ├── src/engine/              # PageEngine trait + WryPageEngine（唯一下探 tauri::Webview）
 │       ├── src/browser/             # URL 规范化与导航校验
+│       ├── src/page_engine_hooks.rs # 应用侧 PagePlatformHooks 实现
 │       ├── src/local_store.rs       # SQLite 迁移、FTS5、备份恢复
 │       ├── src/rag/                 # 分块、索引、召回、融合、引用
 │       ├── src/providers/           # LLM / Embedding Provider
@@ -151,17 +167,15 @@ Provider 与网络：`reqwest` + `rustls-tls`，流式响应。
 
 ## 安装与运行
 
-安装前端依赖：
+所有依赖在仓库根目录安装一次即可（npm workspaces 会把 `packages/*` 链接到根 `node_modules`）：
 
 ```bash
-cd desktop
 npm install
 ```
 
 推荐以完整桌面模式运行：
 
 ```bash
-cd desktop
 npm run tauri:dev
 ```
 
@@ -170,11 +184,18 @@ npm run tauri:dev
 只运行 Web UI：
 
 ```bash
-cd desktop
 npm run dev
 ```
 
 纯 Web 模式主要用于查看界面。由于没有 Tauri 原生层，真实网页子 WebView 和桌面 SQLite 不可用。
+
+只针对某个包工作时，也可以进入包目录运行它自己的脚本，例如：
+
+```bash
+cd packages/ui && npm test
+cd packages/browser-core && npm test
+cd crates/page-engine && cargo test
+```
 
 ## 本地数据
 
@@ -209,14 +230,12 @@ Schema 由 `desktop/src-tauri/src/local_store.rs` 中的 `MIGRATIONS` 常量管�
 构建前端资源：
 
 ```bash
-cd desktop
 npm run build
 ```
 
 构建桌面安装包：
 
 ```bash
-cd desktop
 npm run tauri:build
 ```
 
@@ -232,9 +251,8 @@ npm run build
 ## 测试与检查
 
 ```bash
-# 前端
-cd desktop
-npm run test          # Vitest，61 个文件 / 481 用例
+# 前端（根目录一次跑全部 workspace）
+npm test              # desktop 71 文件 / 494 用例；ui 3 文件 / 11 用例；browser-core 34 文件 / 273 用例
 npm run build         # tsc --noEmit + vite build
 
 # Rust
@@ -242,8 +260,9 @@ cd desktop/src-tauri
 cargo fmt -- --check
 cargo check --all-targets
 
-cd ..
-npm run test:rust     # 247 个用例，见下方说明
+cd ../..
+npm run test:rust     # 282 个应用用例，见下方说明
+cd crates/page-engine && cargo test -- --nocapture   # 2 个引擎用例
 ```
 
 > **Windows 上请用 `npm run test:rust` 跑 Rust 测试，不要直接执行 `cargo test`。**
