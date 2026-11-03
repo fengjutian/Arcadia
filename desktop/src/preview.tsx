@@ -7,6 +7,7 @@ import { AppLayout } from './layouts/AppLayout'
 import { LibraryPage } from './pages/library/LibraryPage'
 import { SearchPage } from './pages/search/SearchPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
+import { BrowserPage } from './pages/browser/BrowserPage'
 import { AssistantPage } from './pages/assistant/AssistantPage'
 import type { View } from './types'
 import './styles/main.scss'
@@ -15,6 +16,7 @@ import './styles/compact.scss'
 import './styles/library.scss'
 import './styles/search.scss'
 import './styles/settings.scss'
+import './styles/glass.scss'
 import { applyTypographySettings, readTypographySettings } from './features/settings/typography'
 
 applyTypographySettings(readTypographySettings())
@@ -24,7 +26,7 @@ const previewQuery = previewParams.get('q') ?? ''
 document.body.dataset.theme = previewParams.get('theme') || 'beige'
 
 const hash = (window.location.hash || '#library').slice(1) as View
-const view: View = (['library', 'search', 'ai', 'settings'] as string[]).includes(hash) ? hash : 'library'
+const view: View = (['library', 'search', 'ai', 'settings', 'browser'] as string[]).includes(hash) ? hash : 'library'
 
 // Diagnostic-only: `?section=系统和性能` activates a settings rail entry so the
 // corresponding card can be screenshotted without scripting a click. The retry
@@ -42,6 +44,7 @@ if (previewSection) {
 }
 
 function page() {
+  if (view === 'browser') return <BrowserPage />
   if (view === 'library') return <LibraryPage onOpenBrowser={() => {}} />
   if (view === 'search') return <SearchPage initialQuery={previewQuery} onOpenUrl={() => {}} />
   if (view === 'ai') return <AssistantPage onNavigate={() => {}} />

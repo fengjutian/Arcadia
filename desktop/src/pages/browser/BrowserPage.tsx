@@ -6,7 +6,7 @@ import { registerToastSink } from '../../components/ui/toastSink'
 import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue, saveClip, listReadingQueue, removeFromReadingQueue, addToCollection, listCollections } from '../../api'
-import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, focusNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, injectSiteCss, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeAdBlocking, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, syncSiteRoutes, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
+import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, focusNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, injectSiteCss, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, prewarmNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeAdBlocking, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, setPrewarmEnabled, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, syncSiteRoutes, tabIdForLabel, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '../../services/nativeBrowser'
 import { extractArticle } from '../../features/reader/extractArticle'
 import type { ReaderArticle } from '../../features/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
@@ -42,6 +42,7 @@ import { restoreTabsFromWorkspace } from '../../features/browser/restoreWorkspac
 import { WORKSPACE_RESTORE_EVENT } from '../../features/browser/workspaces'
 import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_RESTORE_EVENT, SPACE_SAVE_EVENT, SPACE_SURFACE_EVENT, autoSpaceName, autoSavedSnapshotId, dispatchSpaceRestore, readCurrentSpace, rememberAutoSavedSnapshot, tabSnapshotSignature, writeCurrentSpace } from '../../features/browser/spaces'
 import { useTabRuntime } from '../../features/browser/useTabRuntime'
+import { sameSyncedTab } from '../../features/browser/tabSyncReducer'
 import { buildAddressSuggestions } from '../../features/browser/addressSuggestions'
 import { DownloadSummary } from '../../features/downloads/DownloadCenter'
 import { ContextMenu } from '../../features/browser/ContextMenuView'
@@ -80,7 +81,7 @@ import { readRecoverySnapshot, restoreFromSnapshot, stripTransientTabStates, wri
 import { TopBarPortal } from '../../app/TopBarPortal'
 import { dropSessionLock, getSessionLockState } from '../../services/session'
 import { toggleFullscreen as toggleWindowFullscreen } from '../../services/webviewCompat'
-import { consumeLaunchUrl } from '../../services/defaultBrowser'
+import { consumeLaunchUrl, listenLaunchUrl } from '../../services/defaultBrowser'
 import { buildSuggestions, trimSuggestions } from '../../features/browser/suggestionProvider'
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS } from '../../features/browser/searchEngine'
 import { evaluateUrlSafety, highestLevel, type SafetyIssue, type SafetyLevel } from '../../features/browser/urlSafety'
@@ -157,6 +158,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [spaceOptions, setSpaceOptions] = useState<Array<{ id: string; name: string }>>([])
   const [dismissedSpaceRoute, setDismissedSpaceRoute] = useState('')
   const autoReaderAttemptsRef = useRef<Set<string>>(new Set())
+  /** Last tab/URL/style combination we pushed page CSS for. */
+  const siteCssAppliedRef = useRef('')
   const [privacyCap, setPrivacyCap] = useState<Awaited<ReturnType<typeof privacyCapabilityReport>> | null>(null)
   const [privacyStats, setPrivacyStats] = useState<Awaited<ReturnType<typeof privacyGetStats>>>({ blocked: 0, allowed: 0, dropped: 0 })
   const [blockEvents, setBlockEvents] = useState<Awaited<ReturnType<typeof privacyListBlockEvents>>>([])
@@ -594,7 +597,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     let disposed = false
     let unlisten: (() => void) | undefined
     void onNativeSiteBlocked(payload => {
-      const tabId = payload.tabLabel.replace(/^browser-/, '')
+      // Adopted warm views keep their original label, so resolve through the
+      // tab→label map before falling back to the id-derived label.
+      const tabId = tabIdForLabel(payload.tabLabel) ?? payload.tabLabel.replace(/^browser-/, '')
       setTabs(current => current.map(tab => tab.id === tabId
         ? {
             ...tab,
@@ -625,7 +630,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     let unlisten: (() => void) | undefined
     void onNativeProcessFailed(failure => {
       if (disposed || !failure.fatal) return
-      const tabId = failure.tabLabel.replace(/^browser-/, '')
+      const tabId = tabIdForLabel(failure.tabLabel) ?? failure.tabLabel.replace(/^browser-/, '')
       void hideNativeTab(tabId)
       setTabs(current => current.map(tab => tab.id === tabId
         ? {
@@ -675,7 +680,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   useEffect(() => {
     let unlisten: () => void = () => undefined
     void onNativeAdBlockUpdate(update => {
-      const tabId = update.tabLabel.replace(/^browser-/, '')
+      const tabId = tabIdForLabel(update.tabLabel) ?? update.tabLabel.replace(/^browser-/, '')
       const previousCount = lastAdBlockCountRef.current[tabId] ?? 0
       const delta = update.blockedCount - previousCount
       lastAdBlockCountRef.current[tabId] = update.blockedCount
@@ -762,22 +767,26 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
           if (cancelled) return
           const nextBounds = bounds()
           if (!nextBounds) return
-          await Promise.all(restoredTabs.filter(tab => tab.url &&( !tab.suspended || tab.id === parsed.activeTabId)).map(async tab => {
+          // Lazy restore: only the tab the user can see gets a WebView. Building
+          // one for every restored tab spawned a renderer per tab (and the LRU
+          // sweep closed most of them again); the rest are created on first
+          // activation by `resumeTab`.
+          const activeTab = restoredTabs.find(tab => tab.id === parsed.activeTabId)
+          if (activeTab?.url) {
             try {
-              const opened = await ensureNativeTab(tab.id, tab.url, nextBounds, { private: tab.private })
+              const opened = await ensureNativeTab(activeTab.id, activeTab.url, nextBounds, { private: activeTab.private })
               if (!opened) {
-                setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: { kind: 'web-mode-required', message:translate("网页浏览仅在 Tauri 桌面应用中可用。")}}:item))
-                return
+                setTabs(current => current.map(item => item.id === activeTab.id ? { ...item, error: { kind: 'web-mode-required', message:translate("网页浏览仅在 Tauri 桌面应用中可用。")}}:item))
+              } else {
+                if (visibleRef.current) await showNativeTab(activeTab.id)
+                // The view is live again → any error carried in from the saved
+                // session is stale by definition.
+                setTabs(current => current.map(item => item.id === activeTab.id ? { ...item, error: undefined, crashed: false } : item))
               }
-              if (tab.id === parsed.activeTabId && visibleRef.current) await showNativeTab(tab.id)
-              else await hideNativeTab(tab.id)
-              // The view is live again → any error carried in from the saved
-              // session is stale by definition.
-              setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: undefined, crashed: false } : item))
             } catch (error) {
-              setTabs(current => current.map(item => item.id === tab.id ? { ...item, error: classifyNavigationError(error) } : item))
+              setTabs(current => current.map(item => item.id === activeTab.id ? { ...item, error: classifyNavigationError(error) } : item))
             }
-          }))
+          }
           await enforceLiveTabLimit(parsed.activeTabId)
         }            )()
       }
@@ -940,6 +949,18 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     void consumeLaunchUrl().then(url => {
       if (url) window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
     })
+  }, [])
+
+  // Same hand-off while Arcadia is already running: the single-instance plugin
+  // forwards the second process's arguments instead of starting a new app.
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    void listenLaunchUrl(url => {
+      window.dispatchEvent(new CustomEvent('arcadia-navigate-view', { detail: 'browser' }))
+      window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
+    }).then(stop => { if (disposed) stop(); else unlisten = stop })
+    return () => { disposed = true; unlisten?.() }
   }, [])
 
   useEffect(() => {
@@ -1129,29 +1150,42 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     tab: active,
     visible,
     enabled: nativeMode && hasNativeTab(active.id) && !active.error,
+    // The page is only polled for scroll/URL/title drift. Poll faster while it
+    // is still loading; afterwards 1.5s is enough and saves an in-page eval.
+    intervalMs: active.loading ? 750 : 1_500,
     onApply: (patch) => {
       // macOS / Linux fallback: no navigation guard, so the polling loop is the
       // only place a redirect into a blacklisted host can be caught.
       const blocked = typeof patch.url === 'string' && !active.error ? findBlockingEntry(patch.url) : null
       if (blocked) void hideNativeTab(active.id)
-      setTabs(current => current.map(tab => {
-        if (tab.id !== active.id) return tab
-        if (!blocked) return { ...tab, ...patch, ...(tab.titleLocked ? { title: tab.title } : {}), crashed: false }
-        return {
-          ...tab,
-          ...patch,
-          crashed: false,
-          loading: false,
-          error: {
-            kind: 'site-blocked',
-            message:translate("该网站已被封杀（{value0}）",{value0:blocked.host}),
-            host: hostFromUrl(patch.url ?? '') ?? blocked.host,
-            ruleHost: blocked.host,
-            entryId: blocked.id,
-          },
-        }
-      }))
-      if (typeof patch.url === 'string') setAddress(patch.url)
+      setTabs(current => {
+        const index = current.findIndex(tab => tab.id === active.id)
+        if (index < 0) return current
+        const tab = current[index]
+        const merged: BrowserTab = blocked
+          ? {
+              ...tab,
+              ...patch,
+              crashed: false,
+              loading: false,
+              error: {
+                kind: 'site-blocked',
+                message:translate("该网站已被封杀（{value0}）",{value0:blocked.host}),
+                host: hostFromUrl(patch.url ?? '') ?? blocked.host,
+                ruleHost: blocked.host,
+                entryId: blocked.id,
+              },
+            }
+          : { ...tab, ...patch, ...(tab.titleLocked ? { title: tab.title } : {}), crashed: false }
+        // Returning the same array skips the render: the 750ms poll used to
+        // rebuild the tab object even when nothing had moved.
+        if (sameSyncedTab(tab, merged)) return current
+        const next = current.slice()
+        next[index] = merged
+        return next
+      })
+      const nextUrl = patch.url
+      if (typeof nextUrl === 'string') setAddress(current => current === nextUrl ? current : nextUrl)
       // Site-level Reader preference: open Reader once per URL after the page
       // finishes loading, never for private tabs and never twice.
       if (typeof patch.url === 'string' && patch.loading === false && !patch.error
@@ -1160,10 +1194,18 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         autoReaderAttemptsRef.current.add(patch.url)
         void openReader()
       }
-      // Local-only site CSS (user-authored) applied after each load.
+      // Local-only site CSS (user-authored) applied once per tab/URL/style.
+      // The poll runs while the page is open, so re-injecting on every tick was
+      // both wasteful and visible on slow frames. A reload resets the marker so
+      // the stylesheet is re-applied to the new document.
+      if (patch.loading === true) siteCssAppliedRef.current = ''
       if (typeof patch.url === 'string' && patch.loading === false && !patch.error) {
-        const css = liveHideCssFor(readerStyleFor(patch.url))
-        if (css) void injectSiteCss(active.id, css).catch(() => undefined)
+        const key = `${active.id}|${patch.url}|${readerStyleVersion}`
+        if (siteCssAppliedRef.current !== key) {
+          siteCssAppliedRef.current = key
+          const css = liveHideCssFor(readerStyleFor(patch.url))
+          if (css) void injectSiteCss(active.id, css).catch(() => undefined)
+        }
       }
     },
     onReopen: () => {
@@ -1172,7 +1214,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (!tab?.url || !nextBounds) return
       tabRuntime.enqueueScroll(tab.id, { x: tab.scrollX ?? 0, y: tab.scrollY ?? 0 })
       setTabs(current => current.map(item => item.id === tab.id ? { ...item, crashed: true, loading: true, error: undefined } : item))
-      void openNativeTab(tab.id, tab.url, nextBounds, { private: tab.private }).catch(error => {
+      void openNativeTab(tab.id, tab.url, nextBounds, { private: tab.private }).then(async opened => {
+        if (opened && visibleRef.current && activeTabIdRef.current === tab.id) await showNativeTab(tab.id)
+      }).catch(error => {
         setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, crashed: true, error: classifyNavigationError(error) } : item))
       })
     },
@@ -1199,6 +1243,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   }, [active.id, aiOpen, findOpen, modalOverlayCount, toolbarOverlay, visible])
 
   useEffect(() => () => {
+    setPrewarmEnabled(false)
     tabsRef.current.forEach(tab => { void closeNativeTab(tab.id) })
     comparisonRef.current?.sources.filter(source => source.kind === 'web').forEach(source => { void closeNativeTab(source.id) })
   }, [])
@@ -1561,6 +1606,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     await new Promise(resolve => requestAnimationFrame(resolve))
     const nextBounds = bounds()
     if (!nextBounds) return
+    const hadNativeView = hasNativeTab(tabId)
     try {
       const opened = await openNativeTab(tabId, url, nextBounds, { private: tabPrivate })
       if (!opened) {
@@ -1568,6 +1614,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
         return
       }
       setTabs(current => current.map(tab => tab.id === tabId ? { ...tab, error: undefined } : tab))
+      // An adopted spare view starts hidden; a navigation that reuses the
+      // current tab does not change `active.id`, so the visibility effect will
+      // not fire for it.
+      if (!hadNativeView && visibleRef.current && activeTabIdRef.current === tabId) await showNativeTab(tabId)
       await enforceLiveTabLimit(tabId)
     } catch (error) {
       const diagnosed = await diagnoseNavigationError(url, error)
@@ -1617,6 +1667,16 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     const timer = window.setInterval(sweep, 60_000)
     return () => window.clearInterval(timer)
   }, [advancedSettings.idleSuspendMinutes, advancedSettings.maxLiveWebviews])
+
+  // "启动增强": keep one hidden spare view ready so the next navigation skips
+  // WebView creation. Delayed so it never competes with the restored tab.
+  useEffect(() => {
+    const enabled = isNativeBrowserAvailable() && advancedSettings.startupBoost
+    setPrewarmEnabled(enabled)
+    if (!enabled) return
+    const timer = window.setTimeout(() => { void prewarmNativeTab() }, 2_500)
+    return () => window.clearTimeout(timer)
+  }, [advancedSettings.startupBoost])
 
   async function resumeTab(tab: BrowserTab) {
     if (!tab.url) return
@@ -1911,7 +1971,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     return computeResourceStats({ tabs, liveIds, downloadingOrigins, lastActiveAt: lastActiveAtRef.current })
   }, [tabs, downloads])
 
-  const processMemory = useProcessMemory({ enabled: nativeMode })
+  // Only sample while the resources panel is visible: an always-on 5s timer
+  // re-rendered the browser page for numbers nobody was looking at.
+  const processMemory = useProcessMemory({ enabled: nativeMode && toolbarOverlay === 'resources' })
   const memory = processMemory.snapshot
 
   const nativePanelPayloads = useMemo(() =>( {
@@ -2378,6 +2440,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             await hideNativeTab(tab.id)
             return
           }
+          // The visibility effect may already have run before the native view
+          // existed (it only reacts to the active id); an adopted spare starts
+          // hidden, so showing it is required.
+          if (visibleRef.current && activeTabIdRef.current === tab.id) await showNativeTab(tab.id)
           await enforceLiveTabLimit(tab.id)
         } catch (error) {
           setTabs(current => current.map(item => item.id === tab.id ? { ...item, loading: false, error: classifyNavigationError(error) } : item))

@@ -63,8 +63,10 @@ export function emptySnapshot(): SessionSnapshot {
  * the "recreate and show" path until the user clicks 重试.
  */
 export function stripTransientTabState(tab: BrowserTab): BrowserTab {
-  if (tab.error === undefined && tab.crashed !== true) return tab
-  const next: BrowserTab = { ...tab, crashed: false }
+  if (tab.error === undefined && tab.crashed !== true && tab.loading !== true) return tab
+  // A restored tab has no native view yet, so a persisted `loading` would pin
+  // a spinner on background tabs until they are first activated.
+  const next: BrowserTab = { ...tab, crashed: false, loading: false }
   delete next.error
   return next
 }

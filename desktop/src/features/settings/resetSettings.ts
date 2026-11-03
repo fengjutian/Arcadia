@@ -10,6 +10,7 @@ import { DEFAULT_SEARCH_ENGINE_CONFIG, writeSearchEngineConfig } from '../browse
 import { resetAllShortcutOverrides } from '../browser/shortcuts'
 import { setAdBlockerEnabled } from '../plugins/adBlocker'
 import { setTrackingCleanerEnabled } from '../plugins/trackingCleaner'
+import { syncEnginePreferences } from '../../services/enginePreferences'
 
 /** Restore preferences only. User content and credentials are intentionally untouched. */
 export function resetBrowserPreferences(): void {
@@ -25,6 +26,7 @@ export function resetBrowserPreferences(): void {
   writeShellSettings(DEFAULT_SHELL_SETTINGS)
   writeDownloadSettings(DEFAULT_DOWNLOAD_SETTINGS)
   writeAdvancedSettings(DEFAULT_ADVANCED_SETTINGS)
+  syncEnginePreferences(DEFAULT_ADVANCED_SETTINGS)
   writeTypographySettings(DEFAULT_TYPOGRAPHY_SETTINGS)
   writeSearchEngineConfig(DEFAULT_SEARCH_ENGINE_CONFIG)
   resetAllShortcutOverrides()

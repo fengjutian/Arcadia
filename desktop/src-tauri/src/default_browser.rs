@@ -58,9 +58,10 @@ impl DefaultBrowserStatus {
     }
 }
 
-/// URL handed to the process by the shell, kept until the UI asks for it once.
+/// URL handed to the process by the shell, waiting until the UI claims it.
+/// A small queue so an unconsumed hand-off is never silently overwritten.
 #[derive(Default)]
-pub struct PendingLaunchUrl(std::sync::Mutex<Option<String>>);
+pub struct PendingLaunchUrl(std::sync::Mutex<Vec<String>>);
 
 impl PendingLaunchUrl {
     /// Captures the URL from the current process arguments (the shell passes the
@@ -70,16 +71,57 @@ impl PendingLaunchUrl {
     }
 
     pub fn from_args<I: IntoIterator<Item = String>>(args: I) -> Self {
-        let url = args.into_iter().find_map(|arg| launch_url(&arg));
-        Self(std::sync::Mutex::new(url))
+        let pending = Self::default();
+        let args = args.into_iter().collect::<Vec<_>>();
+        if let Some(url) = forwarded_url(&args) {
+            pending.push(url);
+        }
+        pending
+    }
+
+    fn push(&self, url: String) {
+        if let Ok(mut queue) = self.0.lock() {
+            queue.push(url);
+        }
     }
 
     fn take(&self) -> Result<Option<String>, String> {
-        self.0
-            .lock()
-            .map(|mut slot| slot.take())
-            .map_err(|error| error.to_string())
+        let mut queue = self.0.lock().map_err(|error| error.to_string())?;
+        if queue.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(queue.remove(0)))
+        }
     }
+}
+
+/// First http(s) argument, i.e. the address the shell handed to the process.
+pub fn forwarded_url(args: &[String]) -> Option<String> {
+    args.iter().find_map(|arg| launch_url(arg))
+}
+
+/// Event the running instance emits when another launch carries a URL.
+pub const LAUNCH_URL_EVENT: &str = "arcadia://launch-url";
+
+/// Single-instance hand-off: the plugin delivered the arguments of a second
+/// process that has already exited. Focus the running window and forward its URL
+/// so the click opens as a tab in the existing window instead of a new app.
+///
+/// The URL is only emitted, never queued: the UI is already running, and a
+/// queued copy would be replayed the next time the page mounts (for example
+/// after a language switch reloads the window).
+pub fn handle_second_instance(app: &tauri::AppHandle, args: &[String]) {
+    use tauri::{Emitter, Manager};
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    let Some(url) = forwarded_url(args) else {
+        return;
+    };
+    let _ = app.emit_to("main", LAUNCH_URL_EVENT, serde_json::json!({ "url": url }));
 }
 
 /// Accepts only absolute http(s) URLs, so a stray argument can never become a
@@ -399,6 +441,35 @@ mod tests {
         assert_eq!(
             pending.take().unwrap().as_deref(),
             Some("https://example.com/a?b=1")
+        );
+        assert_eq!(pending.take().unwrap(), None);
+    }
+
+    #[test]
+    fn resolves_the_shell_hand_off_past_the_executable_path() {
+        let args = vec![
+            r"C:\Program Files\Arcadia\arcadia.exe".to_string(),
+            "https://example.com/story".to_string(),
+        ];
+        assert_eq!(
+            forwarded_url(&args).as_deref(),
+            Some("https://example.com/story")
+        );
+        assert_eq!(forwarded_url(&args[..1]), None);
+    }
+
+    #[test]
+    fn queues_every_forwarded_url_in_order() {
+        let pending = PendingLaunchUrl::default();
+        pending.push("https://example.com/1".into());
+        pending.push("https://example.com/2".into());
+        assert_eq!(
+            pending.take().unwrap().as_deref(),
+            Some("https://example.com/1")
+        );
+        assert_eq!(
+            pending.take().unwrap().as_deref(),
+            Some("https://example.com/2")
         );
         assert_eq!(pending.take().unwrap(), None);
     }

@@ -20,32 +20,26 @@ describe('advanced settings', () => {
     expect(settings.hardwareAcceleration).toBe(true)
     expect(settings.startupBoost).toBe(true)
     expect(settings.developerToolsEnabled).toBe(true)
-    expect(settings.backgroundPollingEnabled).toBe(true)
-    expect(settings.backgroundPollIntervalMs).toBe(3000)
     expect(settings.idleSuspendMinutes).toBe(30)
   })
 
   it('clamps extreme values back into the supported range', () => {
     localStorage.setItem(ADVANCED_SETTINGS_KEY, JSON.stringify({
       maxLiveWebviews: 0,
-      backgroundPollIntervalMs: 50,
       idleSuspendMinutes: 9999,
     }))
     const settings = readAdvancedSettings()
     expect(settings.maxLiveWebviews).toBe(2)
-    expect(settings.backgroundPollIntervalMs).toBe(1000)
     expect(settings.idleSuspendMinutes).toBe(180)
   })
 
   it('honours explicit user overrides within range', () => {
     localStorage.setItem(ADVANCED_SETTINGS_KEY, JSON.stringify({
-      backgroundPollingEnabled: false,
-      backgroundPollIntervalMs: 5000,
+      maxLiveWebviews: 12,
       idleSuspendMinutes: 5,
     }))
     const settings = readAdvancedSettings()
-    expect(settings.backgroundPollingEnabled).toBe(false)
-    expect(settings.backgroundPollIntervalMs).toBe(5000)
+    expect(settings.maxLiveWebviews).toBe(12)
     expect(settings.idleSuspendMinutes).toBe(5)
   })
 

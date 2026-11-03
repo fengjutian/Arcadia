@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { decideTabSync, fallbackTabTitle, TAB_SYNC_FAILURE_THRESHOLD } from './tabSyncReducer'
+import { decideTabSync, fallbackTabTitle, sameSyncedTab, TAB_SYNC_FAILURE_THRESHOLD } from './tabSyncReducer'
 import type { NativeBrowserState } from '../../services/nativeBrowser'
+import type { BrowserTab } from '../../types'
 
 const makeState = (overrides: Partial<NativeBrowserState> = {}): NativeBrowserState => ({
   url: 'https://example.com',
@@ -115,5 +116,38 @@ describe('decideTabSync', () => {
       fallbackTitle: '新标签页',
     })
     expect(decision.kind).toBe('bumpFailure')
+  })
+})
+
+describe('sameSyncedTab', () => {
+  const tab: BrowserTab = {
+    id: 'tab-1',
+    url: 'https://example.com',
+    title: 'Example',
+    loading: false,
+    active: true,
+    pinned: false,
+    scrollX: 0,
+    scrollY: 120,
+    scrollDepth: 0.2,
+    canGoBack: false,
+    canGoForward: false,
+  }
+
+  it('detects an unchanged poll result', () => {
+    expect(sameSyncedTab(tab, { ...tab })).toBe(true)
+  })
+
+  it('detects a scroll-only change', () => {
+    expect(sameSyncedTab(tab, { ...tab, scrollY: 121 })).toBe(false)
+  })
+
+  it('detects a title or url change', () => {
+    expect(sameSyncedTab(tab, { ...tab, title: 'New' })).toBe(false)
+    expect(sameSyncedTab(tab, { ...tab, url: 'https://example.com/next' })).toBe(false)
+  })
+
+  it('detects a recovered crash flag', () => {
+    expect(sameSyncedTab({ ...tab, crashed: true }, { ...tab, crashed: false })).toBe(false)
   })
 })

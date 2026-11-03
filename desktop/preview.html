@@ -86,6 +86,15 @@
           if (cmd === 'local_reading_snapshot_stats') return { count: 3, bytes: 8400000 }
           if (cmd === 'privacy_get_stats') return { blocked: 0, allowed: 0, dropped: 0 }
           if (cmd === 'privacy_capability_report') return { networkSubresourceBlocking: true }
+          if (cmd === 'default_browser_status') return {
+            platformSupported: true, isDefault: false, registered: true,
+            currentProgId: 'ChromeHTML', currentAppName: 'Google Chrome',
+          }
+          if (cmd === 'bookmark_list') return [
+            { id: 'b1', url: 'https://developer.mozilla.org/zh-CN/', title: 'MDN Web Docs', folder: '工具', note: '', position: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+            { id: 'b2', url: 'https://github.com/fengjutian/browser', title: 'Arcadia · GitHub', folder: '工具', note: '', position: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+            { id: 'b3', url: 'https://github.blog/news-insights/change-is-constant/', title: 'GitHub Blog', folder: '', note: '', position: 2, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+          ]
           if ((demoSearch || demoLibrary) && cmd === 'local_list_documents') return savedDocuments
           if (demoSearch && cmd === 'local_list_reading_activity') return readingActivity
           if (demoLibrary && cmd === 'local_list_history') return libraryHistory

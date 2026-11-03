@@ -738,6 +738,7 @@ body[data-theme='dark'] {
   .bookmark-import-source strong { color: #e5ebe7; }
   .bookmark-import-source span { color: #9da9a1; }
   .bookmark-import-source--count { border-color: color-mix(in srgb, var(--accent) 42%, #34413a); background: color-mix(in srgb, var(--accent) 18%, #1b241f); }
+  .default-browser-status__badge { background: color-mix(in srgb, var(--accent) 24%, #1b241f); color: color-mix(in srgb, var(--accent) 62%, #e5ebe7); }
 }
 
 @media (max-width: 900px) {

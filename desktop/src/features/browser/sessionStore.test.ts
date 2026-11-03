@@ -170,6 +170,13 @@ describe('stripTransientTabState', () => {
     expect(cleaned.url).toBe('https://a.example')
   })
 
+  it('does not persist loading, so restored background tabs have no stuck spinner', () => {
+    const tab = { id: 'a', url: 'https://a.example', title: 'A', loading: true, active: true, pinned: false }
+    const cleaned = stripTransientTabState(tab)
+    expect(cleaned.loading).toBe(false)
+    expect(cleaned).not.toBe(tab)
+  })
+
   it('does not persist error state through writeSnapshot', () => {
     localStorage.clear()
     writeSnapshot({

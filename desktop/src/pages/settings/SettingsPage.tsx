@@ -27,6 +27,7 @@ import { isTrackingCleanerEnabled, setTrackingCleanerEnabled } from '../../featu
 import { isAdBlockerEnabled, setAdBlockerEnabled } from '../../features/plugins/adBlocker'
 import { deleteBrowserPassword, listBrowserPasswords, setNativeAdBlocking, type SavedCredential } from '../../services/nativeBrowser'
 import { pickFiles } from '../../services/webviewCompat'
+import { syncEnginePreferences } from '../../services/enginePreferences'
 import { PrivacyExportPanel } from '../../features/privacy/PrivacyExportPanel'
 import { getAdBlockStats, onAdBlockStatsChange, resetAdBlockStats, resetSessionAdBlockStats, type AdBlockStatsSnapshot } from '../../features/privacy/adBlockStats'
 import { formatStringMap, parseArguments, parseStringMap } from '../../features/mcp/config'
@@ -1718,17 +1719,19 @@ function SystemPerformanceSettingsPanel() {
     const next = { ...settings, ...patch }
     setSettings(next)
     writeAdvancedSettings(next)
+    syncEnginePreferences(next)
   }
 
   function reset() {
     setSettings(DEFAULT_ADVANCED_SETTINGS)
     writeAdvancedSettings(DEFAULT_ADVANCED_SETTINGS)
+    syncEnginePreferences(DEFAULT_ADVANCED_SETTINGS)
   }
 
   const systemPanel = <>
     <Alert type="info" showIcon message={t("部分系统设置需要重启浏览器后完全生效")}/>
-    <div className="advanced-setting-row"><div><Typography.Text strong>{t("使用硬件加速")}</Typography.Text><Typography.Paragraph type="secondary">{t("可用时使用 GPU 绘制网页和界面。关闭后可解决部分显卡驱动导致的闪烁或黑屏。")}</Typography.Paragraph></div><Switch checked={settings.hardwareAcceleration} onChange={value=>update({hardwareAcceleration:value})}/></div>
-    <div className="advanced-setting-row"><div><Typography.Text strong>{t("启动增强")}</Typography.Text><Typography.Paragraph type="secondary">{t("保留轻量级启动状态，以缩短下次打开浏览器的等待时间。")}</Typography.Paragraph></div><Switch checked={settings.startupBoost} onChange={value=>update({startupBoost:value})}/></div>
+    <div className="advanced-setting-row"><div><Typography.Text strong>{t("使用硬件加速")}</Typography.Text><Typography.Paragraph type="secondary">{t("可用时使用 GPU 绘制网页和界面。关闭后可解决部分显卡驱动导致的闪烁或黑屏；重启应用后生效。")}</Typography.Paragraph></div><Switch checked={settings.hardwareAcceleration} onChange={value=>update({hardwareAcceleration:value})}/></div>
+    <div className="advanced-setting-row"><div><Typography.Text strong>{t("启动增强")}</Typography.Text><Typography.Paragraph type="secondary">{t("预建一个隐藏的空白网页视图，缩短新标签页首次打开的等待时间。")}</Typography.Paragraph></div><Switch checked={settings.startupBoost} onChange={value=>update({startupBoost:value})}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>{t("使用 F12 键打开开发人员工具")}</Typography.Text><Typography.Paragraph type="secondary">{t("关闭后隐藏浏览器菜单中的开发者工具入口，并忽略 F12 快捷键。")}</Typography.Paragraph></div><Switch checked={settings.developerToolsEnabled} onChange={value=>update({developerToolsEnabled:value})}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>{t("危险地址提醒")}</Typography.Text><Typography.Paragraph type="secondary">{t("在地址包含可疑协议、凭据或不安全 HTTP 时显示提醒。")}</Typography.Paragraph></div><Switch checked={settings.safetyWarnings} onChange={value=>update({safetyWarnings:value})}/></div>
   </>
@@ -1737,8 +1740,6 @@ function SystemPerformanceSettingsPanel() {
     <div className="advanced-setting-row"><div><Typography.Text strong>{t("活动网页上限")}</Typography.Text><Typography.Paragraph type="secondary">{t("超过上限的后台标签页会休眠，重新选中时自动恢复，以降低内存占用。")}</Typography.Paragraph></div><InputNumber min={2} max={16} value={settings.maxLiveWebviews} onChange={value=>update({maxLiveWebviews:value??8})}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>{t("减少界面动画")}</Typography.Text><Typography.Paragraph type="secondary">{t("关闭页面切换位移和侧栏动效，适合低性能设备或偏好静态界面。")}</Typography.Paragraph></div><Switch checked={settings.reduceMotion} onChange={value=>update({reduceMotion:value})}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>{t("空闲自动休眠")}</Typography.Text><Typography.Paragraph type="secondary">{t("超过设定分钟数未访问的标签页会被列入休眠候选；固定标签、有音频、或正在下载的标签页会豁免。")}</Typography.Paragraph></div><InputNumber min={1} max={180} value={settings.idleSuspendMinutes} addonAfter={t("分钟")} onChange={value=>update({idleSuspendMinutes:value??30})}/></div>
-    <div className="advanced-setting-row"><div><Typography.Text strong>{t("后台标签轮询")}</Typography.Text><Typography.Paragraph type="secondary">{t("关闭后非活动标签完全停止轮询，仅在切换时刷新状态；适合极低功耗设备。")}</Typography.Paragraph></div><Switch checked={settings.backgroundPollingEnabled} onChange={value=>update({backgroundPollingEnabled:value})}/></div>
-    <div className="advanced-setting-row"><div><Typography.Text strong>{t("后台轮询频率")}</Typography.Text><Typography.Paragraph type="secondary">{t("后台标签状态同步的频率，越小越实时但 CPU 越高。")}</Typography.Paragraph></div><InputNumber min={1000} max={15000} step={500} value={settings.backgroundPollIntervalMs} addonAfter="ms" onChange={value=>update({backgroundPollIntervalMs:value??3000})} disabled={!settings.backgroundPollingEnabled}/></div>
     <div className="advanced-setting-row"><div><Typography.Text strong>{t("下载并发上限")}</Typography.Text><Typography.Paragraph type="secondary">{t("同时进行的下载超过上限时，新任务会按 FIFO 进入本地排队；任意一个任务结束自动接力下一个。")}</Typography.Paragraph></div><InputNumber min={1} max={8} value={settings.maxConcurrentDownloads} onChange={value=>update({maxConcurrentDownloads:value??3})}/></div>
   </>
 

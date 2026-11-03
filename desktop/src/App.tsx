@@ -5,6 +5,7 @@ import { readThemePreference, THEME_CHANGE_EVENT, type ThemePreference } from '.
 import { APPEARANCE_CHANGE_EVENT, IMAGE_THEMES, readAppearancePreference, readBackgroundImageEnabled, readImageTheme, VISUAL_THEME_CHANGE_EVENT, type AppearancePreference, type ImageThemeId, type VisualThemeChangeDetail } from './features/settings/visualTheme'
 import { BING_DAILY_CHANGE_EVENT, loadBingDailyImage, readCachedBingDailyImage, type BingDailyImage } from './features/settings/bingDailyTheme'
 import { readAdvancedSettings } from './features/settings/advanced'
+import { syncEnginePreferences } from './services/enginePreferences'
 import { useTaskWorker } from './features/tasks/useTaskWorker'
 import { useLocale } from './i18n'
 
@@ -105,6 +106,8 @@ export default function App() {
 
   useEffect(() => {
     document.body.dataset.reduceMotion = readAdvancedSettings().reduceMotion ? 'true' : 'false'
+    // Seed the native mirror that the next launch reads before WebView2 starts.
+    syncEnginePreferences(readAdvancedSettings())
   }, [])
 
   const palette = PALETTES[resolvedPreference]

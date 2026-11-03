@@ -74,6 +74,24 @@ const suspendedTabs = new Set<string>()
 const isTauri = () => '__TAURI_INTERNALS__' in window
 export const isNativeBrowserAvailable = (): boolean => isTauri()
 const labelFor = (tabId: string) => `browser-${tabId.replace(/[^a-zA-Z0-9-]/g, '-')}`
+
+/**
+ * A single hidden spare view, created while the browser is idle and adopted by
+ * the next tab that needs a URL. Creating a WebView2 child (renderer process +
+ * init scripts) is the fixed cost of opening a page; paying it before the user
+ * submits an address makes the navigation itself feel instant.
+ *
+ * The spare lives under a fake tab id and is parked far off-screen so it can
+ * never paint over the UI. Only normal tabs adopt it: private tabs need their
+ * own ephemeral profile.
+ */
+const WARM_TAB_ID = '__arcadia_warm__'
+const WARM_LABEL = 'browser-warm-spare'
+const WARM_BOUNDS: BrowserBounds = { x: -20000, y: -20000, width: 1, height: 1 }
+let warmCreation: Promise<boolean> | null = null
+/** Mirrors the "启动增强" switch; the browser page owns the preference. */
+let prewarmEnabled = false
+
 const isUnknownCommand = (error: unknown) => /command not found|not allowed/i.test(String(error))
 
 function enqueueTabOperation<T>(tabId: string, operation: () => Promise<T>): Promise<T> {
@@ -136,11 +154,97 @@ async function applyBounds(tabId: string, bounds: BrowserBounds): Promise<void> 
   lastAppliedBounds.set(tabId, { ...bounds })
 }
 
+/**
+ * Enable or disable the spare-view pool. Disabling immediately releases the
+ * parked view instead of leaving a hidden renderer alive.
+ */
+export function setPrewarmEnabled(enabled: boolean): void {
+  prewarmEnabled = enabled
+  if (!enabled) void disposeWarmNativeTab()
+}
+
+/**
+ * Create (or keep) the hidden spare view. Safe to call repeatedly; concurrent
+ * calls share one creation. Never throws — a failed prewarm only means the next
+ * navigation pays the normal creation cost.
+ */
+export async function prewarmNativeTab(): Promise<boolean> {
+  if (!isTauri() || !prewarmEnabled) return false
+  if (labels.has(WARM_TAB_ID)) return true
+  if (warmCreation) return warmCreation
+  warmCreation = (async () => {
+    try {
+      await invoke('browser_create', {
+        label: WARM_LABEL,
+        url: 'about:blank',
+        bounds: WARM_BOUNDS,
+        permissions: readSitePermissions(),
+        adBlockEnabled: isAdBlockerEnabled(),
+        private: false,
+      })
+      labels.set(WARM_TAB_ID, WARM_LABEL)
+      lastAppliedBounds.set(WARM_TAB_ID, { ...WARM_BOUNDS })
+      await invoke('browser_set_visible', { label: WARM_LABEL, visible: false })
+      return true
+    } catch {
+      labels.delete(WARM_TAB_ID)
+      lastAppliedBounds.delete(WARM_TAB_ID)
+      return false
+    } finally {
+      warmCreation = null
+    }
+  })()
+  return warmCreation
+}
+
+/** Release the spare view (setting turned off, or the browser page unmounts). */
+export async function disposeWarmNativeTab(): Promise<void> {
+  if (warmCreation) await warmCreation.catch(() => false)
+  const label = labels.get(WARM_TAB_ID)
+  labels.delete(WARM_TAB_ID)
+  lastAppliedBounds.delete(WARM_TAB_ID)
+  desiredVisibility.delete(WARM_TAB_ID)
+  if (!label) return
+  try { await invoke('browser_close_tab', { label }) } catch { /* already gone */ }
+  try { await (await Webview.getByLabel(label))?.close() } catch { /* already gone */ }
+}
+
+/**
+ * Hand the spare view to `tabId`. The reservation happens synchronously so two
+ * concurrent opens can never share one native view.
+ */
+async function takeWarmNativeTab(tabId: string, url: string): Promise<boolean> {
+  if (warmCreation) await warmCreation.catch(() => false)
+  const label = labels.get(WARM_TAB_ID)
+  if (!label) return false
+  labels.delete(WARM_TAB_ID)
+  lastAppliedBounds.delete(WARM_TAB_ID)
+  desiredVisibility.delete(WARM_TAB_ID)
+  try {
+    await invoke<string>('browser_navigate', { label, url })
+  } catch {
+    try { await invoke('browser_close_tab', { label }) } catch { /* already gone */ }
+    return false
+  }
+  labels.set(tabId, label)
+  return true
+}
+
+/** Resolve the owning tab from an event label (adopted views keep their label). */
+export function tabIdForLabel(label: string): string | undefined {
+  for (const [tabId, value] of labels) {
+    if (value === label) return tabId
+  }
+  return undefined
+}
+
 async function openNativeTabOnce(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   const label = labelFor(tabId)
+  let created = false
   let webview = await Webview.getByLabel(label)
   if (!webview) {
     await invoke('browser_create', { label, url, bounds, permissions: readSitePermissions(), adBlockEnabled: isAdBlockerEnabled(), private: options.private === true })
+    created = true
     // `browser_create` is authoritative. WebView2 child views backed by an
     // isolated private profile are not always returned by the JS
     // `Webview.getByLabel` registry even though Rust created and loaded them.
@@ -150,7 +254,10 @@ async function openNativeTabOnce(tabId: string, url: string, bounds: BrowserBoun
     await webview.show()
   }
   labels.set(tabId, label)
-  await applyBounds(tabId, bounds)
+  // The bounds already went to `browser_create`; a second command here only
+  // added an IPC round trip to every first navigation.
+  if (created) lastAppliedBounds.set(tabId, { ...bounds })
+  else await applyBounds(tabId, bounds)
   return true
 }
 
@@ -163,13 +270,23 @@ async function ensureNativeTabOnce(tabId: string, url: string, bounds: BrowserBo
     await invoke('browser_create', { label, url, bounds, permissions: readSitePermissions(), adBlockEnabled: isAdBlockerEnabled(), private: options.private === true })
   }
   labels.set(tabId, label)
-  await applyBounds(tabId, bounds)
+  // See `openNativeTabOnce`: creation already applied the bounds.
+  if (existing) await applyBounds(tabId, bounds)
+  else lastAppliedBounds.set(tabId, { ...bounds })
   return true
 }
 
 export async function openNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   if (!isTauri()) return false
   return enqueueTabOperation(tabId, async () => {
+    // Adopt the idle spare view when this tab has none of its own. Private tabs
+    // keep their isolated profile and always create a fresh view.
+    if (!options.private && !labels.has(tabId) && await takeWarmNativeTab(tabId, url)) {
+      await applyBounds(tabId, bounds)
+      suspendedTabs.delete(tabId)
+      if (prewarmEnabled) void prewarmNativeTab()
+      return true
+    }
     const opened = await rebuildWhenViewMissing(tabId, () => openNativeTabOnce(tabId, url, bounds, options))
     suspendedTabs.delete(tabId)
     return opened
@@ -179,6 +296,12 @@ export async function openNativeTab(tabId: string, url: string, bounds: BrowserB
 export async function ensureNativeTab(tabId: string, url: string, bounds: BrowserBounds, options: { private?: boolean } = {}): Promise<boolean> {
   if (!isTauri()) return false
   return enqueueTabOperation(tabId, async () => {
+    if (!options.private && !labels.has(tabId) && await takeWarmNativeTab(tabId, url)) {
+      await applyBounds(tabId, bounds)
+      suspendedTabs.delete(tabId)
+      if (prewarmEnabled) void prewarmNativeTab()
+      return true
+    }
     const opened = await rebuildWhenViewMissing(tabId, () => ensureNativeTabOnce(tabId, url, bounds, options))
     suspendedTabs.delete(tabId)
     return opened

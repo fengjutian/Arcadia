@@ -593,6 +593,15 @@ impl NavStack {
         }
         self.push(url);
     }
+
+    /// Drop the `about:blank` placeholder a prewarmed spare starts with, so the
+    /// first real navigation does not leave a phantom history entry.
+    fn reset_placeholder(&mut self) {
+        if self.entries.len() == 1 && self.entries[0] == "about:blank" {
+            self.entries.clear();
+            self.index = 0;
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -793,6 +802,128 @@ impl PageObserver for AppPageObserver {
     }
 }
 
+/// Bundle identifier from `tauri.conf.json`, used to resolve the config
+/// directory before Tauri itself is available (see `run`).
+#[cfg(target_os = "windows")]
+const APP_IDENTIFIER: &str = "com.arcadia.knowledge-browser";
+const ENGINE_PREFERENCES_FILE: &str = "engine-preferences.json";
+/// Chromium disk cache budget for the shared browser profile. WebView2 has no
+/// equivalent setting in `tauri.conf.json`, so it is passed as a launch flag.
+const DISK_CACHE_BYTES: u64 = 512 * 1024 * 1024;
+
+#[cfg(target_os = "windows")]
+fn engine_preferences_path() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("APPDATA")?;
+    Some(
+        std::path::PathBuf::from(base)
+            .join(APP_IDENTIFIER)
+            .join(ENGINE_PREFERENCES_FILE),
+    )
+}
+
+/// Combine the user's WebView2 flags with ours. Existing flags win: we never
+/// duplicate an argument the environment already provides.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(crate) fn merge_engine_browser_args(
+    existing: Option<&str>,
+    hardware_acceleration: bool,
+) -> String {
+    // Append to the user's string verbatim: re-joining would drop the quoting
+    // of arguments such as `--proxy-server="..."`.
+    let mut merged = existing.unwrap_or_default().trim().to_string();
+    let has_flag = |value: &str, flag: &str| {
+        value
+            .split_whitespace()
+            .any(|argument| argument == flag)
+    };
+    if !merged.contains("--disk-cache-size=") {
+        if !merged.is_empty() {
+            merged.push(' ');
+        }
+        merged.push_str(&format!("--disk-cache-size={DISK_CACHE_BYTES}"));
+    }
+    if !hardware_acceleration && !has_flag(&merged, "--disable-gpu") {
+        if !merged.is_empty() {
+            merged.push(' ');
+        }
+        merged.push_str("--disable-gpu");
+    }
+    merged
+}
+
+#[cfg(test)]
+mod engine_preference_tests {
+    use super::merge_engine_browser_args;
+
+    #[test]
+    fn keeps_hardware_acceleration_on_by_default() {
+        let args = merge_engine_browser_args(None, true);
+        assert!(args.contains("--disk-cache-size="));
+        assert!(!args.contains("--disable-gpu"));
+    }
+
+    #[test]
+    fn disables_gpu_when_hardware_acceleration_is_off() {
+        let args = merge_engine_browser_args(Some("--lang=zh-CN"), false);
+        assert!(args.contains("--lang=zh-CN"));
+        assert!(args.ends_with("--disable-gpu"));
+    }
+
+    #[test]
+    fn never_duplicates_flags_the_environment_already_sets() {
+        let args = merge_engine_browser_args(Some("--disable-gpu --disk-cache-size=1"), false);
+        assert_eq!(args.matches("--disable-gpu").count(), 1);
+        assert_eq!(args.matches("--disk-cache-size=").count(), 1);
+    }
+}
+
+/// WebView2 reads its launch flags from the process environment, so the saved
+/// preference must be applied before the first WebView (or its environment) is
+/// created. Settings are written by `browser_set_engine_preferences`.
+fn apply_engine_startup_environment() {
+    #[cfg(target_os = "windows")]
+    {
+        let hardware_acceleration = engine_preferences_path()
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .and_then(|value| {
+                value
+                    .get("hardwareAcceleration")
+                    .and_then(|enabled| enabled.as_bool())
+            })
+            // No saved preference yet: keep the platform default (accelerated).
+            .unwrap_or(true);
+        let existing = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").ok();
+        let merged = merge_engine_browser_args(existing.as_deref(), hardware_acceleration);
+        if !merged.is_empty() {
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", merged);
+        }
+    }
+}
+
+/// Persist the flags that must be known before the next WebView2 environment
+/// starts. The renderer calls this whenever the performance switches change.
+#[tauri::command]
+fn browser_set_engine_preferences(
+    app: tauri::AppHandle,
+    hardware_acceleration: bool,
+) -> Result<(), String> {
+    let directory = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let payload = serde_json::json!({
+        "hardwareAcceleration": hardware_acceleration,
+        "updatedAt": chrono::Utc::now().timestamp(),
+    });
+    std::fs::write(
+        directory.join(ENGINE_PREFERENCES_FILE),
+        serde_json::to_vec_pretty(&payload).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 async fn browser_create(
     app: tauri::AppHandle,
@@ -808,7 +939,14 @@ async fn browser_create(
     if engine.exists(&label) {
         return Ok(());
     }
-    let url = external_url(&url)?;
+    // The prewarm pool parks one hidden `about:blank` view so the next
+    // navigation can skip WebView creation. Every other URL still goes through
+    // the http(s)/file allow-list enforced by `external_url`.
+    let url = if url.trim() == "about:blank" {
+        url::Url::parse("about:blank").map_err(|error| error.to_string())?
+    } else {
+        external_url(&url)?
+    };
     emit_site_route(&app, url.as_str());
     let nav_url = url.to_string();
     let private_mode = private.unwrap_or(false);
@@ -945,6 +1083,7 @@ async fn browser_navigate(
         .lock()
         .map_err(|_| "nav stack poisoned".to_string())?;
     let stack = guard.entry(label).or_default();
+    stack.reset_placeholder();
     stack.push(url.to_string());
     Ok(url.to_string())
 }
@@ -2046,7 +2185,16 @@ async fn ai_test_provider(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Must run before `Builder` creates the first WebView: WebView2 reads these
+    // launch flags once per environment.
+    apply_engine_startup_environment();
     tauri::Builder::default()
+        // Registered first: it decides whether this process survives. When the
+        // app is already running, the second process forwards its arguments and
+        // exits, so a link click becomes a tab in the existing window.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            default_browser::handle_second_instance(app, &argv);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
@@ -2189,6 +2337,7 @@ pub fn run() {
             bing::bing_daily_images,
             web_search::web_search,
             browser_create,
+            browser_set_engine_preferences,
             browser_set_ad_blocking,
             browser_set_muted,
             browser_inject_css,
@@ -2698,6 +2847,27 @@ mod tests {
         assert!(validate_browser_label("main").is_err());
         assert!(validate_browser_label("browser-").is_err());
         assert!(validate_browser_label("browser-../main").is_err());
+    }
+
+    #[test]
+    fn nav_stack_drops_the_prewarm_placeholder_before_first_navigation() {
+        let mut stack = NavStack::default();
+        stack.push("about:blank".into());
+        assert!(!stack.can_go_back());
+        stack.reset_placeholder();
+        stack.push("https://example.com/".into());
+        assert!(!stack.can_go_back());
+        assert_eq!(stack.entries, vec!["https://example.com/".to_string()]);
+    }
+
+    #[test]
+    fn nav_stack_keeps_real_history_when_the_placeholder_reset_runs() {
+        let mut stack = NavStack::default();
+        stack.push("https://example.com/a".into());
+        stack.push("https://example.com/b".into());
+        stack.reset_placeholder();
+        assert!(stack.can_go_back());
+        assert_eq!(stack.entries.len(), 2);
     }
 
     #[test]

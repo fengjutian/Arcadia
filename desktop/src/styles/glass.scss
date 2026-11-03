@@ -1,0 +1,396 @@
+// Glass surface system.
+//
+// One vocabulary for every floating surface in the app: a translucent pane, a
+// hairline light edge, a top bevel and a soft ambient shadow, sitting on an
+// accent-tinted canvas. Colours live in tokens, so all thirteen accent themes
+// inherit the treatment without per-theme rules; only light and dark differ.
+//
+// Performance budget: `backdrop-filter` is spent on chrome and overlays (a
+// handful of layers at most). Dense grids (library cards, result cards) get the
+// same translucent fill, sheen and bevel but a smaller blur, because a scrolling
+// container full of blurred layers is the one thing that reliably drops frames
+// on WebView2.
+
+// ---------------------------------------------------------------------------
+// Tokens
+// ---------------------------------------------------------------------------
+body[data-theme] {
+  --glass-blur: 14px;
+  --glass-blur-chrome: 22px;
+  --glass-blur-overlay: 30px;
+  --glass-saturate: 140%;
+
+  // Surface fills. Light panes stay bright enough that the ink on them keeps its
+  // existing contrast; the translucency lets the canvas glow read through and is
+  // what makes the pane look like glass rather than paint.
+  --glass-fill-soft: color-mix(in srgb, #fff 50%, transparent);
+  --glass-fill: color-mix(in srgb, #fff 66%, transparent);
+  --glass-fill-strong: color-mix(in srgb, #fff 78%, transparent);
+
+  // The diagonal sheen that makes a flat fill read as a physical pane.
+  --glass-sheen: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, .52) 0%,
+    rgba(255, 255, 255, .10) 44%,
+    rgba(255, 255, 255, 0) 70%
+  );
+
+  --glass-edge: color-mix(in srgb, #fff 32%, var(--accent-border, #d7e0d9));
+  --glass-edge-strong: color-mix(in srgb, #fff 58%, var(--accent-border, #d7e0d9));
+  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, .92);
+  --glass-bevel:
+    inset 0 1px 0 rgba(255, 255, 255, .90),
+    inset 0 -1px 0 rgba(24, 38, 30, .045);
+  --glass-shadow:
+    0 1px 2px rgba(24, 38, 30, .05),
+    0 12px 26px -16px rgba(24, 38, 30, .34),
+    0 32px 60px -30px rgba(24, 38, 30, .28);
+  --glass-shadow-lift:
+    0 2px 6px rgba(24, 38, 30, .07),
+    0 20px 40px -18px rgba(24, 38, 30, .38),
+    0 44px 80px -36px rgba(24, 38, 30, .36);
+  --glass-shadow-overlay:
+    0 2px 6px rgba(16, 28, 22, .10),
+    0 28px 64px -24px rgba(16, 28, 22, .46);
+
+  // Ambient canvas. Three wide accent glows give the panes something to sit in;
+  // `fixed` keeps them anchored while a route scrolls.
+  background-color: color-mix(in srgb, var(--page, #f7f8f7) 92%, var(--accent));
+  background-image:
+    radial-gradient(54rem 34rem at 2% -14%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(44rem 30rem at 104% -4%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 68%),
+    radial-gradient(58rem 42rem at 72% 118%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 72%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+body[data-theme='dark'] {
+  --glass-fill-soft: rgba(255, 255, 255, .035);
+  --glass-fill: rgba(255, 255, 255, .055);
+  --glass-fill-strong: rgba(255, 255, 255, .075);
+  --glass-sheen: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, .10) 0%,
+    rgba(255, 255, 255, .03) 44%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  --glass-edge: rgba(255, 255, 255, .11);
+  --glass-edge-strong: rgba(255, 255, 255, .16);
+  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, .09);
+  --glass-bevel:
+    inset 0 1px 0 rgba(255, 255, 255, .10),
+    inset 0 -1px 0 rgba(0, 0, 0, .38);
+  --glass-shadow:
+    0 1px 2px rgba(0, 0, 0, .38),
+    0 20px 40px -22px rgba(0, 0, 0, .68);
+  --glass-shadow-lift:
+    0 2px 8px rgba(0, 0, 0, .46),
+    0 32px 64px -26px rgba(0, 0, 0, .78);
+  --glass-shadow-overlay:
+    0 2px 8px rgba(0, 0, 0, .5),
+    0 32px 70px -24px rgba(0, 0, 0, .8);
+
+  background-image:
+    radial-gradient(52rem 32rem at 2% -12%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 70%),
+    radial-gradient(42rem 30rem at 104% -4%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 68%),
+    radial-gradient(56rem 42rem at 72% 116%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%);
+}
+
+// The page surfaces have to become transparent for the canvas to be visible.
+body[data-theme] .app-content,
+body[data-theme] .route-view,
+body[data-theme] .page {
+  background-color: transparent;
+}
+
+// ---------------------------------------------------------------------------
+// Window chrome
+// ---------------------------------------------------------------------------
+body[data-theme] .app-topbar {
+  background-color: color-mix(in srgb, var(--chrome-bg, #e7ebe7) 78%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+  box-shadow:
+    inset 0 -1px 0 var(--chrome-border, #d8ded9),
+    inset 0 1px 0 rgba(255, 255, 255, .4),
+    0 14px 30px -26px rgba(24, 38, 30, .6);
+}
+
+body[data-theme] .app-sider.ant-layout-sider {
+  background-color: color-mix(in srgb, var(--page, #f7f8f7) 46%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+  border-right: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, .28);
+}
+
+body[data-theme='dark'] .app-sider.ant-layout-sider {
+  background-color: rgba(0, 0, 0, .18);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, .04);
+}
+
+// The rail button is the only interactive element in the chrome: it gets the same
+// vocabulary on hover and a distinctly lit plate when active.
+body[data-theme] .rail-button {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+body[data-theme] .rail-button:hover {
+  border-color: color-mix(in srgb, var(--glass-edge) 90%, transparent);
+  background-color: var(--glass-fill);
+  box-shadow: var(--glass-bevel), 0 6px 14px -10px rgba(24, 38, 30, .5);
+}
+
+body[data-theme] .rail-button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-edge));
+  background-color: color-mix(in srgb, var(--accent) 14%, var(--glass-fill));
+  box-shadow: var(--glass-bevel), 0 8px 18px -12px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+// ---------------------------------------------------------------------------
+// Cards
+// ---------------------------------------------------------------------------
+body[data-theme] .ui-card {
+  border: 1px solid var(--glass-edge);
+  border-radius: 16px;
+  background-color: var(--glass-fill-strong);
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-shadow), var(--glass-bevel);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background-color .18s ease;
+}
+
+body[data-theme] .ui-card.is-hoverable:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-edge));
+  background-color: var(--glass-fill-strong);
+  box-shadow: var(--glass-shadow-lift), var(--glass-bevel);
+  transform: translateY(-2px);
+}
+
+// ---------------------------------------------------------------------------
+// Library
+// ---------------------------------------------------------------------------
+// The page already centralises its surfaces in custom properties, so remapping
+// those to glass tokens restyles every card at once.
+body[data-theme] .library-page {
+  --library-surface: color-mix(in srgb, #fff 60%, transparent);
+  --library-surface-strong: color-mix(in srgb, #fff 78%, transparent);
+  --library-line: var(--glass-edge);
+  --library-shadow: var(--glass-shadow);
+  --library-shadow-hover: var(--glass-shadow-lift);
+}
+
+body[data-theme='dark'] .library-page {
+  --library-surface: rgba(255, 255, 255, .04);
+  --library-surface-strong: rgba(255, 255, 255, .06);
+  --library-line: var(--glass-edge);
+  --library-shadow: var(--glass-shadow);
+  --library-shadow-hover: var(--glass-shadow-lift);
+}
+
+body[data-theme] .library-page :is(.document-card, .library-metric, .library-collection, .library-add-tile) {
+  background-color: var(--library-surface-strong);
+  background-image: var(--glass-sheen);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-shadow), var(--glass-bevel);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+body[data-theme] .library-page .document-card.is-hoverable:hover,
+body[data-theme] .library-page .library-collection:hover {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--glass-edge));
+  box-shadow: var(--glass-shadow-lift), var(--glass-bevel);
+}
+
+// The add tile is an empty state: keep its dashed outline readable, drop the
+// shadow so it never competes with real content.
+body[data-theme] .library-page .library-add-tile {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--accent-border, #d7e0d9));
+  box-shadow: none;
+  background-color: var(--glass-fill-soft);
+}
+
+body[data-theme] .library-page :is(.library-search, .library-tabs > .ui-tabs__nav) {
+  border-color: var(--glass-edge);
+}
+
+body[data-theme] .library-page .library-search {
+  background-color: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-bevel);
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+body[data-theme] .search-page {
+  --search-card-bg: color-mix(in srgb, #fff 78%, transparent);
+  --search-line: var(--glass-edge);
+}
+
+body[data-theme='dark'] .search-page {
+  --search-card-bg: rgba(255, 255, 255, .055);
+  --search-line: var(--glass-edge);
+}
+
+body[data-theme] .search-page :is(.result-card, .ai-search-answer) {
+  background-image: var(--glass-sheen);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-shadow), var(--glass-bevel);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+body[data-theme] .search-page .result-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-edge));
+  box-shadow: var(--glass-shadow-lift), var(--glass-bevel);
+}
+
+// ---------------------------------------------------------------------------
+// Overlays: the one place where the blur is genuinely visible
+// ---------------------------------------------------------------------------
+body[data-theme] :is(.ui-popover, .ui-dropdown, .ui-dialog, .ui-confirm, .ui-drawer, .ui-message) {
+  border: 1px solid var(--glass-edge-strong);
+  background-color: var(--glass-fill-strong);
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-shadow-overlay), var(--glass-bevel);
+  -webkit-backdrop-filter: blur(var(--glass-blur-overlay)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur-overlay)) saturate(160%);
+}
+
+body[data-theme] .ui-dialog__backdrop {
+  background-color: color-mix(in srgb, #0d1a14 42%, transparent);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  backdrop-filter: blur(6px) saturate(120%);
+}
+
+// Menu rows read better on a translucent plate when the highlight is a wash
+// rather than an opaque fill.
+body[data-theme] .ui-dropdown__item[data-highlighted] {
+  background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+// ---------------------------------------------------------------------------
+// Floating panels
+// ---------------------------------------------------------------------------
+body[data-theme] :is(.ai-panel, .context-card, .notes-panel, .privacy-status) {
+  border-color: var(--glass-edge);
+  background-color: var(--glass-fill-strong);
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-shadow), var(--glass-bevel);
+  -webkit-backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+}
+
+// ---------------------------------------------------------------------------
+// Browser chrome and the new tab
+// ---------------------------------------------------------------------------
+body[data-theme] .browser-toolbar {
+  background-color: color-mix(in srgb, var(--chrome-bg, #e7ebe7) 74%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+  box-shadow:
+    inset 0 -1px 0 var(--chrome-border, #d8ded9),
+    inset 0 1px 0 rgba(255, 255, 255, .38);
+}
+
+// The new tab keeps its own backdrop: it is the only surface painting that
+// region when no page is loaded, so the canvas must not show through it.
+// The base rule forces the light gradient with `!important`, which left the dark
+// theme with white text on a white page; the dark backdrop has to be re-asserted
+// at the same weight. Wallpaper mode keeps its own photo layer.
+body[data-theme='dark'][data-wallpaper='off'] .new-tab {
+  background: radial-gradient(circle at 50% 30%, #20372a, #111714 46%) !important;
+}
+
+body[data-theme] .new-tab__workspace {
+  border: 1px solid var(--glass-edge);
+  background-color: var(--glass-fill-strong);
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-shadow-lift), var(--glass-bevel);
+  -webkit-backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
+}
+
+body[data-theme] .new-tab :is(.quick-site, .new-tab__utility, .new-tab__weather) {
+  border-color: var(--glass-edge);
+  background-color: var(--glass-fill);
+  box-shadow: var(--glass-bevel);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+// The dark new tab paints its own near-black canvas, so the workspace keeps a
+// dark translucent fill instead of borrowing the light-theme white.
+body[data-theme='dark'] .new-tab__workspace {
+  background-color: color-mix(in srgb, #1b241f 86%, transparent);
+  border-color: var(--glass-edge);
+}
+
+body[data-theme='dark'] .new-tab :is(.quick-site, .new-tab__utility, .new-tab__weather) {
+  background-color: rgba(25, 34, 29, .62);
+  border-color: var(--glass-edge);
+}
+
+body[data-theme] .new-tab .quick-site:hover {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-edge));
+  background-color: var(--glass-fill-strong);
+}
+
+// ---------------------------------------------------------------------------
+// Degradation
+// ---------------------------------------------------------------------------
+// Without `backdrop-filter` a translucent pane over artwork turns into mud, so
+// the panes fall back to a near-solid fill that keeps the layout and the ink.
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  body[data-theme] :is(.ui-card, .library-page .document-card, .library-page .library-metric,
+      .library-page .library-collection, .search-page .result-card, .search-page .ai-search-answer,
+      .ui-popover, .ui-dropdown, .ui-dialog, .ui-confirm, .ui-drawer, .ai-panel, .notes-panel) {
+    background-color: color-mix(in srgb, var(--page, #f7f8f7) 90%, #fff);
+    background-image: var(--glass-sheen);
+  }
+
+  body[data-theme='dark'] :is(.ui-card, .ui-popover, .ui-dropdown, .ui-dialog, .ui-confirm, .ui-drawer) {
+    background-color: #1e2723;
+  }
+}
+
+// Users who ask the system for less transparency get the same content on solid
+// panes: the glass is decoration, never the carrier of meaning.
+@media (prefers-reduced-transparency: reduce) {
+  body[data-theme] :is(.ui-card, .library-page .document-card, .library-page .library-metric,
+      .library-page .library-collection, .search-page .result-card, .search-page .ai-search-answer,
+      .ui-popover, .ui-dropdown, .ui-dialog, .ui-confirm, .ui-drawer, .ai-panel, .notes-panel,
+      .app-sider.ant-layout-sider, .app-topbar) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: color-mix(in srgb, var(--page, #f7f8f7) 92%, #fff);
+    background-image: none;
+  }
+
+  body[data-theme='dark'] :is(.ui-card, .ui-popover, .ui-dropdown, .ui-dialog, .ui-confirm,
+      .ui-drawer, .app-sider.ant-layout-sider, .app-topbar) {
+    background-color: #1e2723;
+  }
+
+  body[data-theme] .ui-dialog__backdrop {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+// Escape hatch for diagnostics and screenshot comparison: `data-glass="off"`
+// paints the pre-glass surfaces without touching the rest of the theme.
+body[data-glass='off'] :is(.ui-card, .ui-popover, .ui-dropdown, .ui-dialog, .ui-confirm, .ui-drawer) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-image: none;
+  background-color: #fff;
+}

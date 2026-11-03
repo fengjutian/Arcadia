@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 /**
  * Default-browser integration (see `src-tauri/src/default_browser.rs`).
@@ -29,13 +30,15 @@ const FALLBACK: DefaultBrowserStatus = {
 
 export async function getDefaultBrowserStatus(): Promise<DefaultBrowserStatus> {
   if (!isTauri()) return FALLBACK
-  return invoke<DefaultBrowserStatus>('default_browser_status')
+  const status = await invoke<DefaultBrowserStatus | null>('default_browser_status')
+  return status ?? FALLBACK
 }
 
 /** Registers the per-user ProgID/capabilities entries and returns the new state. */
 export async function registerAsDefaultBrowser(): Promise<DefaultBrowserStatus> {
   if (!isTauri()) throw new Error('default browser registration requires the desktop app')
-  return invoke<DefaultBrowserStatus>('default_browser_register')
+  const status = await invoke<DefaultBrowserStatus | null>('default_browser_register')
+  return status ?? FALLBACK
 }
 
 /** Opens Windows "Default apps" (focused on Arcadia where the OS supports it). */
@@ -66,4 +69,20 @@ export async function consumeLaunchUrl(): Promise<string | null> {
   if (!url || deliveredLaunchUrl === url) return null
   deliveredLaunchUrl = url
   return url
+}
+
+/** Event the Rust side emits when a second launch forwards a URL. */
+export const LAUNCH_URL_EVENT = 'arcadia://launch-url'
+
+/**
+ * Subscribes to URLs forwarded by a second process. The single-instance
+ * plugin already exited that process, so this is the only delivery path for
+ * "click a link while Arcadia is running".
+ */
+export function listenLaunchUrl(handler: (url: string) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => undefined)
+  return listen<{ url?: string }>(LAUNCH_URL_EVENT, event => {
+    const url = event.payload?.url
+    if (url && /^https?:\/\//i.test(url)) handler(url)
+  })
 }

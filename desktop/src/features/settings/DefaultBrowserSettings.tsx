@@ -62,13 +62,16 @@ export function DefaultBrowserSettings() {
     setError('')
     try {
       setStatus(await registerAsDefaultBrowser())
-      await openDefaultAppsSettings()
-      messageApi.info(t("已打开 Windows 默认应用设置，请在「Web 浏览器」中选择 Arcadia。"))
     } catch (caught) {
       setError(t("设置默认浏览器失败：{value0}", { value0: String(caught) }))
-    } finally {
       setRegistering(false)
+      return
     }
+    setRegistering(false)
+    // Registration and the system page are separate steps: failing to open
+    // Settings must not be reported as a failed registration.
+    await openSettingsPage()
+    messageApi.info(t("已打开 Windows 默认应用设置，请在「Web 浏览器」中选择 Arcadia。"))
   }
 
   async function openSettingsPage() {
@@ -76,11 +79,12 @@ export function DefaultBrowserSettings() {
     try {
       await openDefaultAppsSettings()
     } catch (caught) {
-      setError(t("设置默认浏览器失败：{value0}", { value0: String(caught) }))
+      setError(t("无法打开 Windows 默认应用设置：{value0}", { value0: String(caught) }))
     }
   }
 
   const registration = status?.registered ? t("已注册为系统浏览器") : t("尚未注册为系统浏览器")
+  const supported = status?.platformSupported === true
 
   return <>{contextHolder}<Card title={<Space><GlobalOutlined/>{t("默认浏览器")}</Space>} className="settings-card default-browser-settings">
     <div className={`default-browser-status${status?.isDefault ? ' is-default' : ''}`}>
@@ -97,15 +101,15 @@ export function DefaultBrowserSettings() {
         <Typography.Paragraph type="secondary">{t("Windows 要求由你本人确认默认应用：点击后 Arcadia 会注册为可选浏览器，并打开系统默认应用设置。")}</Typography.Paragraph>
       </div>
       <Space wrap>
-        <Button type="primary" loading={registering} disabled={status?.isDefault} onClick={() => void makeDefault()}>{t("设为默认浏览器")}</Button>
+        <Button type="primary" loading={registering} disabled={!supported || status?.isDefault} onClick={() => void makeDefault()}>{t("设为默认浏览器")}</Button>
         <Button icon={<ReloadOutlined/>} loading={refreshing} onClick={() => void refresh()}>{t("刷新状态")}</Button>
       </Space>
     </div>
     <div className="default-browser-footer">
       <Typography.Text type="secondary">{t("注册状态：{value0}", { value0: registration })}</Typography.Text>
-      <Button type="link" icon={<ExportOutlined/>} onClick={() => void openSettingsPage()}>{t("仅打开 Windows 默认应用设置")}</Button>
+      {supported && <Button type="link" icon={<ExportOutlined/>} onClick={() => void openSettingsPage()}>{t("仅打开 Windows 默认应用设置")}</Button>}
     </div>
-    <Alert type="info" showIcon message={t("在系统设置中完成最后一步")} description={t("在「默认应用」中搜索 Arcadia，把「Web 浏览器」设为 Arcadia；回到本页后状态会自动刷新。")}/>
+    {supported && <Alert type="info" showIcon message={t("在系统设置中完成最后一步")} description={t("在「默认应用」中搜索 Arcadia，把「Web 浏览器」设为 Arcadia；回到本页后状态会自动刷新。")}/>}
     {error && <Typography.Text type="danger">{error}</Typography.Text>}
   </Card></>
 }

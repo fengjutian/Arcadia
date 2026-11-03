@@ -67,3 +67,26 @@ export function decideTabSync(inputs: TabSyncInputs): TabSyncDecision {
  * number changes we want both to drift together.
  */
 export const TAB_SYNC_FAILURE_THRESHOLD = FAILURE_THRESHOLD
+
+/**
+ * Fields the poll loop writes into the tab record. Used by the browser page to
+ * bail out of a `setTabs` when nothing moved: the 750ms poll used to rebuild
+ * the tab object (and re-render the whole page) on every tick.
+ */
+const SYNCED_TAB_FIELDS: Array<keyof BrowserTab> = [
+  'url',
+  'title',
+  'favicon',
+  'loading',
+  'scrollX',
+  'scrollY',
+  'scrollDepth',
+  'canGoBack',
+  'canGoForward',
+  'crashed',
+]
+
+/** True when applying `next` over `current` would not change anything visible. */
+export function sameSyncedTab(current: BrowserTab, next: BrowserTab): boolean {
+  return SYNCED_TAB_FIELDS.every(field => current[field] === next[field])
+}
