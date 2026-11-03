@@ -746,7 +746,7 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
       const activeProvider = providers.find(item => item.id === providerId)
       const result = await runResearchAgent(defaultAgentDeps, trimmed, {
         providerId,
-        nativeToolCalling: activeProvider ? activeProvider.type !== 'ollama' : false,
+        nativeToolCalling: Boolean(activeProvider),
         requestApproval: requestMcpApproval,
       })
       const content = result.stopped && !result.answer

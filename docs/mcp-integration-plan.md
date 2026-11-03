@@ -556,3 +556,12 @@ Agent/用户提出调用
   - 助手仅在非 Ollama Provider 上启用，避免向不支持 tools 的本地模型发送该字段。
 - 测试：新增原生 tool calls 解析用例与前端“原生选择工具”用例；Rust 270 通过 + 4 项忽略，前端 108 文件 / 771 用例通过。
 
+### 12.28 第二十八批：Provider 工具调用的真实 HTTP 契约测试（2026-11-03）
+
+- 新增本地 HTTP mock Provider 测试：实际启动 TCP 服务，验证 `OpenAICompatibleProvider`：
+  - 请求体包含 `tools:[{type:"function",function:{name,description,parameters}}]`；
+  - 响应 `content:null` + `tool_calls` 能被解析为 `ChatToolCall`；
+  - 工具参数以原始 JSON 字符串返回。
+- 该测试不依赖任何外部 API key，进入常规 Rust 测试集（非 `#[ignore]`）。
+- 结果：Rust 271 通过 + 4 项忽略；前端 771 通过。
+

@@ -1,4 +1,4 @@
-use super::{AiProvider, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ProviderError};
+use super::{AiProvider, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ChatToolCall, ProviderError};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,23 @@ pub struct OllamaProvider {
 struct OllamaRequest {
     model: String,
     messages: Vec<OllamaMessage>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<OllamaTool>,
     stream: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct OllamaTool {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: OllamaFunction,
+}
+
+#[derive(Debug, Serialize)]
+struct OllamaFunction {
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
 }
 
 #[derive(Debug, Serialize)]
@@ -35,6 +51,22 @@ struct OllamaResponse {
 struct OllamaResponseMessage {
     #[serde(default)]
     content: Option<String>,
+    #[serde(default)]
+    tool_calls: Vec<OllamaToolCall>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaToolCall {
+    #[serde(default)]
+    function: Option<OllamaToolCallFunction>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaToolCallFunction {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    arguments: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -61,9 +93,22 @@ impl AiProvider for OllamaProvider {
         let client = reqwest::Client::builder().timeout(self.timeout).build()?;
         let messages: Vec<OllamaMessage> =
             request.messages.into_iter().map(message_to_wire).collect();
+        let tools = request
+            .tools
+            .into_iter()
+            .map(|tool| OllamaTool {
+                kind: "function",
+                function: OllamaFunction {
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                },
+            })
+            .collect();
         let body = OllamaRequest {
             model: self.model.clone(),
             messages,
+            tools,
             stream: false,
         };
         let url = format!("{}/api/chat", self.base_url.trim_end_matches('/'));
@@ -79,11 +124,25 @@ impl AiProvider for OllamaProvider {
         let parsed: OllamaResponse = serde_json::from_str(&text).map_err(|error| {
             ProviderError::InvalidResponse(format!("{error}: {}", sanitize_body(&text)))
         })?;
-        let content = parsed
-            .message
-            .and_then(|message| message.content)
-            .unwrap_or_default();
-        if content.is_empty() {
+        let mut content = String::new();
+        let mut tool_calls = Vec::new();
+        if let Some(message) = parsed.message {
+            content = message.content.unwrap_or_default();
+            for (index, call) in message.tool_calls.into_iter().enumerate() {
+                if let Some(function) = call.function {
+                    if !function.name.is_empty() {
+                        tool_calls.push(ChatToolCall {
+                            id: format!("ollama-{index}"),
+                            name: function.name,
+                            arguments: serde_json::to_string(&function.arguments)
+                                .unwrap_or_else(|_| "{}".into()),
+                        });
+                    }
+                }
+            }
+        }
+        let content = content.trim().to_string();
+        if content.is_empty() && tool_calls.is_empty() {
             return Err(ProviderError::InvalidResponse(
                 "empty assistant content".into(),
             ));
@@ -92,7 +151,7 @@ impl AiProvider for OllamaProvider {
             content,
             prompt_tokens: None,
             completion_tokens: None,
-            tool_calls: Vec::new(),
+            tool_calls,
         })
     }
 
@@ -108,6 +167,7 @@ impl AiProvider for OllamaProvider {
         let body = OllamaRequest {
             model: self.model.clone(),
             messages,
+            tools: Vec::new(),
             stream: true,
         };
         let url = format!("{}/api/chat", self.base_url.trim_end_matches('/'));
@@ -265,6 +325,84 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].delta, "ok");
         assert!(buf.contains("par"));
+    }
+
+    #[tokio::test]
+    async fn sends_tools_and_parses_ollama_tool_calls() {
+        use std::io::{BufRead, Read, Write};
+        use std::net::TcpListener;
+        use std::sync::{Arc, Mutex};
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind ollama mock");
+        let address = listener.local_addr().expect("ollama address");
+        let seen = Arc::new(Mutex::new(None::<serde_json::Value>));
+        let server_seen = seen.clone();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("request line");
+            let mut length = 0usize;
+            loop {
+                let mut header = String::new();
+                reader.read_line(&mut header).expect("header");
+                if header == "\r\n" || header.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = header.split_once(':') {
+                    if name.eq_ignore_ascii_case("content-length") {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                }
+            }
+            let mut body = vec![0u8; length];
+            reader.read_exact(&mut body).expect("body");
+            *server_seen.lock().unwrap() = Some(serde_json::from_slice(&body).expect("json body"));
+            let response = serde_json::json!({
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{
+                        "function": {"name": "search", "arguments": {"query": "cats"}}
+                    }]
+                }
+            })
+            .to_string();
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
+                response.len()
+            );
+            stream.write_all(reply.as_bytes()).expect("response");
+        });
+
+        let provider = OllamaProvider {
+            base_url: format!("http://{address}"),
+            model: "mock".into(),
+            timeout: Duration::from_secs(5),
+        };
+        let request = ChatRequest {
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "find cats".into(),
+            }],
+            temperature: Some(0.0),
+            max_tokens: Some(64),
+            tools: vec![crate::providers::ChatTool {
+                name: "search".into(),
+                description: "Search the web".into(),
+                parameters: serde_json::json!({"type": "object"}),
+            }],
+        };
+        let response = provider.chat(request).await.expect("ollama chat");
+        assert_eq!(response.content, "");
+        assert_eq!(response.tool_calls.len(), 1);
+        assert_eq!(response.tool_calls[0].name, "search");
+        assert_eq!(response.tool_calls[0].arguments, "{\"query\":\"cats\"}");
+
+        server.join().expect("ollama mock");
+        let sent = seen.lock().unwrap().clone().expect("request body");
+        assert_eq!(sent["tools"][0]["type"], "function");
+        assert_eq!(sent["tools"][0]["function"]["name"], "search");
     }
 
     #[test]

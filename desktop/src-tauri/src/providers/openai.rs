@@ -456,6 +456,89 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn sends_tools_and_parses_native_tool_calls() {
+        use std::io::{BufRead, Read, Write};
+        use std::net::TcpListener;
+        use std::sync::{Arc, Mutex};
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock provider");
+        let address = listener.local_addr().expect("mock address");
+        let seen = Arc::new(Mutex::new(None::<serde_json::Value>));
+        let server_seen = seen.clone();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("request line");
+            let mut length = 0usize;
+            loop {
+                let mut header = String::new();
+                reader.read_line(&mut header).expect("header");
+                if header == "\r\n" || header.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = header.split_once(':') {
+                    if name.eq_ignore_ascii_case("content-length") {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                }
+            }
+            let mut body = vec![0u8; length];
+            reader.read_exact(&mut body).expect("body");
+            *server_seen.lock().unwrap() = Some(serde_json::from_slice(&body).expect("json body"));
+            let response = serde_json::json!({
+                "choices": [{
+                    "message": {
+                        "content": null,
+                        "tool_calls": [{
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {"name": "search", "arguments": "{\"query\":\"cats\"}"}
+                        }]
+                    }
+                }]
+            })
+            .to_string();
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
+                response.len()
+            );
+            stream.write_all(reply.as_bytes()).expect("response");
+        });
+
+        let provider = OpenAICompatibleProvider {
+            base_url: format!("http://{address}"),
+            model: "mock".into(),
+            api_key: None,
+            timeout: Duration::from_secs(5),
+        };
+        let request = ChatRequest {
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "find cats".into(),
+            }],
+            temperature: Some(0.0),
+            max_tokens: Some(64),
+            tools: vec![crate::providers::ChatTool {
+                name: "search".into(),
+                description: "Search the web".into(),
+                parameters: serde_json::json!({"type": "object", "properties": {"query": {"type": "string"}}}),
+            }],
+        };
+        let response = provider.chat(request).await.expect("chat");
+        assert_eq!(response.content, "");
+        assert_eq!(response.tool_calls.len(), 1);
+        assert_eq!(response.tool_calls[0].name, "search");
+        assert_eq!(response.tool_calls[0].arguments, "{\"query\":\"cats\"}");
+
+        server.join().expect("mock server");
+        let sent = seen.lock().unwrap().clone().expect("request body");
+        assert_eq!(sent["tools"][0]["type"], "function");
+        assert_eq!(sent["tools"][0]["function"]["name"], "search");
+        assert!(sent["tools"][0]["function"]["parameters"].is_object());
+    }
+
     #[test]
     fn sse_extracts_usage_when_choices_empty() {
         let mut buf = String::new();
