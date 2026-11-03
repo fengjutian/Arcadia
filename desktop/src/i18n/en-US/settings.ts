@@ -494,4 +494,6 @@ export const settings: Messages = {
   '书签按 URL 去重后写入本地数据库，也可以把这次导入同时保存为一个 Space。': 'Bookmarks are de-duplicated by URL and stored in the local database; the import can also be saved as a Space.',
   '书签导入完成': 'Bookmarks imported',
   '读取收藏失败：{value0}': 'Could not read bookmarks: {value0}',
+  '毛玻璃效果': 'Frosted glass',
+  '面板、卡片和浮层使用半透明模糊。关闭后改为不透明表面，低配设备滚动更流畅。': 'Panels, cards and overlays use translucent blur. Turning this off switches to opaque surfaces, which scroll more smoothly on low-end hardware.',
 }

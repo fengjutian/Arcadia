@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { UIProvider } from './components/ui'
 import { AppRouter } from './app/AppRouter'
 import { readThemePreference, THEME_CHANGE_EVENT, type ThemePreference } from './features/settings/theme'
-import { APPEARANCE_CHANGE_EVENT, IMAGE_THEMES, readAppearancePreference, readBackgroundImageEnabled, readImageTheme, VISUAL_THEME_CHANGE_EVENT, type AppearancePreference, type ImageThemeId, type VisualThemeChangeDetail } from './features/settings/visualTheme'
+import { APPEARANCE_CHANGE_EVENT, GLASS_EFFECT_CHANGE_EVENT, IMAGE_THEMES, applyGlassEffect, readAppearancePreference, readBackgroundImageEnabled, readGlassEffectEnabled, readImageTheme, VISUAL_THEME_CHANGE_EVENT, type AppearancePreference, type ImageThemeId, type VisualThemeChangeDetail } from './features/settings/visualTheme'
 import { BING_DAILY_CHANGE_EVENT, loadBingDailyImage, readCachedBingDailyImage, type BingDailyImage } from './features/settings/bingDailyTheme'
 import { readAdvancedSettings } from './features/settings/advanced'
 import { syncEnginePreferences } from './services/enginePreferences'
@@ -108,6 +108,16 @@ export default function App() {
     document.body.dataset.reduceMotion = readAdvancedSettings().reduceMotion ? 'true' : 'false'
     // Seed the native mirror that the next launch reads before WebView2 starts.
     syncEnginePreferences(readAdvancedSettings())
+  }, [])
+
+  // The frosted-glass material is a user preference (Settings -> 外观). The
+  // attribute is the only switch `glass.scss` reads, so applying it here keeps
+  // every surface - including the ones outside this tree - in sync.
+  useEffect(() => {
+    applyGlassEffect(readGlassEffectEnabled())
+    const apply = (event: Event) => applyGlassEffect((event as CustomEvent<boolean>).detail)
+    window.addEventListener(GLASS_EFFECT_CHANGE_EVENT, apply)
+    return () => window.removeEventListener(GLASS_EFFECT_CHANGE_EVENT, apply)
   }, [])
 
   const palette = PALETTES[resolvedPreference]

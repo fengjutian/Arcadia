@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   APPEARANCE_CHANGE_EVENT,
+  GLASS_EFFECT_CHANGE_EVENT,
   readAppearancePreference,
   readBackgroundImageEnabled,
+  readGlassEffectEnabled,
   readImageTheme,
   readThemeKind,
   VISUAL_THEME_CHANGE_EVENT,
   writeAppearancePreference,
   writeBackgroundImageEnabled,
+  writeGlassEffectEnabled,
   writeImageTheme,
   writeThemeKind,
   type VisualThemeChangeDetail,
@@ -80,5 +83,24 @@ describe('visual theme preferences', () => {
     localStorage.setItem('arcadia-background-image', 'false')
     localStorage.setItem('arcadia-theme-kind', 'image')
     expect(readBackgroundImageEnabled()).toBe(false)
+  })
+
+  it('toggles the glass material on the document and persists the choice', () => {
+    const listener = vi.fn()
+    window.addEventListener(GLASS_EFFECT_CHANGE_EVENT, listener)
+
+    expect(readGlassEffectEnabled()).toBe(true)
+    expect(document.body.dataset.glass).toBeUndefined()
+
+    writeGlassEffectEnabled(false)
+    expect(readGlassEffectEnabled()).toBe(false)
+    expect(document.body.dataset.glass).toBe('off')
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ detail: false }))
+
+    writeGlassEffectEnabled(true)
+    expect(document.body.dataset.glass).toBe('on')
+
+    window.removeEventListener(GLASS_EFFECT_CHANGE_EVENT, listener)
+    delete document.body.dataset.glass
   })
 })

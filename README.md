@@ -294,6 +294,7 @@ npm run test:rust     # 247 个用例，见下方说明
 - [开发路线图](docs/roadmap.md)
 - [开发技术文档](docs/development-guide.md)
 - [国际化方案](docs/internationalization.md)
+- [玻璃材质设计](docs/glass-material-design.md)
 - [WebView 原生能力矩阵](docs/browser-native-capability-matrix.md)
 - [主流浏览器借鉴分析](docs/browser-borrowing-analysis.md)
 - [网站封杀名单方案](docs/site-blacklist-plan.md)

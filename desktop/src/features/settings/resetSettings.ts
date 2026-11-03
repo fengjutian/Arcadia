@@ -4,7 +4,7 @@ import { DEFAULT_SHELL_SETTINGS, writeShellSettings } from './shell'
 import { DEFAULT_DOWNLOAD_SETTINGS, writeDownloadSettings } from './downloadSettings'
 import { DEFAULT_TYPOGRAPHY_SETTINGS, writeTypographySettings } from './typography'
 import { writeThemePreference } from './theme'
-import { writeAppearancePreference, writeBackgroundImageEnabled, writeImageTheme, writeThemeKind } from './visualTheme'
+import { writeAppearancePreference, writeBackgroundImageEnabled, writeGlassEffectEnabled, writeImageTheme, writeThemeKind } from './visualTheme'
 import { writeBingDailyRefresh } from './bingDailyTheme'
 import { DEFAULT_SEARCH_ENGINE_CONFIG, writeSearchEngineConfig } from '../browser/searchEngine'
 import { resetAllShortcutOverrides } from '../browser/shortcuts'
@@ -21,6 +21,7 @@ export function resetBrowserPreferences(): void {
   // default appearance is a colour theme without a background image.
   writeBackgroundImageEnabled(false)
   writeThemeKind('color')
+  writeGlassEffectEnabled(true)
   writeBingDailyRefresh(true)
   writeBrowserAppearance(DEFAULT_BROWSER_APPEARANCE)
   writeShellSettings(DEFAULT_SHELL_SETTINGS)

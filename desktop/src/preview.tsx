@@ -24,6 +24,9 @@ applyTypographySettings(readTypographySettings())
 const previewParams = new URLSearchParams(window.location.search)
 const previewQuery = previewParams.get('q') ?? ''
 document.body.dataset.theme = previewParams.get('theme') || 'beige'
+// Diagnostic-only: `?glass=off` paints the solid fallback of the glass material
+// so both states can be screenshotted without opening the preferences UI.
+document.body.dataset.glass = previewParams.get('glass') === 'off' ? 'off' : 'on'
 
 const hash = (window.location.hash || '#library').slice(1) as View
 const view: View = (['library', 'search', 'ai', 'settings', 'browser'] as string[]).includes(hash) ? hash : 'library'

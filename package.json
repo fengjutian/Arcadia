@@ -1,0 +1,18 @@
+{
+  "name": "arcadia",
+  "private": true,
+  "version": "0.6.0",
+  "description": "Arcadia — AI knowledge browser monorepo",
+  "workspaces": [
+    "desktop",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @arcadia/desktop",
+    "build": "npm run build -w @arcadia/desktop",
+    "test": "npm run test --workspaces --if-present",
+    "tauri:dev": "npm run tauri:dev -w @arcadia/desktop",
+    "tauri:build": "npm run tauri:build -w @arcadia/desktop",
+    "test:rust": "npm run test:rust -w @arcadia/desktop"
+  }
+}

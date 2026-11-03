@@ -14,7 +14,7 @@ import { DefaultBrowserSettings } from '../../features/settings/DefaultBrowserSe
 import { TaskPanel } from '../../features/tasks/TaskPanel'
 import { SiteBlacklistPanel } from '../../features/privacy/SiteBlacklistPanel'
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../features/settings/theme'
-import { IMAGE_THEMES, readAppearancePreference, readBackgroundImageEnabled, readImageTheme, readThemeKind, writeAppearancePreference, writeBackgroundImageEnabled, writeImageTheme, writeThemeKind, type AppearancePreference, type ImageThemeId, type ThemeKind } from '../../features/settings/visualTheme'
+import { IMAGE_THEMES, readAppearancePreference, readBackgroundImageEnabled, readGlassEffectEnabled, readImageTheme, readThemeKind, writeAppearancePreference, writeBackgroundImageEnabled, writeGlassEffectEnabled, writeImageTheme, writeThemeKind, type AppearancePreference, type ImageThemeId, type ThemeKind } from '../../features/settings/visualTheme'
 import { loadBingDailyImage, readBingDailyHistory, readBingDailyRefresh, readCachedBingDailyImage, selectBingDailyImage, writeBingDailyRefresh, type BingDailyImage } from '../../features/settings/bingDailyTheme'
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS, writeSearchEngineConfig } from '../../features/browser/searchEngine'
 import { isSearchTemplateValid } from '../../features/browser/navigation'
@@ -126,6 +126,7 @@ function GeneralSettings() {
   const [themeKind, setThemeKind] = useState<ThemeKind>(readThemeKind)
   const [imageTheme, setImageTheme] = useState<ImageThemeId>(readImageTheme)
   const [backgroundImage, setBackgroundImage] = useState(readBackgroundImageEnabled)
+  const [glassEffect, setGlassEffect] = useState(readGlassEffectEnabled)
   const [bingImage, setBingImage] = useState<BingDailyImage | null>(readCachedBingDailyImage)
   const [bingHistory, setBingHistory] = useState<BingDailyImage[]>(readBingDailyHistory)
   const [bingLoading, setBingLoading] = useState(false)
@@ -189,6 +190,11 @@ function GeneralSettings() {
     writeBackgroundImageEnabled(enabled)
   }
 
+  function changeGlassEffect(enabled: boolean) {
+    setGlassEffect(enabled)
+    writeGlassEffectEnabled(enabled)
+  }
+
   async function selectBingTheme(force = false) {
     setBingLoading(true)
     const image = await loadBingDailyImage(force)
@@ -215,10 +221,12 @@ function GeneralSettings() {
     setAppearance('system')
     setThemeKind('color')
     setBackgroundImage(false)
+    setGlassEffect(true)
     writeThemePreference('green')
     writeAppearancePreference('system')
     writeBackgroundImageEnabled(false)
     writeThemeKind('color')
+    writeGlassEffectEnabled(true)
   }
 
   const selected = THEME_OPTIONS.find(option => option.value === theme) ?? THEME_OPTIONS[0]
@@ -242,6 +250,11 @@ function GeneralSettings() {
         { label: <Space><SunOutlined/>{t("浅色")}</Space>,value:'light'},
         { label: <Space><MoonOutlined/>{t("深色")}</Space>,value:'dark'},
       ]}/>
+    </section>
+
+    <section className="appearance-setting appearance-setting--glass">
+      <div className="appearance-setting__copy"><span>▦</span><div><strong>{t("毛玻璃效果")}</strong><small>{t("面板、卡片和浮层使用半透明模糊。关闭后改为不透明表面，低配设备滚动更流畅。")}</small></div></div>
+      <Switch checked={glassEffect} aria-label={t("毛玻璃效果")} onChange={changeGlassEffect}/>
     </section>
 
     <div className="theme-mode-tabs" aria-label={t("主题类型")}>

@@ -86,3 +86,36 @@ export function writeImageTheme(value: ImageThemeId) {
   localStorage.setItem(BACKGROUND_IMAGE_KEY, 'true')
   notifyVisualTheme()
 }
+
+/**
+ * The frosted-glass material. It is decoration with a real cost: every blurred
+ * pane is a compositing layer, which is why the switch exists. Off is not a
+ * degraded experience — `glass.scss` keeps the same layout, edges and shadows on
+ * solid surfaces — so the preference is safe to leave off on slow hardware.
+ */
+const GLASS_EFFECT_KEY = 'arcadia-glass-effect'
+export const GLASS_EFFECT_CHANGE_EVENT = 'arcadia-glass-effect-change'
+
+export function readGlassEffectEnabled(): boolean {
+  try {
+    return localStorage.getItem(GLASS_EFFECT_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+/** Applies the material to the document: `on` keeps the blur, `off` is solid. */
+export function applyGlassEffect(enabled: boolean) {
+  if (typeof document === 'undefined') return
+  document.body.dataset.glass = enabled ? 'on' : 'off'
+}
+
+export function writeGlassEffectEnabled(value: boolean) {
+  try {
+    localStorage.setItem(GLASS_EFFECT_KEY, String(value))
+  } catch {
+    // A blocked storage backend still gets the visual change for this session.
+  }
+  applyGlassEffect(value)
+  window.dispatchEvent(new CustomEvent<boolean>(GLASS_EFFECT_CHANGE_EVENT, { detail: value }))
+}
