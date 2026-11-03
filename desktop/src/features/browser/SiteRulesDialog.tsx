@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
 import { Button, Modal, Select, Switch, Tag, Typography } from '@arcadia/ui'
-import { removeSiteRoute, setSiteRouteEnabled, type SiteRoute } from './siteRoutes'
+import { removeSiteRoute, setSiteRouteEnabled, type SiteRoute } from '@arcadia/browser-core/siteRoutes'
 
 /**
  * Manage every site rule in one place: pause without deleting, remove, and see

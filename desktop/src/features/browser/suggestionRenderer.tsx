@@ -1,5 +1,5 @@
 import { t } from '@arcadia/i18n'
-import type { SuggestionItem } from './suggestionProvider'
+import type { SuggestionItem } from '@arcadia/browser-core/suggestionProvider'
 
 const SOURCE_LABELS: Record<SuggestionItem['source'], string> = {
   'open-tab':t("已打开"),

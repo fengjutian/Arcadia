@@ -1,6 +1,6 @@
 import { t } from '@arcadia/i18n'
 import { Button, Drawer, Select, Space, Switch, Typography } from '@arcadia/ui'
-import { SITE_PERMISSION_KINDS, type SitePermissionKind, type SitePermissionRule, type SitePermissionValue } from './sitePermissions'
+import { SITE_PERMISSION_KINDS, type SitePermissionKind, type SitePermissionRule, type SitePermissionValue } from '@arcadia/browser-core/sitePermissions'
 
 const PERMISSION_LABELS: Record<SitePermissionKind, string> = {
   camera: t('摄像头'),

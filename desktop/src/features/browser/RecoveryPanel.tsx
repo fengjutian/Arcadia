@@ -1,7 +1,7 @@
 import { t } from '@arcadia/i18n'
 import { Button, Modal, Space, Typography } from '@arcadia/ui'
 import { ExclamationCircleOutlined } from '@arcadia/ui/icons'
-import type { SessionLockState } from '../../services/session'
+import type { SessionLockState } from '@arcadia/browser-core/session'
 
 export type RecoveryChoice = 'all' | 'pinned' | 'discard'
 

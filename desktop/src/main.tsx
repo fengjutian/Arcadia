@@ -16,9 +16,14 @@ import { isFloatingAssistantWindow } from './features/ai/floatingAssistant'
 import { LittleArcWindow } from './features/littlearc/LittleArcWindow'
 import { isLittleArcWindow } from './features/littlearc/littleArc'
 import { syncLocaleAcrossWindows } from '@arcadia/i18n'
+import { setAdBlockEnabledProvider } from '@arcadia/browser-core'
+import { isAdBlockerEnabled } from './features/plugins/adBlocker'
 
 applyTypographySettings(readTypographySettings())
 syncLocaleAcrossWindows()
+// The browser package cannot import app settings; hand it the one host
+// decision it needs (whether ad blocking is on) before any tab is created.
+setAdBlockEnabledProvider(isAdBlockerEnabled)
 
 const floatingAssistantWindow = isFloatingAssistantWindow()
 if (floatingAssistantWindow) document.body.classList.add('floating-assistant-window')

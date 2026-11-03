@@ -19,7 +19,9 @@
     "check:cef": "cargo check --features cef --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
+    "@arcadia/browser-core": "*",
     "@arcadia/i18n": "*",
+    "@arcadia/ui": "*",
     "@assistant-ui/react": "^0.15.32",
     "@base-ui/react": "^1.8.0",
     "@mozilla/readability": "^0.6.0",

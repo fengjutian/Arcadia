@@ -35,7 +35,7 @@ zip = { version = "4", default-features = false, features = ["deflate"] }
 wasmtime = { version = "49", features = ["component-model", "cranelift", "runtime"], default-features = false }
 pinyin = { path = "vendor/pinyin-0.11.0", default-features = false, features = ["plain"] }
 pdf-extract = "0.12.1"
-cef = { version = "156.3.0", optional = true }
+page-engine = { path = "../../crates/page-engine" }
 
 [dev-dependencies]
 wit-component = "0.258"
@@ -47,4 +47,4 @@ windows = "0.62"
 windows-sys = { version = "0.59", features = ["Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_Graphics_Gdi"] }
 
 [features]
-cef = ["dep:cef"]
+cef = ["page-engine/cef"]

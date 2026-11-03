@@ -7,10 +7,13 @@ pub mod capabilities;
 pub mod certificate_guard;
 pub mod default_browser;
 pub mod downloads;
-pub mod engine;
+// The page hosting layer lives in its own crate (`crates/page-engine`) so the
+// browser domain can be built and tested without the desktop application.
+pub use page_engine as engine;
 pub mod event_bus;
 pub mod local_store;
 pub mod mcp;
+pub mod page_engine_hooks;
 pub mod permission_guard;
 pub mod plugins;
 pub mod privacy;
@@ -160,16 +163,7 @@ impl DownloadIndex {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SitePermissionRule {
-    origin: String,
-    camera: String, // "allow" | "deny" | "ask"
-    microphone: String,
-    location: String,
-    notifications: String,
-    clipboard: String,
-}
+pub use page_engine::SitePermissionRule;
 
 /// Initialization script that intercepts the WebView's `contextmenu` event
 /// and forwards a structured payload to the host. The host (BrowserPage)
@@ -2233,6 +2227,7 @@ pub fn run() {
             // to wry (recording why) when it cannot start.
             app.manage(engine::PageEngineState::new(engine::select::select(
                 app.handle(),
+                page_engine_hooks::browser_page_hooks(),
             )));
             // Set the runtime window icon explicitly as well as the bundled executable
             // icon. This keeps `tauri dev` and packaged Windows builds consistent.

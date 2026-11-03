@@ -1,0 +1,25 @@
+[package]
+name = "page-engine"
+version = "0.6.0"
+edition = "2021"
+description = "Page hosting abstraction for Arcadia browser tabs (wry WebView + optional CEF)"
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["unstable", "devtools"] }
+thiserror = "1"
+tokio = { version = "1", features = ["sync", "time"] }
+url = "2"
+cef = { version = "156.3.0", optional = true }
+
+[target.x86_64-pc-windows-msvc.dependencies]
+webview2-com = "0.39.1"
+windows = "0.62"
+
+[features]
+default = []
+cef = ["dep:cef"]

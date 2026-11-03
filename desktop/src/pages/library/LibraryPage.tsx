@@ -38,7 +38,7 @@ import {
   type AutoArchiveSettings,
 } from '../../features/archive/archiveSettings'
 import { formatQueuedAt, queueHost } from '../../features/reading-queue/readingQueue'
-import { documentInScope } from '../../features/browser/spaces'
+import { documentInScope } from '@arcadia/browser-core/spaces'
 import { useSpaceCollectionFilter } from '../../features/browser/spaceScope'
 import { BookmarkImportDialog } from '../../features/import/BookmarkImportDialog'
 import { CLIP_KIND_LABEL, clipPreview, clipSourceHost, clipToMarkdown, clipsToMarkdown } from '../../features/clips/clips'

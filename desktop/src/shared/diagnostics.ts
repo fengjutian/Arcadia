@@ -1,4 +1,4 @@
-import { redactLogLine } from '../features/browser/logRedaction'
+import { redactLogLine } from '@arcadia/browser-core/logRedaction'
 
 export type DiagnosticLevel = 'info' | 'warn' | 'error'
 

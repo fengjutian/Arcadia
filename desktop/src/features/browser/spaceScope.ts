@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { listCollectionDocumentIds } from '../../api'
-import { SPACE_CHANGED_EVENT, SPACE_SCOPE_EVENT, activeCollectionId } from './spaces'
+import { SPACE_CHANGED_EVENT, SPACE_SCOPE_EVENT, activeCollectionId } from '@arcadia/browser-core/spaces'
 
 /**
  * Document ids allowed by the active Space's knowledge scope.

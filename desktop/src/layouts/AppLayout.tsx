@@ -7,10 +7,10 @@ import type { View } from '../types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TopBarPortalProvider } from '../app/TopBarPortal'
 import { diagnosticLog } from '../shared/diagnostics'
-import { listWorkspaces, type WorkspaceSummary } from '../services/workspaces'
+import { listWorkspaces, type WorkspaceSummary } from '@arcadia/browser-core/workspacesService'
 import { listCollections, type Collection } from '../api'
-import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_SCOPE_EVENT, SPACE_SURFACE_EVENT, clearCurrentSpace, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, spaceColorFor, spaceIconFor, writeSpaceIdentity, writeSpaceScope, type CurrentSpace } from '../features/browser/spaces'
-import { spaceMenuRows } from '../features/browser/spaceMenu'
+import { SPACE_CHANGED_EVENT, SPACE_MENU_ACTION_EVENT, SPACE_MENU_FALLBACK_EVENT, SPACE_MENU_OPEN_EVENT, SPACE_SCOPE_EVENT, SPACE_SURFACE_EVENT, clearCurrentSpace, dispatchSpaceRestore, dispatchSpaceSave, readCurrentSpace, readSpaceScopes, spaceColorFor, spaceIconFor, writeSpaceIdentity, writeSpaceScope, type CurrentSpace } from '@arcadia/browser-core/spaces'
+import { spaceMenuRows } from '@arcadia/browser-core/spaceMenu'
 import { readShellSettings, SHELL_SETTINGS_EVENT, writeShellSettings, type ShellSettings } from '../features/settings/shell'
 
 const items = [{ key: 'browser', icon: <Globe2/>, label:t("浏览器")},{key:'library',icon:<BookOpen/>,label:t("知识库")},{key:'search',icon:<Search/>,label:t("搜索")},{key:'ai',icon:<Sparkles/>,label:'AI Research'},{key:'mcp',icon:<Boxes/>,label:'MCP'}]as const

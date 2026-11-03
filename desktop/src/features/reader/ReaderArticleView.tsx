@@ -2,8 +2,8 @@ import { t } from '@arcadia/i18n'
 import { Typography } from '@arcadia/ui'
 import type { CSSProperties } from 'react'
 import type { ReaderArticle } from '../reader/types'
-import type { ReaderSiteStyle } from '../browser/siteReaderPrefs'
-import { hideCssFor } from '../browser/siteReaderPrefs'
+import type { ReaderSiteStyle } from '@arcadia/browser-core/siteReaderPrefs'
+import { hideCssFor } from '@arcadia/browser-core/siteReaderPrefs'
 
 export function ReaderArticleView({ article, style }: { article: ReaderArticle; style?: ReaderSiteStyle | null }) {
   const cssVars: Record<string, string> = {}

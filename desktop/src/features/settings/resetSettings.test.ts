@@ -7,7 +7,7 @@ import { readDownloadSettings, DEFAULT_DOWNLOAD_SETTINGS } from './downloadSetti
 import { readTypographySettings, DEFAULT_TYPOGRAPHY_SETTINGS } from './typography'
 import { readThemePreference } from './theme'
 import { readBackgroundImageEnabled } from './visualTheme'
-import { readSearchEngineConfig, DEFAULT_SEARCH_ENGINE_CONFIG } from '../browser/searchEngine'
+import { readSearchEngineConfig, DEFAULT_SEARCH_ENGINE_CONFIG } from '@arcadia/browser-core/searchEngine'
 
 describe('reset browser preferences', () => {
   beforeEach(() => localStorage.clear())

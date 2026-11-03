@@ -4,7 +4,7 @@ import { ReloadOutlined } from '@arcadia/ui/icons'
 import { useCallback, useEffect, useState } from 'react'
 import { getMigrationStatus, listStoredSitePermissions, ragEnqueueAll, ragIndexStatus, ragListJobs, ragRebuildIndex, ragReindexExtras, ragRetryJob, replaceSitePermissions, type MigrationStatus, type RagIndexStatus, type RagJobRow, listAIProviders } from '../../api'
 import type { AIProvider } from '../../types'
-import { SITE_PERMISSION_KINDS, type SitePermissionRule } from '../browser/sitePermissions'
+import { SITE_PERMISSION_KINDS, type SitePermissionRule } from '@arcadia/browser-core/sitePermissions'
 
 const DECISION_COLOR: Record<string, string> = { allow: 'green', deny: 'red', ask: 'gold' }
 

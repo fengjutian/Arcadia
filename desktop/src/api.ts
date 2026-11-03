@@ -2,8 +2,9 @@ import { t } from '@arcadia/i18n'
 import { invoke } from '@tauri-apps/api/core'
 import type { AIProvider, AIProviderType, ChatRequest, ChatResponse, Document, ProviderTestResult, Task } from './types'
 import type { HistoryEntry } from './features/history/dedupeHistory'
-import type { ClosedTab } from './features/browser/closedTabs'
-import type { SitePermissionRule } from './features/browser/sitePermissions'
+import type { ClosedTab } from '@arcadia/browser-core/closedTabs'
+import type { SitePermissionRule } from '@arcadia/browser-core/sitePermissions'
+import { replaceSitePermissions as replaceSitePermissionsCommand } from '@arcadia/browser-core/browserApi'
 import { countTextUnits } from './shared/textCount'
 import type { BrowserTab, ReadingActivity } from './types'
 
@@ -971,9 +972,9 @@ export async function listSitePermissions(): Promise<SitePermissionRule[]> {
 }
 
 export async function replaceSitePermissions(rules: SitePermissionRule[]): Promise<void> {
-  if (!isTauri()) return
-  const permissions = rules.flatMap(rule => (['camera', 'microphone', 'location', 'notifications', 'clipboard'] as const).map(                  (permissionKind                                                         )=>({origin:rule.origin,permissionKind,decision:rule[permissionKind]})))
-  await invoke('local_replace_site_permissions', { permissions })
+  // Owned by @arcadia/browser-core: the browser package persists the rules
+  // whenever they change, so the host re-exports the same command here.
+  await replaceSitePermissionsCommand(rules)
 }
 
 export interface MigrationStatus { version: number; pending: number }

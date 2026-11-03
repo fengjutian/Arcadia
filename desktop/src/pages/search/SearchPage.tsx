@@ -4,7 +4,7 @@ import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, In
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
-import { documentInScope } from '../../features/browser/spaces'
+import { documentInScope } from '@arcadia/browser-core/spaces'
 import { useSpaceCollectionFilter } from '../../features/browser/spaceScope'
 import { deleteDocument, deleteReadingSnapshot, listArchivedTabs, searchClips, searchDocuments, searchPageNotes, listReadingActivity, getSearchSuggestions, getSession, setSession, type ArchivedTab, type Clip, type DocumentSearchHit, type PageNote } from '../../api'
 import { CLIP_KIND_LABEL, clipPreview } from '../../features/clips/clips'

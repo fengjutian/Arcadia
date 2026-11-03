@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { applyDownloadUpdate, DOWNLOAD_FEED_LIMIT, normalizeDownloadPayload, type DownloadFeedEntry } from './downloadFeed'
-import { onNativeDownload } from '../../services/nativeBrowser'
+import { onNativeDownload } from '@arcadia/browser-core/nativeBrowser'
 
 export interface UseDownloadsOptions {
   /** Optional callback fired once per terminal (completed/failed) update. */

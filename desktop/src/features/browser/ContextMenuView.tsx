@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Menu, type MenuComponentProps } from '@arcadia/ui'
-import { onNativeContextMenu, type ContextMenuRequest } from '../../services/nativeBrowser'
-import { buildContextMenu, type ContextMenuAction, type ContextMenuCapabilities } from './contextMenu'
+import { onNativeContextMenu, type ContextMenuRequest } from '@arcadia/browser-core/nativeBrowser'
+import { buildContextMenu, type ContextMenuAction, type ContextMenuCapabilities } from '@arcadia/browser-core/contextMenu'
 
 export interface ContextMenuProps {
   /** Anchor element the menu is positioned relative to (e.g. the content surface). */

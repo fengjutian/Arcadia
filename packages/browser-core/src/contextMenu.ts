@@ -1,0 +1,178 @@
+import { t } from '@arcadia/i18n'
+/**
+ * Pure builders for the browser's right-click context menu. Each region
+ * (page / selection / link / image / input) returns its own item list with
+ * `enabled` flags reflecting URL safety and capability checks. The
+ * component layer maps these into the local menu adapter so that the
+ * state machine stays testable without rendering React.
+ */
+import type { ContextMenuRequest } from './nativeBrowser'
+import { isAllowedExternalUrl } from './nativeBrowser'
+import { classifyShellOpenUrl } from './externalSchemes'
+
+export type ContextMenuRegion = ContextMenuRequest['kind']
+
+export type ContextMenuAction =
+  | 'back'
+  | 'forward'
+  | 'reload'
+  | 'stop'
+  | 'print'
+  | 'view-source'
+  | 'copy'
+  | 'cut'
+  | 'paste'
+  | 'select-all'
+  | 'search-selection'
+  | 'ask-ai'
+  | 'translate-selection'
+  | 'screenshot-selection'
+  | 'add-to-notes'
+  | 'clip-selection'
+  | 'clip-link'
+  | 'clip-image'
+  | 'clip-page'
+  | 'open-link-current'
+  | 'open-link-new'
+  | 'open-link-external'
+  | 'copy-link'
+  | 'open-image-new'
+  | 'copy-image'
+  | 'save-image'
+
+export interface ContextMenuItem {
+  action: ContextMenuAction
+  label: string
+  shortcut?: string
+  danger?: boolean
+  divider?: false
+  enabled: boolean
+  /** Optional inline tooltip when disabled. */
+  disabledReason?: string
+}
+
+export interface ContextMenuSection {
+  items: ContextMenuItem[]
+}
+
+export interface ContextMenuBuild {
+  sections: ContextMenuSection[]
+  request: ContextMenuRequest
+}
+
+export interface ContextMenuCapabilities {
+  canGoBack: boolean
+  canGoForward: boolean
+  canPrint: boolean
+  canAskAi: boolean
+}
+
+const ALWAYS_ENABLED = true
+
+export function buildContextMenu(
+  request: ContextMenuRequest,
+  capabilities: ContextMenuCapabilities,
+): ContextMenuBuild {
+  switch (request.kind) {
+    case 'link':
+      return { request, sections: buildLinkSections(request, capabilities) }
+    case 'image':
+      return { request, sections: buildImageSections(request, capabilities) }
+    case 'selection':
+      return { request, sections: buildSelectionSections(request, capabilities) }
+    case 'input':
+      return { request, sections: buildInputSections(request, capabilities) }
+    case 'page':
+    default:
+      return { request, sections: buildPageSections(request, capabilities) }
+  }
+}
+
+function buildPageSections(request: ContextMenuRequest, cap: ContextMenuCapabilities): ContextMenuSection[] {
+  void request
+  return [
+    {
+      items: [
+        { action: 'back', label:t("后退"),shortcut:'Alt+←',enabled:cap.canGoBack},
+        { action: 'forward', label:t("前进"),shortcut:'Alt+→',enabled:cap.canGoForward},
+        { action: 'reload', label:t("重新加载"),shortcut:'F5',enabled:ALWAYS_ENABLED},
+        { action: 'stop', label:t("停止加载"),shortcut:'Esc',enabled:ALWAYS_ENABLED},
+      ],
+    },
+    {
+      items: [
+        { action: 'print', label:t("打印"),shortcut:'Ctrl+P',enabled:cap.canPrint},
+        { action: 'clip-page', label:t("剪藏整页"),enabled:true},
+        { action: 'view-source', label:t("查看页面信息"),enabled:ALWAYS_ENABLED},
+      ],
+    },
+  ]
+}
+
+function buildSelectionSections(request: ContextMenuRequest, cap: ContextMenuCapabilities): ContextMenuSection[] {
+  const hasSelection = !!request.selectionText?.trim()
+  return [
+    {
+      items: [
+        { action: 'copy', label:t("复制"),shortcut:'Ctrl+C',enabled:ALWAYS_ENABLED},
+        { action: 'search-selection', label:t("用搜索引擎搜索所选内容"),enabled:ALWAYS_ENABLED},
+        { action: 'add-to-notes', label:t("加入笔记"),enabled:hasSelection,disabledReason:hasSelection?undefined:t("请先选中文本")},
+        { action: 'clip-selection', label:t("剪藏选中文字"),enabled:hasSelection,disabledReason:hasSelection?undefined:t("请先选中文本")},
+        { action: 'ask-ai', label:t("向 AI 提问"),enabled:cap.canAskAi,disabledReason:cap.canAskAi?undefined:t("AI 功能尚未配置")},
+        { action: 'translate-selection', label:t("翻译选中内容"),enabled:cap.canAskAi&&hasSelection,disabledReason:cap.canAskAi?undefined:t("AI 功能尚未配置")},
+        { action: 'screenshot-selection', label:t("截取选中区域"),enabled:!!request.selectionRect},
+      ],
+    },
+  ]
+}
+
+function buildLinkSections(request: ContextMenuRequest, cap: ContextMenuCapabilities): ContextMenuSection[] {
+  const url = request.linkUrl ?? ''
+  const allowed = isAllowedExternalUrl(url)
+  const shell = classifyShellOpenUrl(url)
+  return [
+    {
+      items: [
+        { action: 'open-link-current', label:t("在当前标签打开"),enabled:allowed,disabledReason:allowed?undefined:t("链接协议不安全")},
+        { action: 'open-link-new', label:t("在新标签打开"),enabled:allowed,disabledReason:allowed?undefined:t("链接协议不安全")},
+        { action: 'open-link-external', label:t("在系统应用中打开"),enabled:shell.shellOpenable,disabledReason:shell.shellOpenable?undefined:t("链接协议不支持")},
+        { action: 'copy-link', label:t("复制链接地址"),enabled:ALWAYS_ENABLED},
+        { action: 'clip-link', label:t("剪藏此链接"),enabled:ALWAYS_ENABLED},
+      ],
+    },
+    {
+      items: [
+        { action: 'print', label:t("打印"),shortcut:'Ctrl+P',enabled:cap.canPrint},
+      ],
+    },
+  ]
+}
+
+function buildImageSections(request: ContextMenuRequest, cap: ContextMenuCapabilities): ContextMenuSection[] {
+  const url = request.imageUrl ?? ''
+  const allowed = isAllowedExternalUrl(url)
+  return [
+    {
+      items: [
+        { action: 'open-image-new', label:t("在新标签打开图片"),enabled:allowed,disabledReason:allowed?undefined:t("图片地址协议不安全")},
+        { action: 'copy-image', label:t("复制图片地址"),enabled:ALWAYS_ENABLED},
+        { action: 'save-image', label:t("保存图片到下载中心"),enabled:allowed,disabledReason:allowed?undefined:t("图片地址协议不安全")},
+        { action: 'clip-image', label:t("剪藏此图片"),enabled:allowed,disabledReason:allowed?undefined:t("图片地址协议不安全")},
+      ],
+    },
+  ]
+}
+
+function buildInputSections(_request: ContextMenuRequest, _cap: ContextMenuCapabilities): ContextMenuSection[] {
+  void _request; void _cap
+  return [
+    {
+      items: [
+        { action: 'cut', label:t("剪切"),shortcut:'Ctrl+X',enabled:ALWAYS_ENABLED},
+        { action: 'copy', label:t("复制"),shortcut:'Ctrl+C',enabled:ALWAYS_ENABLED},
+        { action: 'paste', label:t("粘贴"),shortcut:'Ctrl+V',enabled:ALWAYS_ENABLED},
+        { action: 'select-all', label:t("全选"),shortcut:'Ctrl+A',enabled:ALWAYS_ENABLED},
+      ],
+    },
+  ]
+}

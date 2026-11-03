@@ -1,9 +1,9 @@
 import type { InputRef } from '@arcadia/ui/Input'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { buildSuggestions, type SuggestionItem } from './suggestionProvider'
-import { trimSuggestions } from './suggestionProvider'
+import { buildSuggestions, type SuggestionItem } from '@arcadia/browser-core/suggestionProvider'
+import { trimSuggestions } from '@arcadia/browser-core/suggestionProvider'
 import { renderSuggestion } from './suggestionRenderer'
-import { resolveActiveSearchTemplate, readSearchEngineConfig } from './searchEngine'
+import { resolveActiveSearchTemplate, readSearchEngineConfig } from '@arcadia/browser-core/searchEngine'
 import type { HistoryEntry } from '../history/dedupeHistory'
 
 export interface AddressSuggestionOption {

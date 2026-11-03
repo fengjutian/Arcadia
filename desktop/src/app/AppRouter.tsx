@@ -3,7 +3,7 @@ import { Spin } from '@arcadia/ui'
 import { AppLayout } from '../layouts/AppLayout'
 import { takeViewAfterReload } from './returnView'
 import { scheduleExtrasSync } from '../features/search/extrasSync'
-import { SPACE_CHANGED_EVENT, currentSpaceNamespace } from '../features/browser/spaces'
+import { SPACE_CHANGED_EVENT, currentSpaceNamespace } from '@arcadia/browser-core/spaces'
 import { listenLittleArcHotkey, openLittleArc } from '../features/littlearc/littleArc'
 import type { View } from '../types'
 

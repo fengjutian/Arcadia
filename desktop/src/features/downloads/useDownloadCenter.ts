@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listDownloads, removeDownloadRecord, showDownloadInFolder, openDownloadFile, cancelDownload, pauseDownload, resumeDownload, retryDownload, type DownloadRecord } from '../../services/downloads'
 import { applyDownloadUpdate, DOWNLOAD_FEED_LIMIT, normalizeDownloadPayload, type DownloadFeedEntry } from './downloadFeed'
-import { onNativeDownload } from '../../services/nativeBrowser'
+import { onNativeDownload } from '@arcadia/browser-core/nativeBrowser'
 
 export interface UseDownloadCenterOptions {
   /** Whether to include records flagged `private: true` in the persistent list. */

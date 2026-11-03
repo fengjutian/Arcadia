@@ -5,7 +5,7 @@ import { DownloadOutlined, LockOutlined, UploadOutlined } from '@arcadia/ui/icon
 import { addBrowserHistory, listBrowserHistory } from '../../api'
 import { listBookmarks } from '../../services/bookmarks'
 import { listDownloads } from '../../services/downloads'
-import { readSitePermissions } from '../../features/browser/sitePermissions'
+import { readSitePermissions } from '@arcadia/browser-core/sitePermissions'
 import {
   decryptPrivacyPayload,
   encryptPrivacyPayload,
@@ -121,7 +121,7 @@ export function PrivacyExportPanel() {
     // Site permissions — only persist if the export included the block so
     // the user's existing rules stay untouched on a partial restore.
     if (sections.sitePermissions?.length) {
-      const { writeSitePermissions } = await import('../../features/browser/sitePermissions')
+      const { writeSitePermissions } = await import('@arcadia/browser-core/sitePermissions')
       // Merge: existing rules take precedence (the user may have updated
       // them locally since the export was made).
       const existing = readSitePermissions()

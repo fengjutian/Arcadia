@@ -1,8 +1,8 @@
 import { t } from '@arcadia/i18n'
 import { Button, Space, Typography } from '@arcadia/ui'
 import { CheckCircleOutlined, CloseCircleOutlined, SafetyCertificateOutlined } from '@arcadia/ui/icons'
-import type { UsePermissionPromptResult } from './usePermissionPrompt'
-import { describePrompt } from './usePermissionPrompt'
+import type { UsePermissionPromptResult } from '@arcadia/browser-core/usePermissionPrompt'
+import { describePrompt } from '@arcadia/browser-core/usePermissionPrompt'
 
 export interface PermissionPromptBarProps {
   prompt: UsePermissionPromptResult
