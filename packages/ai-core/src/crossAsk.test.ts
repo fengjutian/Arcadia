@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_CHARS_PER_DOC, buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from './crossAsk'
-import type { Document } from '../../types'
+import type { KnowledgeDocument } from './types'
 
-function makeDoc(partial: Partial<Document>): Document {
+type TestDoc = KnowledgeDocument & { wordCount: number; status: string; tags: string[]; createdAt: string; starred: boolean }
+
+function makeDoc(partial: Partial<TestDoc>): TestDoc {
   return {
     id: partial.id ?? 'doc',
     title: partial.title ?? 'untitled',

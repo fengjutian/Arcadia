@@ -1,5 +1,5 @@
-import { aiChat, aiChatCancel, aiChatStream } from '../../api'
-import type { ChatRequest, ChatResponse } from '../../types'
+import { aiChat, aiChatCancel, aiChatStream } from './aiApi'
+import type { ChatRequest, ChatResponse } from './types'
 
 export interface StreamChunkEvent {
   streamId: string

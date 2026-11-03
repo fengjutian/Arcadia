@@ -60,6 +60,7 @@ import { initialArguments, validateArguments, type ArgumentIssue } from '../../f
 import { ToolArgumentsEditor } from '../../features/mcp/ToolArgumentsEditor'
 import { ToolResultView } from '../../features/mcp/ToolResultView'
 import { SkillHubPage } from '../skillhub/SkillHubPage'
+import { SAMPLE_SERVERS, sampleServerInput, type SampleServer } from './samples'
 
 type McpTool = { name: string; description?: string; inputSchema?: unknown; arcadiaRisk?: string; arcadiaGranted?: boolean }
 type McpResource = { uri?: string; name?: string; description?: string }
@@ -182,6 +183,8 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [cachedCapabilities, setCachedCapabilities] = useState<McpCachedCapabilities>()
   const [capabilityNotice, setCapabilityNotice] = useState<Array<{ kind: 'tools' | 'resources' | 'prompts'; diff: McpCapabilityDiff }>>()
   const [toolFilter, setToolFilter] = useState('')
+  const [addingSample, setAddingSample] = useState<string | null>(null)
+  const addingSampleRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selected = useMemo(() => servers.find(server => server.id === selectedId), [selectedId, servers])
@@ -378,6 +381,42 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     setModalOpen(true)
   }
 
+  /** One-click path for the empty state: save the sample, then connect it. */
+  async function addSample(sample: SampleServer) {
+    // The ref guard wins over the state flag: two clicks in the same tick would
+    // both read `addingSample === null` and create the server twice.
+    if (addingSampleRef.current) return
+    addingSampleRef.current = sample.key
+    setAddingSample(sample.key)
+    setBusy(true)
+    try {
+      const saved = await saveMcpServer(sampleServerInput(sample))
+      messageApi.success(t("已添加 {value0}",{value0:sample.name}))
+      await reload()
+      setSelectedId(saved.id)
+      await connect(saved)
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      addingSampleRef.current = null
+      setAddingSample(null)
+      setBusy(false)
+    }
+  }
+
+  /** Copy a sample into the add form so it can be edited before saving. */
+  function fillSample(sample: SampleServer) {
+    setEditingId(undefined)
+    setName(sample.name)
+    setTransport(sample.transport)
+    setCommand(sample.command ?? '')
+    setArgs(sample.args.join('\n'))
+    setUrl(sample.url ?? '')
+    setEnv('')
+    setHeaders('')
+    setEnabled(true)
+  }
+
   async function saveServer() {
     if (!name.trim()) { messageApi.error(t("请输入 Server 名称"));return}
     if (transport === 'stdio' && !command.trim()) { messageApi.error(t("请输入启动命令"));return}
@@ -564,7 +603,22 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
       <aside className="mcp-servers">
         <div className="mcp-section-title"><span><Server size={17}/>Servers</span><button type="button" aria-label={t("刷新 Server")} onClick={()=>void reload()}><RefreshCw size={15}/></button></div>
         {servers.length === 0
-          ? <div className="mcp-empty"><Boxes size={30}/><b>{t("还没有 MCP Server")}</b><span>{t("添加本地 stdio 或远程 HTTP 服务。")}</span></div>
+          ? <div className="mcp-empty mcp-start">
+              <Boxes size={28}/>
+              <b>{t("还没有 MCP Server")}</b>
+              <span>{t("先用一个示例打通链路，之后也可以手动接入自己的服务。")}</span>
+              <div className="mcp-start__samples">
+                {SAMPLE_SERVERS.map(sample => {
+                  const pending = addingSample === sample.key
+                  return <button type="button" key={sample.key} className="mcp-sample" disabled={addingSample !== null} onClick={()=>void addSample(sample)}>
+                    <span className="mcp-sample__head"><b>{t(sample.titleId)}</b><Tag>{sample.transport.toUpperCase()}</Tag></span>
+                    <span className="mcp-sample__desc">{t(sample.descriptionId)}</span>
+                    <span className="mcp-sample__hint">{pending ?t("正在添加并连接…"):t(sample.hintId)}</span>
+                  </button>
+                })}
+              </div>
+              <span className="mcp-start__note">{t("或者用「添加 Server」手动填写命令与地址。")}</span>
+            </div>
           : servers.map(server => <div key={server.id} className="mcp-server-row">
               <button type="button" className={`mcp-server${selectedId === server.id ? ' is-selected' : ''}`} onClick={() => selectServer(server.id)}>
                 <span className="mcp-server__icon"><PlugZap size={18}/></span>
@@ -636,6 +690,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
 
     <Modal open={modalOpen} title={editingId ? t("编辑 MCP Server") : t("添加 MCP Server")} width={640} okText={editingId ? t("保存修改") : t("添加")} okButtonProps={{loading:busy}} onOk={()=>void saveServer()} onCancel={()=>{setModalOpen(false);resetForm()}}>
       <div className="mcp-add-form">
+        <div className="mcp-add-form__samples"><span>{t("示例模板")}</span>{SAMPLE_SERVERS.map(sample => <button type="button" key={sample.key} onClick={()=>fillSample(sample)}>{sample.name}</button>)}</div>
         <label><span>{t("Server 名称")}</span><Input value={name} onChange={event=>setName(event.target.value)} placeholder={t("例如 filesystem")}/></label>
         <label><span>{t("传输方式")}</span><Segmented value={transport} onChange={value=>setTransport(value as McpTransport)} options={[{label:'stdio',value:'stdio'},{label:'HTTP',value:'http'},{label:'SSE',value:'sse'}]}/></label>
         {transport === 'stdio' ? <><label><span>{t("启动命令")}</span><Input value={command} onChange={event=>setCommand(event.target.value)} placeholder={t("例如 npx")}/></label><label><span>{t("参数（每行一个）")}</span><Input.TextArea rows={4} value={args} onChange={event=>setArgs(event.target.value)} placeholder={'-y\n@modelcontextprotocol/server-filesystem\nD:\\Documents'}/></label></>:<label><span>{t("服务地址")}</span><Input value={url} onChange={event=>setUrl(event.target.value)} placeholder="https://example.com/mcp"/></label>}

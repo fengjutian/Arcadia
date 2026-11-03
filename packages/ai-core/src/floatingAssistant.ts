@@ -1,7 +1,7 @@
 import { emitTo } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import type { ReaderArticle } from '../reader/types'
+import type { ReaderArticle } from '@arcadia/reader/types'
 
 export const FLOATING_ASSISTANT_LABEL = 'ai-assistant'
 export const FLOATING_ASSISTANT_STORAGE_KEY = 'ai.floating-assistant.payload'

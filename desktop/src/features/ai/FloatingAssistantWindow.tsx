@@ -7,7 +7,7 @@ import {
   closeFloatingAssistant,
   readFloatingAssistantPayload,
   type FloatingAssistantPayload,
-} from './floatingAssistant'
+} from '@arcadia/ai-core/floatingAssistant'
 
 export function FloatingAssistantWindow() {
   const [payload, setPayload] = useState<FloatingAssistantPayload | null>(readFloatingAssistantPayload)

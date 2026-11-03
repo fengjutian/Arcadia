@@ -30,13 +30,13 @@ const IDENTIFIERS = new Set(['t', 'translate', 'i18nTranslate'])
  * keys that are stored in SQLite. These are intentionally not translated.
  */
 const CHINESE_DATA_FILES = new Set([
-  'features/ai/ask.ts',
-  'features/ai/crossAsk.ts',
-  'features/ai/conversation.ts',
+  'packages/ai-core/src/ask.ts',
+  'packages/ai-core/src/crossAsk.ts',
+  'packages/ai-core/src/conversation.ts',
   'features/ai/agentLoop.ts',
-  'features/ai/summarize.ts',
-  'features/ai/bulkSummary.ts',
-  'features/ai/knowledgeAttachmentAdapter.ts',
+  'packages/ai-core/src/summarize.ts',
+  'packages/ai-core/src/bulkSummary.ts',
+  'packages/ai-core/src/knowledgeAttachmentAdapter.ts',
   'features/search/aiSearchPrompt.ts',
   'features/search/aiSearchAnswer.ts',
   'packages/browser-core/src/browserUtils.ts',
@@ -51,6 +51,9 @@ const CHINESE_DATA_FILES = new Set([
   'packages/browser-core/src/siteReaderPrefs.ts',
   'features/clips/clips.ts',
   'features/command/siteSearch.ts',
+  // Sample-server cards store catalog ids in `titleId` / `descriptionId` /
+  // `hintId` instead of calling t() inline, so their Chinese is data here.
+  'pages/mcp/samples.ts',
 ])
 
 function walk(dir: string): string[] {
@@ -101,6 +104,15 @@ function scanSources(): ScanResult {
           if (!first) return
           if (first.type === 'StringLiteral') messageIds.add(first.value)
           else if (first.type === 'TemplateLiteral' && first.expressions.length === 0) messageIds.add(first.quasis[0]?.value.cooked ?? '')
+        },
+        // Data modules may store catalog ids in fields such as `titleId` and
+        // resolve them through `t()` at render time; count those ids too.
+        Property(nodePath) {
+          const value = nodePath.node.value
+          if (!value || value.type !== 'StringLiteral' || !CJK.test(value.value)) return
+          const key = nodePath.node.key
+          const name = key.type === 'Identifier' ? key.name : key.type === 'StringLiteral' ? key.value : ''
+          if (name.endsWith('Id')) messageIds.add(value.value)
         },
         StringLiteral(nodePath) {
           if (!CJK.test(nodePath.node.value)) return

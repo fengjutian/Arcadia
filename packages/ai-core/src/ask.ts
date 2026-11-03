@@ -1,4 +1,4 @@
-import type { ChatRequest } from '../../types'
+import type { ChatRequest } from './types'
 
 const SYSTEM_PROMPT = [
   'You answer questions using ONLY the numbered passages from the document the user provides.',

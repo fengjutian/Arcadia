@@ -1,5 +1,5 @@
-import { extractArticle } from '../reader/extractArticle'
-import type { ReaderArticle } from '../reader/types'
+import { extractArticle } from '@arcadia/reader'
+import type { ReaderArticle } from '@arcadia/reader/types'
 import { buildSummaryPrompt, summaryKindLabel, type SummaryKind } from './summarize'
 
 export interface BulkSummaryInput {

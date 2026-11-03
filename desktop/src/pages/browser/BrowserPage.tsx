@@ -7,8 +7,8 @@ import { Sparkles as RobotOutlined } from 'lucide-react'
 import type { BrowserTab } from '../../types'
 import { addBrowserHistory, deleteClosedTab, findDocumentByUrl, getBrowserShortcutsEnabled, getBrowserWorkspace, getDocument, listBrowserHistory, listClosedTabs, listSitePermissions, privacyCapabilityReport, privacyGetSiteSetting, privacyGetStats, privacyListBlockEvents, privacyListBlocklists, privacySetBlocklistEnabled, privacySetSiteSetting, purgeReadingSnapshots, recordReadingActivity, saveBrowserWorkspace, saveClosedTab, saveDocument, saveReadingSnapshot, setSession, toggleStarred, archiveTab, addToReadingQueue, saveClip, listReadingQueue, removeFromReadingQueue, addToCollection, listCollections } from '../../api'
 import { captureNativePage, captureNativeScreenshot, clearNativePageData, closeNativePageToast, closeNativeTab, editNativePage, ensureNativeTab, fillBrowserPassword, findInNativeTab, focusNativeTab, generateBrowserPassword, hasNativeTab, hideNativeTab, injectSiteCss, isNativeBrowserAvailable, isNativeTabSuspended, listBrowserPasswords, navigateHistory, onNativeAdBlockUpdate, onNativeAudioState, onNativeNewTab, onNativeProcessFailed, onNativeSiteBlocked, onNativeToolbarMenuAction, onPasswordCandidate, onPasswordFillRequest, openNativeDevtools, openNativeTab, prewarmNativeTab, printNativeTab, readNativeState, reloadNativeTab, resizeNativeTab, resumeNativeTab, saveBrowserPassword, scanNativeResources, setNativeAdBlocking, setNativeMuted, setNativeToolbarMenu, setNativeToolbarPanel, setPrewarmEnabled, showNativePageToast, showNativeTab, stopNativeTab, suspendNativeTab, syncSiteRoutes, tabIdForLabel, zoomNativeTab, type PasswordCandidate, type SavedCredential } from '@arcadia/browser-core/nativeBrowser'
-import { extractArticle } from '../../features/reader/extractArticle'
-import type { ReaderArticle } from '../../features/reader/types'
+import { extractArticle } from '@arcadia/reader'
+import type { ReaderArticle } from '@arcadia/reader/types'
 import { classifySaveError } from '../../features/documents/saveClassifier'
 import { useDebouncedValue } from '../../shared/hooks/useDebouncedValue'
 import { dedupeHistory, HISTORY_CHANGE_EVENT, parseHistory, removeHistoryEntry, type HistoryEntry } from '../../features/history/dedupeHistory'
@@ -32,7 +32,7 @@ import { emitLittleArcResult, listenLittleArcCapture, listenLittleArcOpenMain, o
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
 import { scheduleExtrasSync } from '../../features/search/extrasSync'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
-import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '../../features/ai/floatingAssistant'
+import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '@arcadia/ai-core/floatingAssistant'
 import { listen } from '@tauri-apps/api/event'
 import { renderSearchTemplate, resolveNavigationInput } from '@arcadia/browser-core/navigation'
 import { useDownloads } from '../../features/downloads/useDownloads'
@@ -62,7 +62,7 @@ import { useCertificatePrompt } from '@arcadia/browser-core/useCertificatePrompt
 import { CommandPalette } from '../../features/command/CommandPalette'
 import { useBookmarks } from '../../features/bookmarks/useBookmarks'
 import { BulkSummaryPalette } from '../../features/ai/BulkSummaryPalette'
-import type { BulkProgressEntry } from '../../features/ai/bulkSummary'
+import type { BulkProgressEntry } from '@arcadia/ai-core/bulkSummary'
 import { NotesPanel } from '../../features/notes/NotesPanel'
 import type { NoteEntry } from '../../features/notes/notes'
 import { loadPageNotes, persistPageNote, removePageNote } from '../../features/notes/noteStore'
@@ -2742,8 +2742,8 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
 
   async function runBulkSummary(urls: string[], kind: 'one-sentence' | 'short' | 'detailed' | 'key-points') {
     const { aiChat: sendChat } = await import('../../api')
-    const { extractArticle } = await import('../../features/reader/extractArticle')
-    const { buildSummaryPrompt } = await import('../../features/ai/summarize')
+    const { extractArticle } = await import('@arcadia/reader')
+    const { buildSummaryPrompt } = await import('@arcadia/ai-core/summarize')
     const { listAIProviders } = await import('../../api')
     const providers = await listAIProviders().catch(() => [])
     const providerId = providers[0]?.id

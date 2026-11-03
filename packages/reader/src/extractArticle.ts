@@ -1,7 +1,7 @@
 import { Readability } from '@mozilla/readability'
 import TurndownService from 'turndown'
 import type { PageSnapshot, ReaderArticle } from './types'
-import { countTextUnits } from '../../shared/textCount'
+import { countTextUnits } from './textCount'
 
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' })
 turndown.addRule('removeScripts', { filter: ['script', 'style', 'noscript'], replacement: () => '' })

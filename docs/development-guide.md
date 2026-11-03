@@ -24,7 +24,7 @@ AI Provider、RAG、隐私拦截、WASM 插件运行时和受控 Agent 均已实
 | 层 | 技术 | 当前职责 |
 | --- | --- | --- |
 | 桌面 UI | React 19、TypeScript、Vite 6、SCSS | 页面、标签状态、阅读器、知识库和设置界面 |
-| UI 组件层 | `components/ui/`（`@base-ui/react` + `lucide-react`） | 对外暴露对齐 Ant Design 用法的组件；**不依赖 `antd` 包** |
+| UI 组件层 | `packages/ui`（`@arcadia/ui`，`@base-ui/react` + `lucide-react`） | 对外暴露对齐 Ant Design 用法的组件；**不依赖 `antd` 包** |
 | 桌面壳 | Tauri 2、Rust | 子 WebView、受控导航、页面快照、本地 SQLite、应用打包 |
 | 内容处理 | Mozilla Readability、Turndown、React Markdown + remark-gfm | 正文识别、HTML 清理、Markdown 转换和展示 |
 | 持久化 | `rusqlite`（bundled） + SQLite **FTS5** | 26 个顺序迁移；文档、标签、集合、任务、Provider、下载、历史、书签、工作区、阅读活动、凭证、RAG、Agent、插件、隐私统计 |
@@ -32,28 +32,31 @@ AI Provider、RAG、隐私拦截、WASM 插件运行时和受控 Agent 均已实
 | Provider | `reqwest` + `rustls-tls`（流式） | OpenAI Compatible、Ollama、Embedding |
 | 插件 | `wasmtime`（component-model + cranelift） | WASI Preview 2 组件运行时，Fuel / 内存 / 超时隔离 |
 | 密钥 | `keyring` | Credential Manager / Keychain / Secret Service |
-| 测试 | Vitest、Cargo test | 前端 61 文件 / 468 用例；Rust 243 用例（Windows 经 `npm run test:rust`，见 §12） |
+| 测试 | Vitest、Cargo test | 前端 desktop 71 文件 / 494 用例 + ui 11 + browser-core 273；Rust 282 用例（Windows 经 `npm run test:rust`，见 §12） |
 
 ## 3. 仓库结构
 
 ```text
 .
+├── package.json                     # npm workspaces 根配置
+├── packages/                        # @arcadia/i18n / @arcadia/ui / @arcadia/browser-core
+├── crates/page-engine/              # PageEngine trait + wry / CEF 实现
 ├── desktop/
 │   ├── src/                         # React/TypeScript UI
 │   │   ├── app/                     # 视图路由
-│   │   ├── components/ui/           # 自建 UI 组件层
-│   │   ├── features/                # browser / ai / rag / reader / downloads / history /
-│   │   │                            # bookmarks / notes / privacy / plugins / tasks ...
+│   │   ├── features/                # ai / rag / reader / downloads / history / bookmarks /
+│   │   │                            # notes / privacy / plugins / tasks / settings，以及浏览器视图
 │   │   ├── layouts/                 # 应用外壳和可调整侧栏
 │   │   ├── pages/                   # Browser、Library、Search、Assistant、Settings
-│   │   ├── services/                # Tauri 原生浏览器、会话与下载适配器
+│   │   ├── services/                # 非浏览器域的 Tauri 适配器
 │   │   ├── shared/                  # 通用 UI 与 hooks
 │   │   ├── styles/                  # 全局与紧凑布局样式
-│   │   ├── api.ts                   # 桌面本地数据访问入口
-│   │   └── types.ts                 # 前端共享类型
+│   │   ├── api.ts                   # 知识库 / AI / 任务等命令入口
+│   │   └── types.ts                 # 前端共享类型（Tab 类型从 browser-core 再导出）
 │   └── src-tauri/
 │       ├── capabilities/            # 主窗口最小权限
 │       ├── src/browser/             # URL 规范化
+│       ├── src/page_engine_hooks.rs # 应用侧 PagePlatformHooks
 │       ├── src/local_store.rs       # 桌面 SQLite 迁移 + FTS5 + 备份
 │       ├── src/rag/                 # 分块、索引、召回、融合、引用、评测
 │       ├── src/providers/           # openai / ollama / embedding

@@ -1,9 +1,9 @@
 import { t } from '@arcadia/i18n'
 import { useMemo, useState } from 'react'
 import { Alert, Button, Input, List, Modal, Progress, Segmented, Space, Tag, Typography } from '@arcadia/ui'
-import type { BulkProgressEntry } from './bulkSummary'
-import { summaryKindLabelSafe } from './bulkSummary'
-import type { SummaryKind } from './summarize'
+import type { BulkProgressEntry } from '@arcadia/ai-core/bulkSummary'
+import { summaryKindLabelSafe } from '@arcadia/ai-core/bulkSummary'
+import type { SummaryKind } from '@arcadia/ai-core/summarize'
 
 export interface BulkSummaryPaletteProps {
   open: boolean

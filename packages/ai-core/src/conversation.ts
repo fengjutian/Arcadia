@@ -1,5 +1,5 @@
-import type { ChatMessage } from '../../types'
-import type { AgentStep } from './agentLoop'
+import type { ChatMessage } from './types'
+import type { AgentStep } from './agentTypes'
 
 export interface StoredConversationTurn {
   id: string

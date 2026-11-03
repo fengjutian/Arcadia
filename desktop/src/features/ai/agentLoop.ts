@@ -2,6 +2,7 @@ import { aiChat, callMcpTool, discoverMcpServer, listMcpServers, listMcpTools, r
 import type { ChatRequest, ChatResponse } from '../../types'
 import { t } from '@arcadia/i18n'
 import { validateArguments } from '../mcp/schema'
+import type { AgentStep } from '@arcadia/ai-core/agentTypes'
 
 /**
  * Controlled research agent.
@@ -16,15 +17,7 @@ export const DEFAULT_MAX_STEPS = 4
 export const DEFAULT_MAX_TOOL_CALLS = 3
 export const MCP_TOOL_TIMEOUT_MS = 20_000
 
-export interface AgentStep {
-  index: number
-  kind: 'search' | 'mcp_tool' | 'answer'
-  summary: string
-  detail?: string
-  /** Structured MCP result, bounded before it reaches the conversation store. */
-  result?: unknown
-  at: string
-}
+export type { AgentStep }
 
 export interface AgentBudgetExceeded {
   reason: 'max_steps' | 'max_tool_calls' | 'token_budget'

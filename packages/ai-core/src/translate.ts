@@ -1,4 +1,4 @@
-import type { ChatRequest } from '../../types'
+import type { ChatRequest } from './types'
 import { t } from '@arcadia/i18n'
 
 const SYSTEM_PROMPT = [

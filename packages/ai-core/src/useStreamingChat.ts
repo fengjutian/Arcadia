@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isRetryableErrorMessage, runChatStream, type StreamSession } from './streamChat'
-import type { ChatRequest } from '../../types'
+import type { ChatRequest } from './types'
 
 export type StreamingChatStatus = 'idle' | 'streaming' | 'completed' | 'cancelled' | 'failed'
 

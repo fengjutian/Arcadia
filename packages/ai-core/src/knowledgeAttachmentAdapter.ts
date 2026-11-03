@@ -1,3 +1,4 @@
+/// <reference path="./mammoth-browser.d.ts" />
 import {
   generateId,
   type AttachmentAdapter,

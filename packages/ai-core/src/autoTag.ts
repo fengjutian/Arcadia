@@ -1,4 +1,4 @@
-import type { ChatRequest } from '../../types'
+import type { ChatRequest } from './types'
 
 const SYSTEM_PROMPT = [
   'You tag a saved document for a personal knowledge base.',

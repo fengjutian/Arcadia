@@ -304,12 +304,12 @@
 5. 插件市场与签名校验。
 6. macOS / Linux 的隐私拦截与证书拦截等价实现（受平台接口限制，需先做可行性验证）。
 7. ~~Iteration 6 收尾~~ 已完成（2026-11-02）：16 个条目全部完成，含 Space、命令栏、归档、笔记/剪藏、阅读队列、睡眠标签、站点路由、站点面板、分屏、随手收与全局快捷键。
-8. ~~Iteration 7 的第 1 步：把 webview 承载层收口为 `PageEngine` trait~~ 已完成（2026-11-02）：见 `desktop/src-tauri/src/engine/`。CEF 第二阶段列为远期规划，不提供界面上的引擎切换。
+8. ~~Iteration 7 的第 1 步：把 webview 承载层收口为 `PageEngine` trait~~ 已完成（2026-11-02）：见 `crates/page-engine`（2026-11-03 从 `desktop/src-tauri/src/engine/` 抽为独立 crate）。CEF 第二阶段列为远期规划，不提供界面上的引擎切换。
 
 ## 决策记录
 
 - Go sidecar 整条移除。桌面应用从未真正调用该服务，Rust 端 `local_store.rs` 已承担全部持久化与检索职责；保留双存储会造成数据所有权分裂。
 - 不采用独立进程 JSON-RPC 作为第三方插件运行时（难以在三平台稳定限制文件、网络、子进程和系统调用）；JSON-RPC 仍用于 MCP，但不作为插件安全边界。详见 [WASM 插件运行时方案](wasm-plugin-runtime-plan.md)。
 - 借鉴 Arc 只限交互层（Space、标签生命周期、命令栏、Peek、按站点规则），不沿用其「通用浏览器替代品 + 云账号」路线；理由见 Iteration 6 的「明确不做」。
-- UI 组件层自建（`components/ui/`，API 对齐 Ant Design，底层 `@base-ui/react`），不引入 `antd` 依赖。
+- UI 组件层自建（`packages/ui`，API 对齐 Ant Design，底层 `@base-ui/react`），不引入 `antd` 依赖。
 - 实验阶段使用系统 WebView，验证成功后再评估接入自带 Chromium。理由：换内核等于重写 webview 承载层（约 1–2 个月专项 + 永久跟版成本），在产品闭环未验证前投入不划算；且 Windows 上 WebView2 本身已是 Chromium，真正的差距是宿主接口与跨平台一致性。详见 Iteration 7 与 [页面引擎选型](page-engine-selection.md)。

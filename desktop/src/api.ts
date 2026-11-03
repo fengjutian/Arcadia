@@ -5,7 +5,7 @@ import type { HistoryEntry } from './features/history/dedupeHistory'
 import type { ClosedTab } from '@arcadia/browser-core/closedTabs'
 import type { SitePermissionRule } from '@arcadia/browser-core/sitePermissions'
 import { replaceSitePermissions as replaceSitePermissionsCommand } from '@arcadia/browser-core/browserApi'
-import { countTextUnits } from './shared/textCount'
+import { countTextUnits } from '@arcadia/reader/textCount'
 import type { BrowserTab, ReadingActivity } from './types'
 
 const isTauri = () => '__TAURI_INTERNALS__' in window
@@ -311,10 +311,7 @@ export async function deleteAIProvider(id: string): Promise<void> {
   await invoke('local_delete_ai_provider', { id })
 }
 
-export async function aiChat(providerId: string, request: ChatRequest): Promise<ChatResponse> {
-  if (!isTauri()) throw new Error('Document unavailable')
-  return invoke<ChatResponse>('ai_chat', { providerId, request })
-}
+export { aiChat, aiChatCancel, aiChatStream } from '@arcadia/ai-core/aiApi'
 
 export async function aiEmbed(providerId: string, inputs: string[]): Promise<number[][]> {
   if (!isTauri()) throw new Error('Embedding requires the desktop app')
@@ -392,16 +389,6 @@ export async function markDocumentIndexed(input: {
 export async function listPendingEmbeddingDocuments(model: string, limit = 20): Promise<string[]> {
   if (!isTauri()) return []
   return invoke<string[]>('local_list_pending_embeddings', { model, limit })
-}
-
-export async function aiChatStream(providerId: string, request: ChatRequest): Promise<string> {
-  if (!isTauri()) throw new Error('Document unavailable')
-  return invoke<string>('ai_chat_stream', { providerId, request })
-}
-
-export async function aiChatCancel(streamId: string): Promise<boolean> {
-  if (!isTauri()) return false
-  return invoke<boolean>('ai_chat_cancel', { streamId })
 }
 
 export async function aiTestProvider(providerId: string): Promise<ProviderTestResult> {

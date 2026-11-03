@@ -67,6 +67,21 @@ UI 组件层已经抽到 `packages/ui`（`@arcadia/ui`）：对外暴露与 Ant 
 
 ## 模块依赖规则
 
+依赖方向只允许从应用指向包，包之间保持单向：
+
+```text
+@arcadia/desktop ──► @arcadia/browser-core ──► @arcadia/i18n
+        │                  │
+        └──────────────► @arcadia/ui ──────► @arcadia/i18n
+desktop/src-tauri ──► page-engine
+```
+
+- 包不得反向导入 `desktop/`；需要宿主决策时使用注入点（如 `setAdBlockEnabledProvider`、`PagePlatformHooks`）。
+- `@arcadia/ui` 只依赖 `@arcadia/i18n` 与 `@base-ui/react`、`lucide-react`；不引入业务 store、Tauri API 或 `api.ts`。
+- `@arcadia/browser-core` 依赖 `@tauri-apps/api` 与 `@arcadia/i18n`，不依赖 UI 组件；React 视图留在 `desktop/src/features/browser`。
+- `page-engine` 只依赖 `tauri`、`url`、`serde` 与平台 WebView 绑定；不得引用应用模块，原生处理器一律走 `PagePlatformHooks`。
+- 样式：组件样式在 `packages/ui/src/ui.scss`，依赖宿主提供 `--accent*` 等主题变量；应用样式留在 `desktop/src/styles`。
+
 领域模块不依赖 HTTP，也不存在 HTTP 客户端层；前端通过 `api.ts` 调用 Tauri command，Rust 端在 command 边界做校验、映射和错误转换。存储通过 Repository 接口注入。AI Provider、Embedding、Reranker 与 VectorIndex 均为可替换 trait / 接口，便于切换本地与远端实现。Reader 的浏览器侧提取与 Rust 端标准化使用版本化 payload（chunker 亦带 `CHUNKER_VERSION`）。
 
 ## 保存状态机

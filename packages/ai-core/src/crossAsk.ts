@@ -1,4 +1,4 @@
-import type { ChatRequest, Document } from '../../types'
+import type { ChatRequest, KnowledgeDocument } from './types'
 import { rankByBm25 } from './bm25'
 
 const SYSTEM_PROMPT = [
@@ -60,13 +60,13 @@ export function buildGeneralAnswerPrompt(
   return { messages, temperature: 0.5 }
 }
 
-function excerptFor(doc: Document, maxChars: number): string {
+function excerptFor(doc: KnowledgeDocument, maxChars: number): string {
   const raw = (doc.markdown && doc.markdown.trim()) || (doc.summary && doc.summary.trim()) || ''
   return raw.slice(0, maxChars)
 }
 
 export function buildCrossAskPrompt(
-  documents: readonly Document[],
+  documents: readonly KnowledgeDocument[],
   question: string,
   history?: readonly { role: 'user' | 'assistant'; content: string }[],
   options?: CrossAskOptions,
@@ -74,7 +74,7 @@ export function buildCrossAskPrompt(
   const topK = options?.topK ?? DEFAULT_TOP_K
   const maxChars = options?.maxCharsPerDoc ?? MAX_CHARS_PER_DOC
 
-  let chosen: { document: Document; originalIndex: number }[]
+  let chosen: { document: KnowledgeDocument; originalIndex: number }[]
   if (options?.rankedDocumentIds?.length) {
     const rank = new Map(options.rankedDocumentIds.map((id,index)=>[id,index]))
     chosen = documents.map((document,originalIndex)=>({document,originalIndex})).filter(item=>rank.has(item.document.id)).sort((a,b)=>rank.get(a.document.id)!-rank.get(b.document.id)!).slice(0,topK)

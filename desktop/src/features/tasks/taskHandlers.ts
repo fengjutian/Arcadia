@@ -4,7 +4,7 @@ import {
   updateAutoTags,
 } from '../../api'
 import type { AIProvider, Task } from '../../types'
-import { buildAutoTagPrompt, mergeAutoTags, parseAutoTagResponse } from '../ai/autoTag'
+import { buildAutoTagPrompt, mergeAutoTags, parseAutoTagResponse } from '@arcadia/ai-core/autoTag'
 import type { TaskHandler } from './taskWorker'
 
 /** Task kinds handled by the background worker. */

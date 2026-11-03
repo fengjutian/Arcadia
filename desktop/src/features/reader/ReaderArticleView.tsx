@@ -1,7 +1,7 @@
 import { t } from '@arcadia/i18n'
 import { Typography } from '@arcadia/ui'
 import type { CSSProperties } from 'react'
-import type { ReaderArticle } from '../reader/types'
+import type { ReaderArticle } from '@arcadia/reader/types'
 import type { ReaderSiteStyle } from '@arcadia/browser-core/siteReaderPrefs'
 import { hideCssFor } from '@arcadia/browser-core/siteReaderPrefs'
 

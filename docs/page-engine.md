@@ -1,7 +1,7 @@
 # PageEngine：页面承载层抽象
 
-> 状态：已完成（2026-11-02）。对应 [开发路线图](roadmap.md) Iteration 7 启动条件第 1 条。
-> 代码：`desktop/src-tauri/src/engine/`。
+> 状态：已完成（2026-11-02），2026-11-03 抽为独立 crate `crates/page-engine`。
+> 代码：`crates/page-engine/`（应用侧通过 `pub use page_engine as engine;` 接入）。
 > 选型结论：近期以 wry 为主、CEF 列为远期规划，见 [页面引擎选型](page-engine-selection.md)。
 
 ## 为什么有这一层
@@ -13,12 +13,15 @@
 ## 结构
 
 ```text
-engine/mod.rs     PageEngine trait、EngineError、PageSpec / PageBounds / CaptureRequest、
-                  PageObserver、PageEngineState、eval_json 辅助函数
-engine/wry.rs     WryPageEngine —— 当前唯一实现，唯一持有 tauri::Webview 的模块
+crates/page-engine/src/lib.rs     PageEngine trait、EngineError、PageSpec / PageBounds /
+                                  CaptureRequest、PageObserver、PageEngineState、
+                                  SitePermissionRule、PagePlatformHooks、eval_json
+crates/page-engine/src/wry.rs     WryPageEngine —— 当前默认实现，唯一持有 tauri::Webview 的模块
+crates/page-engine/src/cef.rs     CefPageEngine —— Windows + `--features cef` 时的可选实现
+crates/page-engine/src/select.rs  启动时按 feature / 环境变量选择后端
 ```
 
-命令层通过 `engine::page_engine(&app)` 取得 `Arc<dyn PageEngine>`，之后只使用 tab label：
+应用侧通过 `crate::engine`（`pub use page_engine as engine;`）取得同一套 API：
 
 ```rust
 let engine = engine::page_engine(&app);
@@ -35,12 +38,18 @@ engine.set_bounds(&label, bounds)?;
 2. **平台模块走唯一的逃生口。**
    证书错误、权限请求、请求过滤、进程失败、挂起/恢复都需要 WebView2 的 COM 句柄。
    这些模块（`certificate_guard`、`permission_guard`、`privacy/`、`webview_process_guard`、
-   `webview_suspend`）统一调用：
+   `webview_suspend`）的安装时机由应用实现 `PagePlatformHooks` 后注入：
 
    ```rust
-   crate::engine::with_platform_webview(app, label, move |platform| { /* COM */ });
+   // desktop/src-tauri/src/page_engine_hooks.rs
+   impl PagePlatformHooks for BrowserPageHooks {
+       fn attach(&self, app: &AppHandle, label: &str, private: bool, permissions: &[SitePermissionRule]) {
+           // 证书 / 隐私过滤 / 权限 / 进程失败 / 挂起
+       }
+   }
    ```
 
+   这些模块仍通过 `page_engine::with_platform_webview(...)` 取得 COM 句柄；
    这既是 CEF 实现需要替换的地方（换成 `CefClient` 的 handler），也是未来审计「还有多少内核专属代码」的入口。
 
 3. **引擎不做产品决策。**
@@ -64,10 +73,10 @@ engine.set_bounds(&label, bounds)?;
 
 ## 接入 CEF 时要做的事
 
-1. 新增 `engine/cef.rs`，实现同一个 trait；`create` 里把 `PageSpec` 映射到 `CefBrowserHost::CreateBrowser`
+1. 在 `crates/page-engine/src/` 新增或完善 CEF 实现，实现同一个 trait；`create` 里把 `PageSpec` 映射到 `CefBrowserHost::CreateBrowser`
    与 `CefClient` 的回调，而不是 `WebviewBuilder`。
-2. 在 `run()` 的 `setup` 里按 feature flag 选择构造 `WryPageEngine` 还是 `CefPageEngine`，
-   `PageEngineState` 的类型不变。
+2. 在 `run()` 的 `setup` 里调用 `engine::select::select(app.handle(), page_engine_hooks::browser_page_hooks())`，
+   由 crate 按 feature flag 选择构造 `WryPageEngine` 还是 `CefPageEngine`，`PageEngineState` 的类型不变。
 3. 把第 2 条列出的平台模块替换为 CEF 的对应 handler：证书错误 → `OnCertificateError`，
    权限 → `OnRequestMediaAccessPermission`，请求过滤 → `CefResourceRequestHandler`，
    进程失败 → `OnRenderProcessTerminated`，挂起/恢复 → `WasHidden`/`WasShown`。
@@ -84,3 +93,10 @@ engine.set_bounds(&label, bounds)?;
 - 第二个实现已接线：`engine/select.rs` 在 `--features cef` 且 Windows 时优先 CEF、失败回落 wry，
   `browser_capabilities.pageEngine` 回报实际后端。CEF 宿主尚未实现，见
   [Windows CEF 接入方案](cef-windows-plan.md)。
+
+## 独立 crate 边界（2026-11-03）
+
+- 依赖方向：`desktop/src-tauri` → `crates/page-engine`；crate 不引用任何应用模块。
+- 宿主策略全部通过 `PagePlatformHooks` 注入；`SitePermissionRule` 随页面契约一起放在 crate 内，
+  应用通过 `pub use page_engine::SitePermissionRule` 复用。
+- crate 自带单元测试（在 `crates/page-engine` 下运行 `cargo test`）；应用测试仍通过 `npm run test:rust`。

@@ -2,7 +2,7 @@
 
 > 状态：设计定稿，待实施  
 > 版本：v1.0（2026-11-03）  
-> 适用范围：`desktop/src/styles/glass.scss`、`desktop/src/styles/compact.scss` 中与壁纸/浮层相关的材质规则，以及 `desktop/src/components/ui/` 的浮层组件  
+> 适用范围：`desktop/src/styles/glass.scss`、`desktop/src/styles/compact.scss` 中与壁纸/浮层相关的材质规则，以及 `packages/ui/src/` 的浮层组件  
 > 参照：Apple [Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/liquid-glass)、[Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass)、[HIG Materials](https://developer.apple.com/design/human-interface-guidelines/materials)、WWDC25 [Meet Liquid Glass](https://developer.apple.com/videos/play/wwdc2025/219)
 
 ## 1. 这份文档解决什么
