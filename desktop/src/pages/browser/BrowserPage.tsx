@@ -80,6 +80,7 @@ import { readRecoverySnapshot, restoreFromSnapshot, stripTransientTabStates, wri
 import { TopBarPortal } from '../../app/TopBarPortal'
 import { dropSessionLock, getSessionLockState } from '../../services/session'
 import { toggleFullscreen as toggleWindowFullscreen } from '../../services/webviewCompat'
+import { consumeLaunchUrl } from '../../services/defaultBrowser'
 import { buildSuggestions, trimSuggestions } from '../../features/browser/suggestionProvider'
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS } from '../../features/browser/searchEngine'
 import { evaluateUrlSafety, highestLevel, type SafetyIssue, type SafetyLevel } from '../../features/browser/urlSafety'
@@ -930,6 +931,15 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     }
     window.addEventListener('arcadia-browser-open-url', open)
     return () => window.removeEventListener('arcadia-browser-open-url', open)
+  }, [])
+
+  // Default-browser hand-off: the shell starts us with the clicked URL as an
+  // argument. Read it once the open-url listener above is installed; the
+  // service de-duplicates the StrictMode double mount.
+  useEffect(() => {
+    void consumeLaunchUrl().then(url => {
+      if (url) window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
+    })
   }, [])
 
   useEffect(() => {

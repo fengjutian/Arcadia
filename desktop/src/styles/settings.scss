@@ -469,6 +469,93 @@
 
 .open-source-settings-card > .ui-card__body { flex: none !important; }
 
+// Bookmark import -----------------------------------------------------------
+.bookmark-import-settings > .ui-card__body { max-width: 900px; }
+
+.bookmark-import-sources {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin: 18px 0 20px;
+}
+
+.bookmark-import-source {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #e0e7e3;
+  border-radius: 12px;
+  background: #fafcfb;
+
+  strong { color: #354039; font-size: 13px; }
+  span { color: #67736c; font-size: 12px; line-height: 1.6; }
+}
+
+.bookmark-import-source--count {
+  border-color: var(--accent-border, #d7e0d9);
+  background: var(--accent-soft, #e5f2ed);
+
+  strong { color: var(--accent, #2d8264); }
+  .ui-tag { align-self: flex-start; margin-top: 2px; }
+}
+
+.bookmark-import-actions {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+// Default browser -----------------------------------------------------------
+.default-browser-settings > .ui-card__body { max-width: 900px; }
+
+.default-browser-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid #e0e7e3;
+  border-radius: 14px;
+  background: #fafcfb;
+
+  > .ui-tag { flex: none; }
+}
+
+.default-browser-status.is-default {
+  border-color: var(--accent-border, #d7e0d9);
+  background: var(--accent-soft, #e5f2ed);
+}
+
+.default-browser-status__badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent, #2d8264) 12%, white);
+  color: var(--accent, #2d8264);
+
+  svg { width: 20px; height: 20px; }
+}
+
+.default-browser-status__copy {
+  flex: 1;
+  min-width: 0;
+
+  .ui-typography-title { margin: 0 0 2px; font-size: 16px; }
+  .ui-typography-paragraph { margin: 0; font-size: 12px; }
+}
+
+.default-browser-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 14px 0 18px;
+}
+
 .theme-palette {
   display: flex;
   align-items: flex-start;
@@ -646,6 +733,11 @@ body[data-theme='dark'] {
   .open-source-item { border-color: #34413a; background: #1b241f; color: #e5ebe7; }
   .open-source-item p,
   .open-source-item small { color: #9da9a1; }
+  .bookmark-import-source,
+  .default-browser-status { border-color: #34413a; background: #1b241f; }
+  .bookmark-import-source strong { color: #e5ebe7; }
+  .bookmark-import-source span { color: #9da9a1; }
+  .bookmark-import-source--count { border-color: color-mix(in srgb, var(--accent) 42%, #34413a); background: color-mix(in srgb, var(--accent) 18%, #1b241f); }
 }
 
 @media (max-width: 900px) {

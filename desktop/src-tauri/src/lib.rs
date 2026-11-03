@@ -5,6 +5,7 @@ pub mod bookmarks;
 pub mod browser;
 pub mod capabilities;
 pub mod certificate_guard;
+pub mod default_browser;
 pub mod downloads;
 pub mod engine;
 pub mod event_bus;
@@ -2069,6 +2070,7 @@ pub fn run() {
         .manage(mcp::McpHost::default())
         .manage(PermissionWaiters::default())
         .manage(session_lock::SessionBootState::default())
+        .manage(default_browser::PendingLaunchUrl::from_env())
         .manage(SiteRouteRegistry::default())
         .setup(|app| {
             {
@@ -2402,6 +2404,10 @@ pub fn run() {
             session_lock::browser_session_status,
             session_lock::browser_session_drop,
             certificate_guard::browser_certificate_respond,
+            default_browser::default_browser_status,
+            default_browser::default_browser_register,
+            default_browser::default_browser_open_settings,
+            default_browser::default_browser_take_launch_url,
             bookmarks::bookmark_list,
             bookmarks::bookmark_add,
             bookmarks::bookmark_get,

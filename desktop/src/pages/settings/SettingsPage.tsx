@@ -9,6 +9,8 @@ import { callMcpTool, clearBrowserHistory, clearClosedTabs as clearClosedTabsInD
 import type { AIProvider, AIProviderType } from '../../types'
 import { normalizeOrigin, readSitePermissions, writeSitePermissions, type SitePermissionKind, type SitePermissionRule } from '../../features/browser/sitePermissions'
 import { KnowledgeBaseStatusPanel } from '../../features/settings/KnowledgeBaseStatusPanel'
+import { BookmarkImportSettings } from '../../features/settings/BookmarkImportSettings'
+import { DefaultBrowserSettings } from '../../features/settings/DefaultBrowserSettings'
 import { TaskPanel } from '../../features/tasks/TaskPanel'
 import { SiteBlacklistPanel } from '../../features/privacy/SiteBlacklistPanel'
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../features/settings/theme'
@@ -1876,6 +1878,8 @@ export function SettingsPage({ onOpenUrl }: { onOpenUrl?: (url: string) => void 
     [t("重置设置"),<ResetSettingsPanel/>],
     [t("关于"),<AboutSettingsPanel onOpenUrl={onOpenUrl}/>],
     [t("开源组件"),<OpenSourceSettingsPanel onOpenUrl={onOpenUrl}/>],
+    [t("导入书签"),<BookmarkImportSettings/>],
+    [t("默认浏览器"),<DefaultBrowserSettings/>],
   ] as const
   const items = panels.map(([label, panel]) =>( {
     key: label,
