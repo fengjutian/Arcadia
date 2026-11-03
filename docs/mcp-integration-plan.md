@@ -565,3 +565,17 @@ Agent/用户提出调用
 - 该测试不依赖任何外部 API key，进入常规 Rust 测试集（非 `#[ignore]`）。
 - 结果：Rust 271 通过 + 4 项忽略；前端 771 通过。
 
+### 12.29 第二十九批：Ollama 原生工具调用（2026-11-03）
+
+- `OllamaRequest` 支持 `tools`（OpenAI 风格 function 定义），流式请求仍不发送 tools。
+- 解析 Ollama 响应的 `message.tool_calls`：其 `arguments` 是 JSON 对象，转换为统一的 `ChatToolCall.arguments` 字符串；允许 `content` 为空。
+- 助手不再排除 Ollama，所有 Provider 都尝试原生 tools；不支持时规划调用失败并自动回退 JSON 协议。
+- 测试：新增本地 HTTP mock 的 Ollama 工具调用契约测试（请求 tools + 解析 tool_calls）；Rust 272 通过 + 4 项忽略。
+- 前端：`tsc` / `vite build` 通过，全量 108 文件 / 774 用例通过。
+
+### 12.30 第三十批：图片 / 音频结果下载（2026-11-03）
+
+- 工具结果中的图片与音频块新增下载按钮：把 data URI 解码为 Blob，按 MIME 推断扩展名（`jpeg → jpg`）。
+- 工作台与助手研究过程的 compact 视图都可用；MIME 白名单仍由解析层保证（SVG 等不会进入渲染）。
+- 测试：行为无变化；Rust 272 通过 + 4 项忽略，前端 108 文件 / 774 用例通过。
+

@@ -35,6 +35,8 @@ export const mcp: Messages = {
   '检索': 'Search',
   'MCP 工具': 'MCP tool',
   '回答': 'Answer',
+  '下载图片': 'Download image',
+  '下载音频': 'Download audio',
   '查看缓存': 'View cache',
   '离线能力快照': 'Offline capability snapshot',
   '上次更新：{value0}': 'Last updated: {value0}',

@@ -9,6 +9,26 @@ function stringify(value: unknown): string {
   return JSON.stringify(value, null, 2) ?? String(value)
 }
 
+function downloadBase64(mimeType: string, data: string, filename: string) {
+  try {
+    const bytes = Uint8Array.from(atob(data), character => character.charCodeAt(0))
+    const blob = new Blob([bytes], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  } catch { /* invalid base64 should have been filtered by the parser */ }
+}
+
+function extensionFor(mimeType: string): string {
+  const suffix = mimeType.split('/')[1]?.split(';')[0] ?? 'bin'
+  return suffix === 'jpeg' ? 'jpg' : suffix
+}
+
 function TextBlockView({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false)
   const truncated = !expanded && text.length > TEXT_LIMIT
@@ -32,11 +52,15 @@ function BlockView({ block }: { block: ToolResultBlock }) {
     case 'image':
       return <figure className="mcp-tool-result__media">
         <img src={`data:${block.mimeType};base64,${block.data}`} alt={t("工具返回的图片")} loading="lazy"/>
-        <figcaption>{block.mimeType}</figcaption>
+        <figcaption>
+          <span>{block.mimeType}</span>
+          <Button size="small" onClick={() => downloadBase64(block.mimeType, block.data, `mcp-image.${extensionFor(block.mimeType)}`)}>{t("下载图片")}</Button>
+        </figcaption>
       </figure>
     case 'audio':
       return <div className="mcp-tool-result__media">
         <audio controls src={`data:${block.mimeType};base64,${block.data}`}>{t("工具返回的音频")}</audio>
+        <Button size="small" onClick={() => downloadBase64(block.mimeType, block.data, `mcp-audio.${extensionFor(block.mimeType)}`)}>{t("下载音频")}</Button>
       </div>
     case 'resource':
       return <ResourceBlockView block={block}/>

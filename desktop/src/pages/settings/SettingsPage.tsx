@@ -12,7 +12,7 @@ import { KnowledgeBaseStatusPanel } from '../../features/settings/KnowledgeBaseS
 import { TaskPanel } from '../../features/tasks/TaskPanel'
 import { SiteBlacklistPanel } from '../../features/privacy/SiteBlacklistPanel'
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../features/settings/theme'
-import { IMAGE_THEMES, readAppearancePreference, readImageTheme, readThemeKind, writeAppearancePreference, writeImageTheme, writeThemeKind, type AppearancePreference, type ImageThemeId, type ThemeKind } from '../../features/settings/visualTheme'
+import { IMAGE_THEMES, readAppearancePreference, readBackgroundImageEnabled, readImageTheme, readThemeKind, writeAppearancePreference, writeBackgroundImageEnabled, writeImageTheme, writeThemeKind, type AppearancePreference, type ImageThemeId, type ThemeKind } from '../../features/settings/visualTheme'
 import { loadBingDailyImage, readBingDailyHistory, readBingDailyRefresh, readCachedBingDailyImage, selectBingDailyImage, writeBingDailyRefresh, type BingDailyImage } from '../../features/settings/bingDailyTheme'
 import { readSearchEngineConfig, resolveActiveSearchTemplate, SEARCH_ENGINE_PRESETS, writeSearchEngineConfig } from '../../features/browser/searchEngine'
 import { isSearchTemplateValid } from '../../features/browser/navigation'
@@ -122,6 +122,7 @@ function GeneralSettings() {
   const [appearance, setAppearance] = useState<AppearancePreference>(readAppearancePreference)
   const [themeKind, setThemeKind] = useState<ThemeKind>(readThemeKind)
   const [imageTheme, setImageTheme] = useState<ImageThemeId>(readImageTheme)
+  const [backgroundImage, setBackgroundImage] = useState(readBackgroundImageEnabled)
   const [bingImage, setBingImage] = useState<BingDailyImage | null>(readCachedBingDailyImage)
   const [bingHistory, setBingHistory] = useState<BingDailyImage[]>(readBingDailyHistory)
   const [bingLoading, setBingLoading] = useState(false)
@@ -129,12 +130,12 @@ function GeneralSettings() {
   const [shell, setShell] = useState<ShellSettings>(readShellSettings)
 
   useEffect(() => {
-    if (themeKind !== 'image') return
+    if (themeKind !== 'image' && !backgroundImage) return
     void loadBingDailyImage().then(image => {
       if (image) setBingImage(image)
       setBingHistory(readBingDailyHistory())
     })
-  }, [themeKind])
+  }, [themeKind, backgroundImage])
 
   // The rail is toggled from the title bar too, and "重置设置" rewrites the
   // stored value, so mirror the event instead of trusting local state.
@@ -153,9 +154,9 @@ function GeneralSettings() {
   function changeTheme(next: string | number) {
     const preference = next as ThemePreference
     setTheme(preference)
-    setThemeKind('color')
+    // Colour themes only swap the palette; a background image that is already
+    // on stays on, and the image panel keeps its own selection.
     writeThemePreference(preference)
-    writeThemeKind('color')
   }
 
   function changeAppearance(next: string | number) {
@@ -172,11 +173,17 @@ function GeneralSettings() {
   function changeImageTheme(value: ImageThemeId) {
     setImageTheme(value)
     setThemeKind('image')
+    setBackgroundImage(true)
     writeImageTheme(value)
     if (value !== 'bing' && bingDailyRefresh) {
       setBingDailyRefresh(false)
       writeBingDailyRefresh(false)
     }
+  }
+
+  function changeBackgroundImage(enabled: boolean) {
+    setBackgroundImage(enabled)
+    writeBackgroundImageEnabled(enabled)
   }
 
   async function selectBingTheme(force = false) {
@@ -204,8 +211,10 @@ function GeneralSettings() {
     setTheme('green')
     setAppearance('system')
     setThemeKind('color')
+    setBackgroundImage(false)
     writeThemePreference('green')
     writeAppearancePreference('system')
+    writeBackgroundImageEnabled(false)
     writeThemeKind('color')
   }
 
@@ -220,7 +229,7 @@ function GeneralSettings() {
         <Typography.Title level={5}>{t("主题")}</Typography.Title>
         <Typography.Paragraph type="secondary">{t("选择喜欢的颜色主题。更改会立即生效，并自动保存。")}</Typography.Paragraph>
       </div>
-      <Button icon={<ReloadOutlined/>} disabled={theme === 'green' && appearance === 'system' && themeKind === 'color'} onClick={restoreDefaults}>{t("恢复默认值")}</Button>
+      <Button icon={<ReloadOutlined/>} disabled={theme === 'green' && appearance === 'system' && themeKind === 'color' && !backgroundImage} onClick={restoreDefaults}>{t("恢复默认值")}</Button>
     </div>
 
     <section className="appearance-setting">
@@ -237,20 +246,26 @@ function GeneralSettings() {
       <button type="button" className={themeKind === 'image' ? 'is-active' : ''} onClick={() => changeThemeKind('image')}><PictureOutlined/>{t("图像主题")}</button>
     </div>
 
-    {themeKind === 'color' ? <div className="theme-palette" role="radiogroup" aria-label={t("选择颜色主题")}>
-      {THEME_OPTIONS.map(option => <button
-        key={option.value}
-        type="button"
-        role="radio"
-        aria-checked={theme === option.value}
-        aria-label={`${option.label}：${option.description}`}
-        title={option.label}
-        className={`theme-swatch${theme === option.value ? ' is-selected' : ''}`}
-        onClick={() => changeTheme(option.value)}
-        style={{ '--theme-swatch-soft': option.swatch[0], '--theme-swatch-accent': option.swatch[1] } as CSSProperties}
-      ><span/><small>{option.label}</small></button>)}
-    </div> : <div className="image-theme-panel">
-      <div className="image-theme-toolbar"><span>{t("应用的主题：")}<strong>{selectedImageLabel}</strong></span></div>
+    {themeKind === 'color' ? <>
+      <div className="theme-palette" role="radiogroup" aria-label={t("选择颜色主题")}>
+        {THEME_OPTIONS.map(option => <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={theme === option.value}
+          aria-label={`${option.label}：${option.description}`}
+          title={option.label}
+          className={`theme-swatch${theme === option.value ? ' is-selected' : ''}`}
+          onClick={() => changeTheme(option.value)}
+          style={{ '--theme-swatch-soft': option.swatch[0], '--theme-swatch-accent': option.swatch[1] } as CSSProperties}
+        ><span/><small>{option.label}</small></button>)}
+      </div>
+      {backgroundImage && <Typography.Paragraph type="secondary" className="theme-background-hint">{t("已启用背景图片：切换颜色主题不会移除它，可在「图像主题」中更换或关闭。")}</Typography.Paragraph>}
+    </> : <div className="image-theme-panel">
+      <div className="image-theme-toolbar">
+        <span>{t("应用的主题：")}<strong>{selectedImageLabel}</strong></span>
+        <label title={t("关闭后使用纯色背景，已选图片会保留。")}>{t("显示背景图片")} <Switch checked={backgroundImage} onChange={changeBackgroundImage}/></label>
+      </div>
       <section className="image-theme-section image-theme-section--daily">
         <div className="image-theme-section__heading">
           <div><strong>{t("每日一图")}</strong><small>{t("联网获取 Bing 当日壁纸，每天自动更新。")}</small></div>
@@ -302,9 +317,9 @@ function GeneralSettings() {
     </div>}
 
     <div
-      className={`theme-preview theme-preview--${theme}${themeKind === 'image' ? ' is-image-theme' : ''}`}
-      style={themeKind === 'image' ?( { '--theme-image': `url("${selectedImageUrl}")` } as CSSProperties) : undefined}
-      aria-label={themeKind === 'image' ?t("图像主题预览"):t("{value0}主题预览",{value0:selected.label})}
+      className={`theme-preview theme-preview--${theme}${backgroundImage ? ' is-image-theme' : ''}`}
+      style={backgroundImage ?( { '--theme-image': `url("${selectedImageUrl}")` } as CSSProperties) : undefined}
+      aria-label={backgroundImage ?t("图像主题预览"):t("{value0}主题预览",{value0:selected.label})}
     >
       <div className="theme-preview__chrome">
         <span className="theme-preview__tab">{t("新标签页")}</span>
@@ -313,7 +328,7 @@ function GeneralSettings() {
       <div className="theme-preview__toolbar"><span/><b/></div>
       <div className="theme-preview__body">
         <aside><i/><i className="is-active"/><i/><i/></aside>
-        <main><strong>{themeKind === 'image' ? selectedImageLabel : selected.label}</strong><small>{themeKind === 'image' ?t("图像主题已应用到浏览器标签区和新标签页"):selected.description}</small><div><span/><span/><span/></div></main>
+        <main><strong>{backgroundImage ? selectedImageLabel : selected.label}</strong><small>{backgroundImage ?t("图像主题已应用到浏览器标签区和新标签页"):selected.description}</small><div><span/><span/><span/></div></main>
       </div>
     </div>
   </Card>

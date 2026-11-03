@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { UIProvider } from './components/ui'
 import { AppRouter } from './app/AppRouter'
 import { readThemePreference, THEME_CHANGE_EVENT, type ThemePreference } from './features/settings/theme'
-import { APPEARANCE_CHANGE_EVENT, IMAGE_THEMES, readAppearancePreference, readImageTheme, readThemeKind, VISUAL_THEME_CHANGE_EVENT, type AppearancePreference, type ImageThemeId, type ThemeKind } from './features/settings/visualTheme'
+import { APPEARANCE_CHANGE_EVENT, IMAGE_THEMES, readAppearancePreference, readBackgroundImageEnabled, readImageTheme, VISUAL_THEME_CHANGE_EVENT, type AppearancePreference, type ImageThemeId, type VisualThemeChangeDetail } from './features/settings/visualTheme'
 import { BING_DAILY_CHANGE_EVENT, loadBingDailyImage, readCachedBingDailyImage, type BingDailyImage } from './features/settings/bingDailyTheme'
 import { readAdvancedSettings } from './features/settings/advanced'
 import { useTaskWorker } from './features/tasks/useTaskWorker'
@@ -28,8 +28,8 @@ export default function App() {
   const locale = useLocale()
   const [preference, setPreference] = useState<ThemePreference>(readThemePreference)
   const [appearance, setAppearance] = useState<AppearancePreference>(readAppearancePreference)
-  const [themeKind, setThemeKind] = useState<ThemeKind>(readThemeKind)
   const [imageTheme, setImageTheme] = useState<ImageThemeId>(readImageTheme)
+  const [backgroundImage, setBackgroundImage] = useState(readBackgroundImageEnabled)
   const [bingImage, setBingImage] = useState(readCachedBingDailyImage)
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
 
@@ -47,9 +47,9 @@ export default function App() {
   useEffect(() => {
     const handleAppearance = (event: Event) => setAppearance((event as CustomEvent<AppearancePreference>).detail)
     const handleVisualTheme = (event: Event) => {
-      const next = (event as CustomEvent<{ kind: ThemeKind; image: ImageThemeId }>).detail
-      setThemeKind(next.kind)
+      const next = (event as CustomEvent<VisualThemeChangeDetail>).detail
       setImageTheme(next.image)
+      setBackgroundImage(next.background)
       if (next.image === 'bing') setBingImage(readCachedBingDailyImage())
     }
     window.addEventListener(APPEARANCE_CHANGE_EVENT, handleAppearance)
@@ -92,14 +92,16 @@ export default function App() {
   useEffect(() => {
     document.body.dataset.theme = resolvedPreference
     document.body.dataset.themePreference = appearance
-    document.body.dataset.themeKind = themeKind
+    // Wallpapers are independent of the chosen colour theme: this attribute
+    // only tracks whether the user has a background image turned on.
+    document.body.dataset.wallpaper = backgroundImage ? 'on' : 'off'
     document.body.dataset.imageTheme = imageTheme
     const imageUrl = imageTheme === 'bing' && bingImage?.url
       ? bingImage.url
       : (IMAGE_THEMES.find(item => item.id === imageTheme) ?? IMAGE_THEMES[0]).url
     document.body.style.setProperty('--app-theme-image', `url("${imageUrl}")`)
     document.documentElement.style.colorScheme = resolvedPreference === 'dark' ? 'dark' : 'light'
-  }, [appearance, bingImage, imageTheme, resolvedPreference, themeKind])
+  }, [appearance, backgroundImage, bingImage, imageTheme, resolvedPreference])
 
   useEffect(() => {
     document.body.dataset.reduceMotion = readAdvancedSettings().reduceMotion ? 'true' : 'false'

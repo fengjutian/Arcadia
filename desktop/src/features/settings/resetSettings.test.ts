@@ -6,6 +6,7 @@ import { readShellSettings, DEFAULT_SHELL_SETTINGS } from './shell'
 import { readDownloadSettings, DEFAULT_DOWNLOAD_SETTINGS } from './downloadSettings'
 import { readTypographySettings, DEFAULT_TYPOGRAPHY_SETTINGS } from './typography'
 import { readThemePreference } from './theme'
+import { readBackgroundImageEnabled } from './visualTheme'
 import { readSearchEngineConfig, DEFAULT_SEARCH_ENGINE_CONFIG } from '../browser/searchEngine'
 
 describe('reset browser preferences', () => {
@@ -17,6 +18,7 @@ describe('reset browser preferences', () => {
     localStorage.setItem('arcadia-advanced-settings.v1', JSON.stringify({ maxLiveWebviews: 2 }))
     resetBrowserPreferences()
     expect(readThemePreference()).toBe('green')
+    expect(readBackgroundImageEnabled()).toBe(false)
     expect(readAdvancedSettings()).toEqual(DEFAULT_ADVANCED_SETTINGS)
     expect(readBrowserAppearance()).toEqual(DEFAULT_BROWSER_APPEARANCE)
     expect(readShellSettings()).toEqual(DEFAULT_SHELL_SETTINGS)

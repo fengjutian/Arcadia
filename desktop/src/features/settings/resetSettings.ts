@@ -4,7 +4,7 @@ import { DEFAULT_SHELL_SETTINGS, writeShellSettings } from './shell'
 import { DEFAULT_DOWNLOAD_SETTINGS, writeDownloadSettings } from './downloadSettings'
 import { DEFAULT_TYPOGRAPHY_SETTINGS, writeTypographySettings } from './typography'
 import { writeThemePreference } from './theme'
-import { writeAppearancePreference, writeImageTheme, writeThemeKind } from './visualTheme'
+import { writeAppearancePreference, writeBackgroundImageEnabled, writeImageTheme, writeThemeKind } from './visualTheme'
 import { writeBingDailyRefresh } from './bingDailyTheme'
 import { DEFAULT_SEARCH_ENGINE_CONFIG, writeSearchEngineConfig } from '../browser/searchEngine'
 import { resetAllShortcutOverrides } from '../browser/shortcuts'
@@ -15,8 +15,10 @@ import { setTrackingCleanerEnabled } from '../plugins/trackingCleaner'
 export function resetBrowserPreferences(): void {
   writeThemePreference('green')
   writeAppearancePreference('system')
-  writeThemeKind('color')
   writeImageTheme('alpine')
+  // `writeImageTheme` turns the wallpaper on (and opens the image panel); the
+  // default appearance is a colour theme without a background image.
+  writeBackgroundImageEnabled(false)
   writeThemeKind('color')
   writeBingDailyRefresh(true)
   writeBrowserAppearance(DEFAULT_BROWSER_APPEARANCE)

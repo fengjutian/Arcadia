@@ -7,12 +7,19 @@ export type AppearancePreference = 'system' | 'light' | 'dark'
 export type ThemeKind = 'color' | 'image'
 export type ImageThemeId = 'alpine' | 'aurora' | 'forest' | 'bing'
 
+export interface VisualThemeChangeDetail {
+  kind: ThemeKind
+  image: ImageThemeId
+  background: boolean
+}
+
 export const APPEARANCE_CHANGE_EVENT = 'arcadia-appearance-change'
 export const VISUAL_THEME_CHANGE_EVENT = 'arcadia-visual-theme-change'
 
 const APPEARANCE_KEY = 'arcadia-appearance'
 const THEME_KIND_KEY = 'arcadia-theme-kind'
 const IMAGE_THEME_KEY = 'arcadia-image-theme'
+const BACKGROUND_IMAGE_KEY = 'arcadia-background-image'
 
 export const IMAGE_THEMES: Array<{ id: ImageThemeId; label: string; description: string; url: string }> = [
   { id: 'alpine', label:t("雪山晨光"),description:t("明亮温暖的高山日出"),url:alpineSunrise},
@@ -30,6 +37,10 @@ export function writeAppearancePreference(value: AppearancePreference) {
   window.dispatchEvent(new CustomEvent<AppearancePreference>(APPEARANCE_CHANGE_EVENT, { detail: value }))
 }
 
+/**
+ * The panel the appearance settings page had open last. This only remembers
+ * which tab to show; it does not decide whether a wallpaper is painted.
+ */
 export function readThemeKind(): ThemeKind {
   return localStorage.getItem(THEME_KIND_KEY) === 'image' ? 'image' : 'color'
 }
@@ -39,8 +50,28 @@ export function readImageTheme(): ImageThemeId {
   return value === 'aurora' || value === 'forest' || value === 'bing' ? value : 'alpine'
 }
 
+/**
+ * Whether the chosen wallpaper is painted behind the titlebar and the new-tab
+ * page. Wallpapers are independent of the colour theme: picking a colour theme
+ * must not clear or hide an image the user has set.
+ */
+export function readBackgroundImageEnabled(): boolean {
+  const stored = localStorage.getItem(BACKGROUND_IMAGE_KEY)
+  if (stored === 'true' || stored === 'false') return stored === 'true'
+  // Migration: before wallpapers became independent, the image theme was active
+  // exactly when that theme kind had been chosen. Keep the same look on upgrade.
+  return localStorage.getItem(THEME_KIND_KEY) === 'image'
+}
+
+export function writeBackgroundImageEnabled(value: boolean) {
+  localStorage.setItem(BACKGROUND_IMAGE_KEY, String(value))
+  notifyVisualTheme()
+}
+
 function notifyVisualTheme() {
-  window.dispatchEvent(new CustomEvent(VISUAL_THEME_CHANGE_EVENT, { detail: { kind: readThemeKind(), image: readImageTheme() } }))
+  window.dispatchEvent(new CustomEvent<VisualThemeChangeDetail>(VISUAL_THEME_CHANGE_EVENT, {
+    detail: { kind: readThemeKind(), image: readImageTheme(), background: readBackgroundImageEnabled() },
+  }))
 }
 
 export function writeThemeKind(value: ThemeKind) {
@@ -48,8 +79,10 @@ export function writeThemeKind(value: ThemeKind) {
   notifyVisualTheme()
 }
 
+/** Selecting a wallpaper stores it, opens the image panel and turns it on. */
 export function writeImageTheme(value: ImageThemeId) {
   localStorage.setItem(IMAGE_THEME_KEY, value)
   localStorage.setItem(THEME_KIND_KEY, 'image')
+  localStorage.setItem(BACKGROUND_IMAGE_KEY, 'true')
   notifyVisualTheme()
 }

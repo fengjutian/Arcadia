@@ -1591,7 +1591,7 @@ body[data-theme='dark'] {
   overflow: hidden;
 }
 
-body[data-theme-kind='image'] {
+body[data-wallpaper='on'] {
   // Wallpaper strength for image themes. The photo is decoration, not content:
   // `--app-theme-image-opacity` is the share of the page surface the wallpaper
   // may claim on the new-tab backdrop (10% = the photo is veiled by the page
@@ -1719,7 +1719,7 @@ body[data-theme-kind='image'] {
   .window-controls > button:hover { background: rgba(20,35,27,.08); }
 }
 
-body[data-theme='dark'][data-theme-kind='image'] {
+body[data-theme='dark'][data-wallpaper='on'] {
   // The dark theme paints an opaque strip (`#1a221e`) under the tabs; clear it
   // so the frosted pane shows through instead of a flat panel.
   .browser-tabs {
