@@ -8,6 +8,8 @@
 packages/i18n            @arcadia/i18n          语言目录与 locale 运行时（无业务依赖）
 packages/ui              @arcadia/ui            设计系统：Button / Modal / Table … + ui.scss
 packages/browser-core    @arcadia/browser-core  标签、导航、会话、工作区、站点规则、WebView 桥
+packages/reader          @arcadia/reader        Readability + Turndown 正文提取、文本计数
+packages/ai-core         @arcadia/ai-core       Prompt、流式聊天、RAG 召回/融合/重排、跨文档问答
 crates/page-engine       page-engine            PageEngine trait、wry 实现、可选 CEF 实现
 desktop                  @arcadia/desktop       React 应用与 Tauri 主程序
 ```
@@ -45,9 +47,10 @@ desktop/src/
 ├── app/            # 视图路由（AppRouter）
 ├── layouts/        # 应用外壳和跨页面布局
 ├── pages/          # 路由级页面：Browser / Library / Search / Assistant / Settings
-├── features/       # 领域模块：ai / rag / reader / downloads / history / bookmarks /
-│                   # notes / privacy / plugins / tasks / settings / search，
-│                   # 以及浏览器视图（NewTabPage、SitePanel、ContextMenuView …）
+├── features/       # 视图与编排：ai（AssistantPanel / BulkSummaryPalette / agentLoop）、
+│                   # rag、reader、downloads、history、bookmarks、notes、privacy、
+│                   # plugins、tasks、settings、search，以及浏览器视图
+│                   # （NewTabPage、SitePanel、ContextMenuView …）
 ├── services/       # 非浏览器域的适配器（下载、默认浏览器、引擎偏好等）
 ├── shared/         # 无业务依赖的通用 hooks 与工具
 ├── styles/         # SCSS 变量、主题和全局样式
@@ -71,14 +74,19 @@ UI 组件层已经抽到 `packages/ui`（`@arcadia/ui`）：对外暴露与 Ant 
 
 ```text
 @arcadia/desktop ──► @arcadia/browser-core ──► @arcadia/i18n
-        │                  │
-        └──────────────► @arcadia/ui ──────► @arcadia/i18n
+        │
+        ├──────────► @arcadia/ai-core ──► @arcadia/reader
+        │                  └────────────► @arcadia/i18n
+        ├──────────► @arcadia/reader
+        └──────────► @arcadia/ui ──────► @arcadia/i18n
 desktop/src-tauri ──► page-engine
 ```
 
 - 包不得反向导入 `desktop/`；需要宿主决策时使用注入点（如 `setAdBlockEnabledProvider`、`PagePlatformHooks`）。
 - `@arcadia/ui` 只依赖 `@arcadia/i18n` 与 `@base-ui/react`、`lucide-react`；不引入业务 store、Tauri API 或 `api.ts`。
 - `@arcadia/browser-core` 依赖 `@tauri-apps/api` 与 `@arcadia/i18n`，不依赖 UI 组件；React 视图留在 `desktop/src/features/browser`。
+- `@arcadia/reader` 只依赖 `@mozilla/readability` 与 `turndown`，不依赖 React 或 Tauri。
+- `@arcadia/ai-core` 依赖 `@arcadia/i18n`、`@arcadia/reader`、`@tauri-apps/api` 与 `@assistant-ui/react`；Chat 视图与 MCP 驱动的 Agent 循环留在 `desktop/src/features/ai`。
 - `page-engine` 只依赖 `tauri`、`url`、`serde` 与平台 WebView 绑定；不得引用应用模块，原生处理器一律走 `PagePlatformHooks`。
 - 样式：组件样式在 `packages/ui/src/ui.scss`，依赖宿主提供 `--accent*` 等主题变量；应用样式留在 `desktop/src/styles`。
 

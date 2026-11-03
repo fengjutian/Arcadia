@@ -3,16 +3,20 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // First-run experience: an empty workbench used to be a dead end. These tests
-// pin the two sample servers, the one-click add payload, and the guard that
-// stops a sample from being added twice.
+// pin the two sample servers, the payload each one produces (including the
+// Documents directory the filesystem server refuses to start without), and the
+// fallback that sends the user to the form when no host path is available.
 
 const bridge = vi.hoisted(() => ({
   invoke: vi.fn(),
   listen: vi.fn(() => Promise.resolve(() => {})),
+  documentDir: vi.fn(),
+  homeDir: vi.fn(),
 }))
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: bridge.invoke }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: bridge.listen }))
+vi.mock('@tauri-apps/api/path', () => ({ documentDir: bridge.documentDir, homeDir: bridge.homeDir }))
 
 const { McpPage } = await import('./McpPage')
 const { SAMPLE_SERVERS } = await import('./samples')
@@ -20,6 +24,7 @@ const { t } = await import('@arcadia/i18n')
 
 const SAVE_COMMAND = 'local_save_mcp_server'
 const DISCOVER_COMMAND = 'mcp_discover'
+const DOCUMENTS = 'C:\\Users\\tester\\Documents'
 
 let container: HTMLDivElement
 let root: Root
@@ -40,11 +45,20 @@ function sampleButton(title: string): HTMLButtonElement | undefined {
     .find(candidate => candidate.textContent?.includes(title))
 }
 
+function savedPayload(): { server: Record<string, unknown> } | undefined {
+  const call = bridge.invoke.mock.calls.find(([command]) => command === SAVE_COMMAND)
+  return call?.[1] as { server: Record<string, unknown> } | undefined
+}
+
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   ;(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {}
   savedServers = []
   bridge.invoke.mockReset()
+  bridge.documentDir.mockReset()
+  bridge.homeDir.mockReset()
+  bridge.documentDir.mockResolvedValue(DOCUMENTS)
+  bridge.homeDir.mockResolvedValue('C:\\Users\\tester')
   bridge.invoke.mockImplementation(async (command: string, payload?: { server?: Record<string, unknown> }) => {
     if (command === 'local_list_mcp_servers') return savedServers
     if (command === SAVE_COMMAND) {
@@ -78,24 +92,22 @@ describe('MCP empty-state samples', () => {
     }
   })
 
-  it('adds the stdio sample with the command and arguments the backend expects', async () => {
+  it('adds the Playwright sample with its launch arguments and connects it', async () => {
     await mount()
-    const button = sampleButton(t('示例 everything'))
+    const button = sampleButton(t('浏览器自动化'))
     if (!button) throw new Error('sample button missing')
 
     await act(async () => { button.click() })
     await flush()
 
-    const call = bridge.invoke.mock.calls.find(([command]) => command === SAVE_COMMAND)
-    expect(call).toBeTruthy()
-    expect(call?.[1]).toEqual({
+    expect(savedPayload()).toEqual({
       server: {
-        name: 'everything',
+        name: 'playwright',
         transport: 'stdio',
         enabled: true,
         command: 'npx',
         url: undefined,
-        args: ['-y', '@modelcontextprotocol/server-everything'],
+        args: ['-y', '@playwright/mcp@latest'],
         env: {},
         headers: {},
       },
@@ -103,23 +115,36 @@ describe('MCP empty-state samples', () => {
     expect(bridge.invoke).toHaveBeenCalledWith(DISCOVER_COMMAND, { serverId: 'sample-1' })
   })
 
-  it('adds the remote sample as an HTTP server without a command', async () => {
+  it('grants the filesystem sample only the resolved Documents folder', async () => {
     await mount()
-    const button = sampleButton(t('示例 DeepWiki'))
+    const button = sampleButton(t('本地文档'))
     if (!button) throw new Error('sample button missing')
 
     await act(async () => { button.click() })
     await flush()
 
-    const call = bridge.invoke.mock.calls.find(([command]) => command === SAVE_COMMAND)
-    expect(call?.[1]).toMatchObject({
-      server: {
-        name: 'deepwiki',
-        transport: 'http',
-        url: 'https://mcp.deepwiki.com/mcp',
-        args: [],
-      },
+    expect(bridge.documentDir).toHaveBeenCalled()
+    expect(savedPayload()?.server).toMatchObject({
+      name: 'filesystem',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', DOCUMENTS],
     })
-    expect((call?.[1] as { server: { command?: string } }).server.command).toBeUndefined()
+  })
+
+  it('falls back to the add form when the host cannot resolve a folder', async () => {
+    bridge.documentDir.mockRejectedValue(new Error('denied'))
+    bridge.homeDir.mockRejectedValue(new Error('denied'))
+    await mount()
+    const button = sampleButton(t('本地文档'))
+    if (!button) throw new Error('sample button missing')
+
+    await act(async () => { button.click() })
+    await flush()
+
+    expect(bridge.invoke).not.toHaveBeenCalledWith(SAVE_COMMAND, expect.anything())
+    // The add dialog opens prefilled with the command, path left to the user.
+    const dialog = document.querySelector<HTMLElement>('.ui-dialog')
+    expect(dialog?.textContent).toContain('@modelcontextprotocol/server-filesystem')
   })
 })

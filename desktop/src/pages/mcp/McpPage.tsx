@@ -1,6 +1,7 @@
 import { t } from '@arcadia/i18n'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { listen } from '@tauri-apps/api/event'
+import { documentDir, homeDir } from '@tauri-apps/api/path'
 import {
   Boxes,
   ChevronRight,
@@ -61,6 +62,23 @@ import { ToolArgumentsEditor } from '../../features/mcp/ToolArgumentsEditor'
 import { ToolResultView } from '../../features/mcp/ToolResultView'
 import { SkillHubPage } from '../skillhub/SkillHubPage'
 import { SAMPLE_SERVERS, sampleServerInput, type SampleServer } from './samples'
+
+/**
+ * Documents folder used by the filesystem sample. The host may not expose it
+ * (permissions, non-Tauri shell), so fall back to the home folder and let the
+ * caller ask the user for a path when both fail.
+ */
+async function resolveDocumentsDir(): Promise<string | null> {
+  try {
+    return await documentDir()
+  } catch {
+    try {
+      return await homeDir()
+    } catch {
+      return null
+    }
+  }
+}
 
 type McpTool = { name: string; description?: string; inputSchema?: unknown; arcadiaRisk?: string; arcadiaGranted?: boolean }
 type McpResource = { uri?: string; name?: string; description?: string }
@@ -388,9 +406,21 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     if (addingSampleRef.current) return
     addingSampleRef.current = sample.key
     setAddingSample(sample.key)
-    setBusy(true)
     try {
-      const saved = await saveMcpServer(sampleServerInput(sample))
+      let extraArgs: string[] = []
+      if (sample.needsDocumentsDir) {
+        const dir = await resolveDocumentsDir()
+        if (!dir) {
+          // No host path: fall back to the form so the user can type one.
+          fillSample(sample)
+          setModalOpen(true)
+          messageApi.info(t("没有取到「文档」目录，请手动填入一个允许访问的路径"))
+          return
+        }
+        extraArgs = [dir]
+      }
+      setBusy(true)
+      const saved = await saveMcpServer(sampleServerInput(sample, extraArgs))
       messageApi.success(t("已添加 {value0}",{value0:sample.name}))
       await reload()
       setSelectedId(saved.id)
@@ -617,7 +647,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
                   </button>
                 })}
               </div>
-              <span className="mcp-start__note">{t("或者用「添加 Server」手动填写命令与地址。")}</span>
+              <span className="mcp-start__note">{t("也可以用「添加 Server」手动接入。")}</span>
             </div>
           : servers.map(server => <div key={server.id} className="mcp-server-row">
               <button type="button" className={`mcp-server${selectedId === server.id ? ' is-selected' : ''}`} onClick={() => selectServer(server.id)}>

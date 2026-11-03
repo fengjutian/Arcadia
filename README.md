@@ -67,6 +67,8 @@ Arcadia 是一款以浏览器为入口、以本地知识库为核心的桌面阅
 | `@arcadia/i18n` | `packages/i18n` | 语言目录与 locale 运行时 |
 | `@arcadia/ui` | `packages/ui` | 设计系统组件、图标与 `ui.scss` |
 | `@arcadia/browser-core` | `packages/browser-core` | 标签、导航、会话、工作区、站点规则、WebView 桥 |
+| `@arcadia/reader` | `packages/reader` | Readability + Turndown 正文提取与文本计数 |
+| `@arcadia/ai-core` | `packages/ai-core` | Prompt 构建、流式聊天、RAG 召回/融合/重排、跨文档问答 |
 | `page-engine` | `crates/page-engine` | `PageEngine` trait、wry 实现、可选 CEF 实现 |
 
 界面语言：内置简体中文与英文，可在 **设置 → 通用 → 语言** 切换，详见 [国际化方案](docs/internationalization.md)。
@@ -124,7 +126,9 @@ Provider 与网络：`reqwest` + `rustls-tls`，流式响应。
 ├── packages/
 │   ├── i18n/                        # @arcadia/i18n：消息目录与 locale 运行时
 │   ├── ui/                          # @arcadia/ui：设计系统组件、图标、ui.scss
-│   └── browser-core/                # @arcadia/browser-core：浏览器领域逻辑与原生 WebView 桥
+│   ├── browser-core/                # @arcadia/browser-core：浏览器领域逻辑与原生 WebView 桥
+│   ├── reader/                      # @arcadia/reader：正文提取（Readability + Turndown）
+│   └── ai-core/                     # @arcadia/ai-core：Prompt、流式聊天、RAG、跨文档问答
 ├── crates/
 │   └── page-engine/                 # PageEngine trait + WryPageEngine + 可选 CEF
 ├── desktop/
@@ -252,7 +256,7 @@ npm run build
 
 ```bash
 # 前端（根目录一次跑全部 workspace）
-npm test              # desktop 71 文件 / 494 用例；ui 3 文件 / 11 用例；browser-core 34 文件 / 273 用例
+npm test              # desktop 58 文件 / 394 用例；ui 11；browser-core 273；reader 10；ai-core 93
 npm run build         # tsc --noEmit + vite build
 
 # Rust

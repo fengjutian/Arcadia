@@ -26,20 +26,21 @@ AI Provider、RAG、隐私拦截、WASM 插件运行时和受控 Agent 均已实
 | 桌面 UI | React 19、TypeScript、Vite 6、SCSS | 页面、标签状态、阅读器、知识库和设置界面 |
 | UI 组件层 | `packages/ui`（`@arcadia/ui`，`@base-ui/react` + `lucide-react`） | 对外暴露对齐 Ant Design 用法的组件；**不依赖 `antd` 包** |
 | 桌面壳 | Tauri 2、Rust | 子 WebView、受控导航、页面快照、本地 SQLite、应用打包 |
-| 内容处理 | Mozilla Readability、Turndown、React Markdown + remark-gfm | 正文识别、HTML 清理、Markdown 转换和展示 |
+| 内容处理 | `@arcadia/reader`（Mozilla Readability + Turndown）、React Markdown + remark-gfm | 正文识别、HTML 清理、Markdown 转换和展示 |
+| AI 编排 | `@arcadia/ai-core` | Prompt 构建、流式聊天、BM25/RRF/Reranker、跨文档问答 |
 | 持久化 | `rusqlite`（bundled） + SQLite **FTS5** | 26 个顺序迁移；文档、标签、集合、任务、Provider、下载、历史、书签、工作区、阅读活动、凭证、RAG、Agent、插件、隐私统计 |
 | 检索 | 自实现 BM25 / 向量索引 / RRF / Reranker / 引用校验 | 混合召回与带引用的问答 |
 | Provider | `reqwest` + `rustls-tls`（流式） | OpenAI Compatible、Ollama、Embedding |
 | 插件 | `wasmtime`（component-model + cranelift） | WASI Preview 2 组件运行时，Fuel / 内存 / 超时隔离 |
 | 密钥 | `keyring` | Credential Manager / Keychain / Secret Service |
-| 测试 | Vitest、Cargo test | 前端 desktop 71 文件 / 494 用例 + ui 11 + browser-core 273；Rust 282 用例（Windows 经 `npm run test:rust`，见 §12） |
+| 测试 | Vitest、Cargo test | 前端 desktop 58 文件 / 394 用例 + ui 11 + browser-core 273 + reader 10 + ai-core 93；Rust 282 用例（Windows 经 `npm run test:rust`，见 §12） |
 
 ## 3. 仓库结构
 
 ```text
 .
 ├── package.json                     # npm workspaces 根配置
-├── packages/                        # @arcadia/i18n / @arcadia/ui / @arcadia/browser-core
+├── packages/                        # @arcadia/i18n / ui / browser-core / reader / ai-core
 ├── crates/page-engine/              # PageEngine trait + wry / CEF 实现
 ├── desktop/
 │   ├── src/                         # React/TypeScript UI
