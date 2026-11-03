@@ -54,6 +54,8 @@ const CHINESE_DATA_FILES = new Set([
   // Sample-server cards store catalog ids in `titleId` / `descriptionId` /
   // `hintId` instead of calling t() inline, so their Chinese is data here.
   'pages/mcp/samples.ts',
+  // Same pattern for first-call guides (`titleId` / `bodyId`).
+  'pages/mcp/guides.ts',
 ])
 
 function walk(dir: string): string[] {

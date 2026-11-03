@@ -18,6 +18,8 @@ export function AppRouter() {
   const [view, setView] = useState<View>(() => takeViewAfterReload() ?? 'browser')
   const [mountedViews, setMountedViews] = useState<Set<View>>(() => new Set([view]))
   const [knowledgeQuery, setKnowledgeQuery] = useState('')
+  const [assistantDraft, setAssistantDraft] = useState('')
+  const [assistantDraftNonce, setAssistantDraftNonce] = useState(0)
   const [spaceNamespace, setSpaceNamespace] = useState(() => currentSpaceNamespace())
   // Bring the extra-source vector index up to date once the app has settled.
   useEffect(() => { scheduleExtrasSync(2_000) }, [])
@@ -57,10 +59,15 @@ export function AppRouter() {
       window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
       changeView('browser')
     }} />,
-    ai: <AssistantPage onNavigate={changeView} sessionNamespace={spaceNamespace} />,
+    ai: <AssistantPage onNavigate={changeView} sessionNamespace={spaceNamespace} initialQuestion={assistantDraft} draftNonce={assistantDraftNonce} />,
     mcp: <McpPage onOpenUrl={url => {
       window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))
       changeView('browser')
+    }} onAskAssistant={question => {
+      // Bump the nonce so an already mounted assistant re-applies the draft.
+      setAssistantDraft(question)
+      setAssistantDraftNonce(current => current + 1)
+      changeView('ai')
     }} />,
     settings: <SettingsPage onOpenUrl={url => {
       window.dispatchEvent(new CustomEvent('arcadia-browser-open-url', { detail: { url } }))

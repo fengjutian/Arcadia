@@ -205,7 +205,7 @@ function ResearchSteps({ steps }: { steps: AgentStep[] }) {
   </details>
 }
 
-export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = false, embedded = false, sessionNamespace = 'default' }: { onNavigate?: (view: View) => void; initialQuestion?: string; autoSubmit?: boolean; embedded?: boolean; sessionNamespace?: string }) {
+export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = false, embedded = false, sessionNamespace = 'default', draftNonce = 0 }: { onNavigate?: (view: View) => void; initialQuestion?: string; autoSubmit?: boolean; embedded?: boolean; sessionNamespace?: string; draftNonce?: number }) {
   const conversationKey = sessionNamespace === 'default' ? CONVERSATION_KEY : `${CONVERSATION_KEY}:${sessionNamespace}`
   const conversationHistoryKey = sessionNamespace === 'default' ? CONVERSATION_HISTORY_KEY : `${CONVERSATION_HISTORY_KEY}:${sessionNamespace}`
   const [messageApi, contextHolder] = message.useMessage()
@@ -235,6 +235,18 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
   const busyRef = useRef(false)
   const conversationSaveRef = useRef<Promise<void>>(Promise.resolve())
   const autoSubmittedRef = useRef(false)
+  const appliedDraftNonce = useRef(draftNonce)
+
+  // Another view (MCP workbench) handed us a question after this page was
+  // already mounted, so `useState(initialQuestion)` never saw it. The nonce
+  // makes the same text re-appliable on a second hand-off.
+  useEffect(() => {
+    if (draftNonce === appliedDraftNonce.current) return
+    appliedDraftNonce.current = draftNonce
+    if (!initialQuestion.trim()) return
+    setQuestion(initialQuestion)
+    window.requestAnimationFrame(() => document.getElementById('assistant-question')?.focus())
+  }, [draftNonce, initialQuestion])
 
   useEffect(() => {
     // A namespace change means a different Space's conversation: block the

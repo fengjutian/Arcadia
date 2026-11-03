@@ -9,6 +9,7 @@ import {
   Database,
   Download,
   History,
+  Lightbulb,
   MessageSquare,
   Pencil,
   Play,
@@ -62,6 +63,7 @@ import { ToolArgumentsEditor } from '../../features/mcp/ToolArgumentsEditor'
 import { ToolResultView } from '../../features/mcp/ToolResultView'
 import { SkillHubPage } from '../skillhub/SkillHubPage'
 import { SAMPLE_SERVERS, sampleServerInput, type SampleServer } from './samples'
+import { guideFor, type ToolGuide } from './guides'
 
 /**
  * Documents folder used by the filesystem sample. The host may not expose it
@@ -160,7 +162,11 @@ function argumentIssueMessage(issue: ArgumentIssue): string {
   }
 }
 
-export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
+export function McpPage({ onOpenUrl, onAskAssistant }: {
+  onOpenUrl: (url: string) => void
+  /** Hand a question to the assistant; the shell switches views and pre-fills it. */
+  onAskAssistant?: (question: string) => void
+}) {
   const [messageApi, contextHolder] = message.useMessage()
   const [servers, setServers] = useState<McpServer[]>([])
   const [selectedId, setSelectedId] = useState<string>()
@@ -202,6 +208,7 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
   const [capabilityNotice, setCapabilityNotice] = useState<Array<{ kind: 'tools' | 'resources' | 'prompts'; diff: McpCapabilityDiff }>>()
   const [toolFilter, setToolFilter] = useState('')
   const [addingSample, setAddingSample] = useState<string | null>(null)
+  const [dismissedGuide, setDismissedGuide] = useState<string>()
   const addingSampleRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -212,6 +219,27 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
     if (!query) return tools
     return tools.filter(tool => `${tool.name} ${tool.description ?? ''}`.toLowerCase().includes(query))
   }, [tools, toolFilter])
+
+  /**
+   * First-call suggestion shown right above the tool list. It disappears once
+   * the user dismisses it, switches servers, or has already run something.
+   */
+  const guide = useMemo(() => {
+    if (!status.connected || result !== undefined || dismissedGuide === selectedId) return null
+    const allowedDir = selected?.transport === 'stdio'
+      ? selected.args.find(arg => /^[A-Za-z]:[\\/]/.test(arg) || arg.startsWith('/'))
+      : undefined
+    return guideFor(tools, { allowedDir })
+  }, [status.connected, result, dismissedGuide, selectedId, selected, tools])
+
+  function applyGuide(target: ToolGuide) {
+    setToolArgs(current => ({
+      ...current,
+      [target.toolName]: { ...(current[target.toolName] ?? {}), ...target.arguments },
+    }))
+    messageApi.success(t("参数已填入 {value0}",{value0:target.toolName}))
+    document.getElementById(`mcp-tool-${target.toolName}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }
   const cachedSections = cachedCapabilities
     ? [
         { key: 'tools', label: t("工具"), items: cachedCapabilities.tools },
@@ -686,10 +714,19 @@ export function McpPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }) {
           <Alert type="info" showIcon message={t("安全调用")} description={t("工具名称、参数会在执行前展示。只有确认后，Arcadia 才会发送本次调用。")}/>
           {busy && tools.length === 0 ? <div className="mcp-loading"><Spin/><span>{t("正在发现服务能力…")}</span></div>:<div className="mcp-capabilities">
             <section><div className="mcp-section-title"><span><Wrench size={17}/>{t("工具")}</span><Tag>{toolFilter ? `${visibleTools.length}/${tools.length}` : tools.length}</Tag></div>
+              {guide && <div className="mcp-guide">
+                <Lightbulb size={17}/>
+                <div className="mcp-guide__copy"><b>{t(guide.titleId)}</b><p>{t(guide.bodyId)}</p></div>
+                <div className="mcp-guide__actions">
+                  <Button size="small" type="primary" onClick={()=>applyGuide(guide)}>{t("填入参数")}</Button>
+                  {onAskAssistant && <Button size="small" onClick={()=>onAskAssistant(t(guide.assistantPromptId))}>{t("去助手试试")}</Button>}
+                  <Button size="small" type="text" onClick={()=>setDismissedGuide(selectedId)}>{t("知道了")}</Button>
+                </div>
+              </div>}
               {tools.length > 5 && <div className="mcp-tool-filter"><Input allowClear value={toolFilter} prefix={<Search size={15}/>} onChange={event=>setToolFilter(event.target.value)} placeholder={t("筛选工具…")} aria-label={t("筛选工具…")}/></div>}
               {tools.length === 0 ? <div className="mcp-placeholder">{connected ? t("服务未返回工具") : t("连接 Server 后显示工具")}</div>:visibleTools.length === 0 ? <div className="mcp-placeholder">{t("没有匹配的工具")}</div>:visibleTools.map(tool => {
                 const args = toolArgs[tool.name] ?? initialArguments(tool.inputSchema)
-                return <Card key={tool.name} className="mcp-tool-card">
+                return <Card key={tool.name} id={`mcp-tool-${tool.name}`} className="mcp-tool-card">
                   <div className="mcp-tool-card__title"><div><b>{tool.name}</b><p>{tool.description ||t("无描述")}</p></div><div className="mcp-tool-card__actions">
                     <Tag color={riskColor(tool.arcadiaRisk)} title={riskLabel(tool.arcadiaRisk)}>{tool.arcadiaRisk ?? 'R2'}</Tag>
                     {tool.arcadiaGranted && <Tag color="geekblue">{t("已记住授权")}</Tag>}
