@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Space, Typography } from '../../components/ui'
 import { CheckCircleOutlined, CopyOutlined, LockOutlined, PlusOutlined, ReloadOutlined } from '../../components/ui/icons'
 import type { BrowserTab } from '../../types'

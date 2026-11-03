@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Recognising "the native WebView behind this tab is gone".
  *

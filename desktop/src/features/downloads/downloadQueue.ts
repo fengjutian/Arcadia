@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Pure FIFO queue of pending downloads that should only start once a running
  * slot frees up. The queue lives in localStorage so a refresh or a crash

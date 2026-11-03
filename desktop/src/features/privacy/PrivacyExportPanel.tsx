@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useState } from 'react'
 import { Alert, Button, Input, message, Modal, Space, Typography, Upload } from '../../components/ui'
 import { DownloadOutlined, LockOutlined, UploadOutlined } from '../../components/ui/icons'

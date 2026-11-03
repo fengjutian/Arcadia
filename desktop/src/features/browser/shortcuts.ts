@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Pure decoder + editable binding table for the BrowserPage keyboard shortcuts
  * documented in §5.2 of the technical guide. Extracted so the full

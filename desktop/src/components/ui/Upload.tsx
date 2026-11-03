@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { UploadCloud, X } from 'lucide-react'
 import { useRef, type DragEvent, type ReactNode } from 'react'
 

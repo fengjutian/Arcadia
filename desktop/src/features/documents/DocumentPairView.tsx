@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button } from '../../components/ui'
 import type { Document } from '../../types'
 

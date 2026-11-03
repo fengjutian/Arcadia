@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Alert, Button, Card, Space, Tag, Typography, message } from '../../components/ui'
 import { CheckCircleOutlined, ExportOutlined, GlobalOutlined, ReloadOutlined } from '../../components/ui/icons'
 import {

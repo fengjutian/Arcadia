@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Dialog } from '@base-ui/react/dialog'
 import type { CSSProperties, ReactNode } from 'react'
 import { Button, type ButtonProps } from './Button'

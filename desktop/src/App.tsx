@@ -7,7 +7,7 @@ import { BING_DAILY_CHANGE_EVENT, loadBingDailyImage, readCachedBingDailyImage, 
 import { readAdvancedSettings } from './features/settings/advanced'
 import { syncEnginePreferences } from './services/enginePreferences'
 import { useTaskWorker } from './features/tasks/useTaskWorker'
-import { useLocale } from './i18n'
+import { useLocale } from '@arcadia/i18n'
 
 const PALETTES = {
   green: { primary: '#347851', sider: '#edf2ee', item: '#68766e', hover: '#e3ebe5', hoverText: '#275f3f', selected: '#d9e8dd', selectedText: '#275f3f' },

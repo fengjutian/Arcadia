@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useMemo, useState } from 'react'
 import { Alert, Button, Input, List, Modal, Progress, Segmented, Space, Tag, Typography } from '../../components/ui'
 import type { BulkProgressEntry } from './bulkSummary'

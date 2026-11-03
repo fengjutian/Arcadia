@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Descriptions, Drawer, Empty, Input, message, Popconfirm, Space, Tag, Tooltip, Typography } from '../../components/ui'
 import { CopyOutlined, DeleteOutlined, ExportOutlined, InboxOutlined, LinkOutlined, PlusOutlined } from '../../components/ui/icons'
 import ReactMarkdown from 'react-markdown'

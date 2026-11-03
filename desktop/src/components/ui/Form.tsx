@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Children, cloneElement, createContext, isValidElement, useContext, useEffect, useMemo, useSyncExternalStore, type FormEvent, type ReactElement, type ReactNode } from 'react'
 
 export interface FormRule {

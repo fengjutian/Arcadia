@@ -1,5 +1,5 @@
 {
-  "name": "ai-knowledge-browser-desktop",
+  "name": "@arcadia/desktop",
   "private": true,
   "version": "0.6.0",
   "packageManager": "npm@11.6.0",
@@ -19,6 +19,7 @@
     "check:cef": "cargo check --features cef --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
+    "@arcadia/i18n": "*",
     "@assistant-ui/react": "^0.15.32",
     "@base-ui/react": "^1.8.0",
     "@mozilla/readability": "^0.6.0",

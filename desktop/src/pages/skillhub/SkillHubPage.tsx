@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ArrowUpRight, BadgeCheck, Download, Search, Sparkles, Star, Store } from 'lucide-react'
 import { searchSkillHub, type SkillHubSkill } from '../../api'

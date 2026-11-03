@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import type { Document } from '../../types'
 import { listDocuments } from '../../api'
 

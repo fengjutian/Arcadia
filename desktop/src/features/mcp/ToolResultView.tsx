@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Alert, Button } from '../../components/ui'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { parseToolResult, type ResourceBlock, type ToolResultBlock } from './result'
 
 const TEXT_LIMIT = 6000

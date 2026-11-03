@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Input, InputNumber, Select, Switch } from '../../components/ui'
 import { fieldsFromSchema, type SchemaField } from './schema'
 

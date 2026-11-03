@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useEffect, useRef } from 'react'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Descriptions, Drawer, Space, Typography } from '../../components/ui'
 import { LinkOutlined } from '../../components/ui/icons'
 import type { ArchivedTab, Clip, PageNote } from '../../api'

@@ -1,4 +1,4 @@
-import { t } from '../i18n'
+import { t } from '@arcadia/i18n'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { Avatar, Badge, Dropdown, Layout, Space, Tooltip, Typography, type MenuProps } from '../components/ui'
 import { SafetyCertificateOutlined, ThunderboltOutlined } from '../components/ui/icons'

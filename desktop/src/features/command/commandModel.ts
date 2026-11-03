@@ -1,4 +1,4 @@
-import { translate } from '../../i18n'
+import { translate } from '@arcadia/i18n'
 /**
  * Pure model for the unified command bar.
  *

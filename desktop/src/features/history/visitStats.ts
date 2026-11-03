@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import type { HistoryEntry } from './dedupeHistory'
 
 export type SiteCategory = '开发技术' | '视频娱乐' | '社交社区' | '搜索工具' | '购物' | '其他'

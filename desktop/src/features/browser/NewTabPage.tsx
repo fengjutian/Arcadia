@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { Button, Input, Select, Switch, Typography } from '../../components/ui'
 import { SearchOutlined } from '../../components/ui/icons'

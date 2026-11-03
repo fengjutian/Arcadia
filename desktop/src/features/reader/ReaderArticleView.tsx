@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Typography } from '../../components/ui'
 import type { CSSProperties } from 'react'
 import type { ReaderArticle } from '../reader/types'

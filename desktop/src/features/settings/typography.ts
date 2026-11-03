@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 
 export type TypographyFontId = 'source-han-serif' | 'source-han-sans' | 'lxgw-wenkai' | 'system'
 

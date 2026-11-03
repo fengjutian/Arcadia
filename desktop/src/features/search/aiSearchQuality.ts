@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { parseAnswerSegments } from './aiSearchAnswer'
 import type { AiSearchSource } from './aiSearchPrompt'
 

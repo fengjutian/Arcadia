@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useMemo, useState } from 'react'
 import { Button, Empty, List, Popconfirm, Progress, Space, Table, Tag, Tooltip, Typography, type TableColumn } from '../../components/ui'
 import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, DownloadOutlined, ExclamationCircleOutlined, FileOutlined, FolderOpenOutlined, LoadingOutlined, MinusCircleOutlined, PauseOutlined, ReloadOutlined, StopOutlined } from '../../components/ui/icons'

@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Pure helpers around URLs that should be opened via the OS shell rather than
  * loaded as a web page (e.g. `vscode://`, `slack://`, `mailto:`). The Rust

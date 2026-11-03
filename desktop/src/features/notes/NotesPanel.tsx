@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useMemo, useState } from 'react'
 import { Button, Empty, Input, Popconfirm, Space, Tooltip, Typography } from '../../components/ui'
 import { CloseOutlined, DeleteOutlined, EditOutlined, PushpinFilled, PushpinOutlined } from '../../components/ui/icons'

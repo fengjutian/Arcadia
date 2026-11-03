@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Session-scoped helpers for "private tabs" (incognito windows). These
  * helpers are intentionally NOT persisted to localStorage — private tabs

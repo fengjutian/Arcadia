@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatRequest } from '../../types'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 
 export type SummaryKind = 'one-sentence' | 'short' | 'detailed' | 'key-points'
 

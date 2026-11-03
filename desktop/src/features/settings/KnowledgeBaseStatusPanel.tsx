@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Alert, Button, Empty, Space, Table, Tag, Typography, message } from '../../components/ui'
 import { ReloadOutlined } from '../../components/ui/icons'
 import { useCallback, useEffect, useState } from 'react'

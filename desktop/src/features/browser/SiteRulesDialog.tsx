@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Modal, Select, Switch, Tag, Typography } from '../../components/ui'
 import { removeSiteRoute, setSiteRouteEnabled, type SiteRoute } from './siteRoutes'
 

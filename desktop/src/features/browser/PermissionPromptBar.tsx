@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Space, Typography } from '../../components/ui'
 import { CheckCircleOutlined, CloseCircleOutlined, SafetyCertificateOutlined } from '../../components/ui/icons'
 import type { UsePermissionPromptResult } from './usePermissionPrompt'

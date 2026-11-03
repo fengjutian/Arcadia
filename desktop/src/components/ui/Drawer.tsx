@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Dialog } from '@base-ui/react/dialog'
 import type { ReactNode } from 'react'
 import { useModalOverlayLifecycle } from './overlayLifecycle'

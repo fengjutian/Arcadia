@@ -1,4 +1,4 @@
-import { formatNumber, getLocale, t } from '../../i18n'
+import { formatNumber, getLocale, t } from '@arcadia/i18n'
 import { AutoComplete, Button, Input, message, Modal, Popconfirm, Select, Spin, Tabs, Tag, Typography, type InputRef } from '../../components/ui'
 import { BookOutlined, ClockCircleOutlined, DeleteOutlined, FileTextOutlined, InboxOutlined, SearchOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'

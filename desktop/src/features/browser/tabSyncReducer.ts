@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import type { BrowserTab } from '../../types'
 import type { NativeBrowserState } from '../../services/nativeBrowser'
 

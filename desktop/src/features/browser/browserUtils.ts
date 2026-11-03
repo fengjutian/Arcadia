@@ -3,7 +3,7 @@
  * Extracted from BrowserPage so the logic can be unit-tested without React.
  */
 import type { BrowserTab } from '../../types'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 
 export const TAB_GROUP_PALETTE = ['#a7dfbd', '#9bc6e8', '#dfc0a7', '#c8a7df', '#dfb5b5', '#bce0c6']
 

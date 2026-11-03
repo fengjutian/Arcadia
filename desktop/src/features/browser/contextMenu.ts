@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Pure builders for the browser's right-click context menu. Each region
  * (page / selection / link / image / input) returns its own item list with

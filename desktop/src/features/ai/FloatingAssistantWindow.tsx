@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useEffect, useState } from 'react'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { AssistantPanel } from './AssistantPanel'

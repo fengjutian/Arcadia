@@ -15,7 +15,7 @@ import { FloatingAssistantWindow } from './features/ai/FloatingAssistantWindow'
 import { isFloatingAssistantWindow } from './features/ai/floatingAssistant'
 import { LittleArcWindow } from './features/littlearc/LittleArcWindow'
 import { isLittleArcWindow } from './features/littlearc/littleArc'
-import { syncLocaleAcrossWindows } from './i18n'
+import { syncLocaleAcrossWindows } from '@arcadia/i18n'
 
 applyTypographySettings(readTypographySettings())
 syncLocaleAcrossWindows()

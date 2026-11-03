@@ -1,4 +1,4 @@
-import { translate } from '../../i18n'
+import { translate } from '@arcadia/i18n'
 /**
  * Address-bar suggestion provider. Merges four sources — open tabs, history,
  * bookmarks, and the implicit "search" fallback — and ranks them by a small

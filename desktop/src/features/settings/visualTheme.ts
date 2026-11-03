@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import alpineSunrise from '../../assets/themes/alpine-sunrise.webp'
 import auroraFlow from '../../assets/themes/aurora-flow.webp'
 import mistyLake from '../../assets/themes/misty-lake.webp'

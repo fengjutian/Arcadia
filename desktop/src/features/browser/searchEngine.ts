@@ -4,7 +4,7 @@
  * `isSearchTemplateValid`). The active id is stored under
  * `browser.searchEngine.v1` in localStorage.
  */
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { DEFAULT_SEARCH_ENGINE, isSearchTemplateValid } from './navigation'
 
 export interface SearchEnginePreset {

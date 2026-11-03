@@ -8,7 +8,7 @@
  * sections instead of the inert nesting rows the old menu produced.
  */
 
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { SPACE_COLORS, SPACE_ICONS } from './spaces'
 
 export type SpaceMenuRow =

@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 
 /**
  * Space switching on top of the existing `workspaces` table.

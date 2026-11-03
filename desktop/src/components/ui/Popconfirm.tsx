@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import type { ReactElement, ReactNode } from 'react'
 import { useState } from 'react'

@@ -4,12 +4,22 @@ import { fileURLToPath } from 'node:url'
 import * as parser from '@babel/parser'
 import traverseModule from '@babel/traverse'
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatDateTime, getLocale, readLocale, resolveLocale, setLocale, t } from './index'
-import { DEFAULT_LOCALE, LOCALE_LABELS, SUPPORTED_LOCALES } from './types'
-import { EN_US_FRAGMENTS, enUS } from './en-US'
+import { formatDateTime, getLocale, readLocale, resolveLocale, setLocale, t } from '@arcadia/i18n'
+import { DEFAULT_LOCALE, LOCALE_LABELS, SUPPORTED_LOCALES } from '@arcadia/i18n/types'
+import { EN_US_FRAGMENTS, enUS } from '@arcadia/i18n/en-US'
 
 const traverse = (traverseModule as unknown as { default?: typeof traverseModule }).default ?? traverseModule
-const SRC_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+/**
+ * Everything that ships UI strings: the desktop app plus every workspace
+ * package. Keys in `leftoverChinese` stay relative to their scan root so the
+ * exception list below keeps reading like a source path.
+ */
+const SCAN_ROOTS = [
+  { dir: path.join(REPO_ROOT, 'desktop', 'src'), prefix: '' },
+  { dir: path.join(REPO_ROOT, 'packages'), prefix: 'packages/' },
+]
 
 const CJK = /[\u3400-\u9fff]/
 const IDENTIFIERS = new Set(['t', 'translate', 'i18nTranslate'])
@@ -76,38 +86,40 @@ function scanSources(): ScanResult {
   const messageIds = new Set<string>()
   const leftoverChinese = new Map<string, string[]>()
 
-  for (const file of walk(SRC_ROOT)) {
-    const relative = path.relative(SRC_ROOT, file).split(path.sep).join('/')
-    const source = fs.readFileSync(file, 'utf8')
-    if (!CJK.test(source)) continue
-    const ast = parser.parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] })
-    const leftovers: string[] = []
-    traverse(ast, {
-      CallExpression(nodePath) {
-        const callee = nodePath.node.callee
-        if (callee.type !== 'Identifier' || !IDENTIFIERS.has(callee.name)) return
-        const first = nodePath.node.arguments[0]
-        if (!first) return
-        if (first.type === 'StringLiteral') messageIds.add(first.value)
-        else if (first.type === 'TemplateLiteral' && first.expressions.length === 0) messageIds.add(first.quasis[0]?.value.cooked ?? '')
-      },
-      StringLiteral(nodePath) {
-        if (!CJK.test(nodePath.node.value)) return
-        if (isTranslationArgument(nodePath as never)) return
-        leftovers.push(nodePath.node.value)
-      },
-      TemplateLiteral(nodePath) {
-        const value = nodePath.node.quasis.map(q => q.value.cooked ?? '').join('{…}')
-        if (!CJK.test(value)) return
-        if (isTranslationArgument(nodePath as never)) return
-        if (nodePath.parentPath?.isTaggedTemplateExpression()) return
-        leftovers.push(value)
-      },
-      JSXText(nodePath) {
-        if (CJK.test(nodePath.node.value) && nodePath.node.value.trim()) leftovers.push(nodePath.node.value.trim())
-      },
-    })
-    if (leftovers.length) leftoverChinese.set(relative, leftovers)
+  for (const root of SCAN_ROOTS) {
+    for (const file of walk(root.dir)) {
+      const relative = root.prefix + path.relative(root.dir, file).split(path.sep).join('/')
+      const source = fs.readFileSync(file, 'utf8')
+      if (!CJK.test(source)) continue
+      const ast = parser.parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] })
+      const leftovers: string[] = []
+      traverse(ast, {
+        CallExpression(nodePath) {
+          const callee = nodePath.node.callee
+          if (callee.type !== 'Identifier' || !IDENTIFIERS.has(callee.name)) return
+          const first = nodePath.node.arguments[0]
+          if (!first) return
+          if (first.type === 'StringLiteral') messageIds.add(first.value)
+          else if (first.type === 'TemplateLiteral' && first.expressions.length === 0) messageIds.add(first.quasis[0]?.value.cooked ?? '')
+        },
+        StringLiteral(nodePath) {
+          if (!CJK.test(nodePath.node.value)) return
+          if (isTranslationArgument(nodePath as never)) return
+          leftovers.push(nodePath.node.value)
+        },
+        TemplateLiteral(nodePath) {
+          const value = nodePath.node.quasis.map(q => q.value.cooked ?? '').join('{…}')
+          if (!CJK.test(value)) return
+          if (isTranslationArgument(nodePath as never)) return
+          if (nodePath.parentPath?.isTaggedTemplateExpression()) return
+          leftovers.push(value)
+        },
+        JSXText(nodePath) {
+          if (CJK.test(nodePath.node.value) && nodePath.node.value.trim()) leftovers.push(nodePath.node.value.trim())
+        },
+      })
+      if (leftovers.length) leftoverChinese.set(relative, leftovers)
+    }
   }
   return { messageIds, leftoverChinese }
 }

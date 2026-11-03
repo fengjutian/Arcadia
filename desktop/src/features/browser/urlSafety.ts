@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Lightweight safety heuristics for the URL the address bar is about to
  * navigate to. We deliberately avoid reaching for a third-party IDN library;

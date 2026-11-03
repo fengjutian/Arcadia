@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Check, Copy } from 'lucide-react'
 import { useState, type CSSProperties, type ElementType, type HTMLAttributes, type ReactNode } from 'react'
 

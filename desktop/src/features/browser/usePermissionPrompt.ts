@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { onPermissionRequest, type PermissionRequest } from '../../services/nativeBrowser'
 import { respondPermissionRequest } from '../../services/permissions'

@@ -1,5 +1,5 @@
 import { Card, Select, Typography } from '../../components/ui'
-import { changeLocale, getLocale, LOCALE_LABELS, SUPPORTED_LOCALES, t, type Locale } from '../../i18n'
+import { changeLocale, getLocale, LOCALE_LABELS, SUPPORTED_LOCALES, t, type Locale } from '@arcadia/i18n'
 import { rememberViewForReload } from '../../app/returnView'
 
 /**

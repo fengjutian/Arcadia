@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 export function parseStringMap(raw: string, label: string): Record<string, string> {
   if (!raw.trim()) return {}
   let parsed: unknown

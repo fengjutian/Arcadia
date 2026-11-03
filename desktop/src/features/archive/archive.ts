@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import type { ArchivedTab } from '../../api'
 import type { BrowserTab } from '../../types'
 

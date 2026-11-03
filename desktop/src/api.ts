@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t } from '@arcadia/i18n'
 import { invoke } from '@tauri-apps/api/core'
 import type { AIProvider, AIProviderType, ChatRequest, ChatResponse, Document, ProviderTestResult, Task } from './types'
 import type { HistoryEntry } from './features/history/dedupeHistory'

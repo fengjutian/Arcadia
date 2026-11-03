@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Input, Modal, Space, Switch, Typography } from '../../components/ui'
 import { addBookmark, removeBookmark } from '../../services/bookmarks'
 import { saveWorkspace } from '../../services/workspaces'

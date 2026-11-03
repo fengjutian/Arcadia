@@ -4,7 +4,7 @@ import {
   type CompleteAttachment,
   type PendingAttachment,
 } from '@assistant-ui/react'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024
 const MAX_TEXT_CHARS = 100_000

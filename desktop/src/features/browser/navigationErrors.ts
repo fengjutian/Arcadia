@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Navigation error classification and file-name sanitization.
  * Extracted from BrowserPage so the logic can be unit-tested without React.

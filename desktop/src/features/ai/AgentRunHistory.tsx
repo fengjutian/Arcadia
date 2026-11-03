@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Empty, List, Tag, Typography } from '../../components/ui'
 import type { AgentRun } from '../../api'
 

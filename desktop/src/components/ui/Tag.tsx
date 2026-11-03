@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import type { HTMLAttributes, ReactNode } from 'react'
 
 export interface TagProps extends HTMLAttributes<HTMLSpanElement> {

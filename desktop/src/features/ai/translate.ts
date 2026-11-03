@@ -1,5 +1,5 @@
 import type { ChatRequest } from '../../types'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 
 const SYSTEM_PROMPT = [
   'You are a precise translator.',

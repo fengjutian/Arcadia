@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Input, Modal, Tag, Typography, type InputRef } from '../../components/ui'
 import {

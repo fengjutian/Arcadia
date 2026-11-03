@@ -1,6 +1,6 @@
 import { aiChat, callMcpTool, discoverMcpServer, listMcpServers, listMcpTools, recordAgentRun, searchDocuments, updateAgentRunStatus, type AgentRun } from '../../api'
 import type { ChatRequest, ChatResponse } from '../../types'
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { validateArguments } from '../mcp/schema'
 
 /**

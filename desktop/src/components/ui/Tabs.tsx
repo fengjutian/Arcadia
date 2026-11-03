@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useEffect, useState, type CSSProperties, type Key, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Plus, X } from 'lucide-react'
 

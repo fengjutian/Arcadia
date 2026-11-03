@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, message, Table, Tag, Tooltip, Typography } from '../../components/ui'
 import { ReloadOutlined, SyncOutlined } from '../../components/ui/icons'
 import { useEffect, useState } from 'react'

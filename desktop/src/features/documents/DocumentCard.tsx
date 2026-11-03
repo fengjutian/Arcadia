@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Card, Dropdown, Input, message, Popconfirm, Popover, Space, Tag, Tooltip, Typography } from '../../components/ui'
 import { ClockCircleOutlined, DeleteOutlined, FileTextOutlined, FolderAddOutlined, InboxOutlined, MoreOutlined, StarFilled, StarOutlined } from '../../components/ui/icons'
 import { useEffect, useState, type MouseEvent } from 'react'

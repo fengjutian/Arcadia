@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 /**
  * Pure helpers for the workspace UI. The Rust commands do the real I/O; this
  * module just shapes inputs (name/description validation) and normalises the

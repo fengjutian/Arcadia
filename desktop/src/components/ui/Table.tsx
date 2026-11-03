@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useEffect, useMemo, useState, type CSSProperties, type Key, type ReactNode } from 'react'
 import { Empty } from './Empty'
 import { Spin } from './Spin'

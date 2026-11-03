@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button, Spin, Typography } from '../../components/ui'
 import { CloseOutlined, SearchOutlined } from '../../components/ui/icons'

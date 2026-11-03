@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { Button, Drawer, Select, Space, Switch, Typography } from '../../components/ui'
 import { SITE_PERMISSION_KINDS, type SitePermissionKind, type SitePermissionRule, type SitePermissionValue } from './sitePermissions'
 

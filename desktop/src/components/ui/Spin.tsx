@@ -1,4 +1,4 @@
-import { t } from '../../i18n'
+import { t } from '@arcadia/i18n'
 import { LoaderCircle } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 
