@@ -26,8 +26,7 @@ const APP_KEY: &str = r"Software\Clients\StartMenuInternet\Arcadia";
 #[allow(dead_code)]
 const CAPABILITIES_KEY: &str = r"Software\Clients\StartMenuInternet\Arcadia\Capabilities";
 #[allow(dead_code)]
-const URL_ASSOCIATIONS_KEY: &str =
-    r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations";
+const URL_ASSOCIATIONS_KEY: &str = r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations";
 #[allow(dead_code)]
 const REGISTERED_APPLICATIONS_KEY: &str = r"Software\RegisteredApplications";
 
@@ -231,7 +230,10 @@ mod platform {
     }
 
     fn user_choice(scheme: &str) -> Option<String> {
-        query_value(&format!(r"{URL_ASSOCIATIONS_KEY}\{scheme}\UserChoice"), "ProgId")
+        query_value(
+            &format!(r"{URL_ASSOCIATIONS_KEY}\{scheme}\UserChoice"),
+            "ProgId",
+        )
     }
 
     fn is_registered() -> bool {
@@ -243,8 +245,7 @@ mod platform {
     pub fn status() -> DefaultBrowserStatus {
         let http = user_choice("http");
         let https = user_choice("https");
-        let is_default =
-            http.as_deref() == Some(PROG_ID) && https.as_deref() == Some(PROG_ID);
+        let is_default = http.as_deref() == Some(PROG_ID) && https.as_deref() == Some(PROG_ID);
         let current = https.clone().or_else(|| http.clone());
         DefaultBrowserStatus {
             platform_supported: true,
@@ -280,11 +281,7 @@ mod platform {
         // Settings → Default apps.
         set_value(APP_KEY, None, APP_NAME)?;
         set_value(&format!(r"{APP_KEY}\DefaultIcon"), None, &icon)?;
-        set_value(
-            &format!(r"{APP_KEY}\shell\open\command"),
-            None,
-            &quoted_exe,
-        )?;
+        set_value(&format!(r"{APP_KEY}\shell\open\command"), None, &quoted_exe)?;
         set_value(CAPABILITIES_KEY, None, APP_NAME)?;
         set_value(
             &format!(r"{CAPABILITIES_KEY}\ApplicationName"),
@@ -296,11 +293,7 @@ mod platform {
             None,
             "Arcadia local-first AI knowledge browser",
         )?;
-        set_value(
-            &format!(r"{CAPABILITIES_KEY}\ApplicationIcon"),
-            None,
-            &icon,
-        )?;
+        set_value(&format!(r"{CAPABILITIES_KEY}\ApplicationIcon"), None, &icon)?;
         set_value(
             &format!(r"{CAPABILITIES_KEY}\URLAssociations"),
             Some("http"),
@@ -376,7 +369,10 @@ mod tests {
     #[test]
     fn ignores_other_values_and_missing_output() {
         let output = "HKEY_CURRENT_USER\\x\r\n    ProgId    REG_SZ    MSEdgeHTM\r\n";
-        assert_eq!(parse_reg_value(output, "ProgId").as_deref(), Some("MSEdgeHTM"));
+        assert_eq!(
+            parse_reg_value(output, "ProgId").as_deref(),
+            Some("MSEdgeHTM")
+        );
         assert_eq!(parse_reg_value(output, "Arcadia"), None);
         assert_eq!(parse_reg_value("", "ProgId"), None);
     }
@@ -385,7 +381,10 @@ mod tests {
     fn names_common_browsers_and_degrades_for_unknown_prog_ids() {
         assert_eq!(friendly_name("ChromeHTML"), Some("Google Chrome"));
         assert_eq!(friendly_name("MSEdgeHTM"), Some("Microsoft Edge"));
-        assert_eq!(friendly_name("FirefoxURL-308046B0AF4A39CB"), Some("Mozilla Firefox"));
+        assert_eq!(
+            friendly_name("FirefoxURL-308046B0AF4A39CB"),
+            Some("Mozilla Firefox")
+        );
         assert_eq!(friendly_name("ArcadiaHTML"), Some("Arcadia"));
         assert_eq!(friendly_name("SomeVendor.Browser"), None);
     }
@@ -409,6 +408,9 @@ mod tests {
         assert_eq!(launch_url("file:///C:/notes.html"), None);
         assert_eq!(launch_url("javascript:alert(1)"), None);
         assert_eq!(launch_url("not a url"), None);
-        assert_eq!(launch_url("http://example.com"), Some("http://example.com/".to_string()));
+        assert_eq!(
+            launch_url("http://example.com"),
+            Some("http://example.com/".to_string())
+        );
     }
 }
