@@ -146,8 +146,9 @@ body[data-theme='dark'] .app-sider.ant-layout-sider {
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, .04);
 }
 
-// The rail button is the only interactive element in the chrome: it gets the same
-// vocabulary on hover and a distinctly lit plate when active.
+// The rail button is the only interactive element in the chrome. The active
+// state is already painted on `.nav-glyph`; keep the outer button transparent
+// so the selected item does not look like two nested buttons.
 body[data-theme] .rail-button {
   border: 1px solid transparent;
   border-radius: 12px;
@@ -161,9 +162,9 @@ body[data-theme] .rail-button:hover {
 }
 
 body[data-theme] .rail-button.is-active {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-edge));
-  background-color: color-mix(in srgb, var(--accent) 14%, var(--glass-fill));
-  box-shadow: var(--glass-rim), 0 8px 18px -12px color-mix(in srgb, var(--accent) 60%, transparent);
+  border-color: transparent;
+  background-color: transparent;
+  box-shadow: none;
 }
 
 // ---------------------------------------------------------------------------
