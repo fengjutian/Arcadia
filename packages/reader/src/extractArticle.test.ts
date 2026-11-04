@@ -34,7 +34,7 @@ describe('extractArticle', () => {
         'https://example.com/article',
         articleWith(
           'Hello world',
-          '<p>Inline paragraph <script>alert(1)</script> and <iframe src="https://evil.example/"></iframe> with more body text so Readability keeps the surrounding paragraph node.</p>',
+          '<p>Inline paragraph <script>alert(1)</script> and <iframe srcdoc="embedded content"></iframe> with more body text so Readability keeps the surrounding paragraph node.</p>',
         ),
       ),
     )

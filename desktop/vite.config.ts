@@ -19,6 +19,9 @@ export default defineConfig({
     ],
   },
   build: {
+    // Keep Vite's advisory threshold aligned with the enforced bundle budget.
+    // `npm run check:bundle` remains the source of truth and fails above 600 KiB.
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks(id) {
