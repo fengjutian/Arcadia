@@ -1588,7 +1588,21 @@ body[data-theme='dark'] {
 // A native child WebView (including Edge's print preview) owns its scrolling.
 // Prevent the empty React host beneath it from exposing a second scrollbar.
 .web-surface--native {
+  position: relative;
   overflow: hidden;
+}
+
+// Still frame of the page, painted while a host overlay (tab menu, dialog)
+// hides the native WebView. Without it the content area would go blank the
+// moment the menu opens; with it the page appears to stay put underneath.
+.web-surface__still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
 }
 
 body[data-wallpaper='on'] {

@@ -207,6 +207,10 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const [comparison, setComparison] = useState<ComparisonSession | null>(null)
   const [toolbarOverlay, setToolbarOverlay] = useState<ToolbarOverlay | null>(null)
   const [modalOverlayCount, setModalOverlayCount] = useState(0)
+  // Still frame of the page painted underneath a host overlay while the native
+  // WebView is hidden, so opening the tab menu does not blank the content area.
+  const [frozenFrame, setFrozenFrame] = useState<string | null>(null)
+  const frozenForRef = useRef<string | null>(null)
   const [sourceView, setSourceView] = useState<{ url: string; html: string } | null>(null)
   const [clearSiteDataOpen, setClearSiteDataOpen] = useState(false)
   const [passwordCandidate, setPasswordCandidate] = useState<(PasswordCandidate & { existingId?: string }) | null>(null)
@@ -545,12 +549,30 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     setToolbarOverlay(current => current === kind ? null : current)
   }
 
+  // A still belongs to exactly one tab; drop it when the active tab changes so
+  // a leftover frame can never flash over another page.
+  useEffect(() => {
+    frozenForRef.current = null
+    setFrozenFrame(null)
+  }, [active.id])
+
+  // Read by the async capture below: an overlay that closed while the
+  // screenshot was in flight must not hide the page it already restored.
+  const overlayOpenRef = useRef(false)
+  overlayOpenRef.current = modalOverlayCount > 0 || toolbarOverlay === 'tab-menu' || toolbarOverlay === 'menu'
+
   useEffect(() => {
     let cancelled = false
-    if (!hasNativeTab(active.id)) return
+    if (!hasNativeTab(active.id)) {
+      frozenForRef.current = null
+      setFrozenFrame(null)
+      return
+    }
     // The native child WebView paints above the React surface, so any error
     // view (site block, crash, load failure) must hide it.
     if (!visible || readerArticle || active.error) {
+      frozenForRef.current = null
+      setFrozenFrame(null)
       void hideNativeTab(active.id)
       return
     }
@@ -558,7 +580,39 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     // paint over the native page, so it has to be hidden while they are open.
     // The Space menu is not here: it is drawn inside the page by Rust.
     if (modalOverlayCount > 0 || toolbarOverlay === 'tab-menu' || toolbarOverlay === 'menu') {
-      void hideNativeTab(active.id)
+      // Hiding the WebView alone leaves the content area blank, which looks
+      // like the page was closed. Capture the visible page first and paint
+      // that still under the overlay instead: the menu then appears to float
+      // over an unchanged page, and the still is dropped as soon as the page
+      // returns.
+      const tabId = active.id
+      // A second overlay (select inside a dialog) must keep the still captured
+      // by the first: the page is already hidden, so capturing again would
+      // paint a blank frame over a perfectly good one.
+      if (frozenForRef.current === tabId) {
+        void hideNativeTab(tabId)
+        return
+      }
+      frozenForRef.current = tabId
+      void (async () => {
+        const frame = await Promise.race([
+          captureNativeScreenshot(tabId, false)
+            .then(data => `data:image/png;base64,${data}`)
+            .catch(() => null),
+          // Never keep the overlay waiting on a slow capture: fall back to
+          // hiding the page, which is the old behaviour.
+          new Promise<null>(resolve => window.setTimeout(() => resolve(null), 400)),
+        ])
+        if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId || !overlayOpenRef.current) return
+        if (frame) {
+          setFrozenFrame(frame)
+          // Let React paint the still before the WebView disappears, otherwise
+          // one frame of the blank host surface shows through.
+          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+          if (frozenForRef.current !== tabId || activeTabIdRef.current !== tabId || !overlayOpenRef.current) return
+        }
+        await hideNativeTab(tabId)
+      })()
       return
     }
     const next = bounds()
@@ -567,6 +621,13 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       if (next) await resizeNativeTab(active.id, inset > 0 ? { ...next, width: Math.max(1, next.width - inset) } : next)
       if (cancelled || activeTabIdRef.current !== active.id || !visibleRef.current) return
       await showNativeTab(active.id)
+      // Drop the still only after the native page is visible again; clearing it
+      // first would flash the blank host surface for a frame. Skip if an
+      // overlay reopened while the page was being restored.
+      if (!cancelled && !overlayOpenRef.current && frozenForRef.current === active.id) {
+        frozenForRef.current = null
+        setFrozenFrame(null)
+      }
     }            )()
     return () => { cancelled = true }
   }, [active.error, active.id, modalOverlayCount, readerArticle, toolbarOverlay, visible])
@@ -3174,6 +3235,7 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
             : active.url
               ? <BrowserErrorView tab={{...active, error:{kind:'web-mode-required',message:translate("当前环境暂时无法打开此网页。")}}} onRetry={retryActive} onNewTab={openNewTab} onCopy={copyUrl}/>
               : <NewTab address={address} setAddress={setAddress} navigate={navigate} onCompareSearch={startComparison} onOpenLibrary={onOpenLibrary}/>}
+      {nativeMode && frozenFrame && <img className="web-surface__still" src={frozenFrame} alt="" aria-hidden="true"/>}
       {splitDocument && <DocumentSplitPane document={splitDocument} onClose={closeDocumentSplit} ratio={splitRatio}/>}
       {splitTabId && <div className="split-pane-head" style={{ left: `${splitRatio * 100}%`, width: `${(1 - splitRatio) * 100}%` }}>
         <Dropdown menu={{ items: tabs.filter(tab => tab.id !== active.id && !tab.private).slice(0, 12).map(tab => ({ key: tab.id, label: tab.title || tab.url, onClick: () => setSplitTabId(tab.id) })) }} trigger={['click']}>
