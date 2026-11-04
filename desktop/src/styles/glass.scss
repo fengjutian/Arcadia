@@ -130,7 +130,6 @@ body[data-theme] .app-topbar {
   backdrop-filter: blur(var(--glass-blur-chrome)) saturate(var(--glass-saturate));
   box-shadow:
     inset 0 -1px 0 var(--chrome-border, #d8ded9),
-    inset 0 1px 0 rgba(255, 255, 255, .4),
     0 14px 30px -26px rgba(24, 38, 30, .6);
 }
 

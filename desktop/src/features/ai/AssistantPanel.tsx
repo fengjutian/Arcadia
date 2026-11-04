@@ -9,13 +9,14 @@ import { buildAskPrompt, numberPassages, parseAnswer, passageById } from '@arcad
 import { buildSummaryPrompt, summaryKindLabel, type SummaryKind } from '@arcadia/ai-core/summarize'
 import { TRANSLATION_VIEW_LABEL, buildTranslatePrompt, detectTranslationTarget, translationKey, type TranslationView } from '@arcadia/ai-core/translate'
 import { useStreamingChat } from '@arcadia/ai-core/useStreamingChat'
+import type { SaveToLibraryOutcome } from '@arcadia/ai-core/floatingAssistant'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 
 type PanelMode = 'summarize' | 'ask' | 'translate'
 
 interface AssistantPanelProps {
   close: () => void
-  saveToLibrary: () => Promise<void>
+  saveToLibrary: (options?: { notify?: boolean }) => Promise<SaveToLibraryOutcome | void>
   currentUrl: string
   currentTabId: string
   readerArticle: ReaderArticle | null
@@ -62,6 +63,7 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
   const [targetLanguage, setTargetLanguage] = useState('zh-CN')
   const [translationView, setTranslationView] = useState<TranslationView>('translation-only')
   const [translation, setTranslation] = useState('')
+  const [savingToLibrary, setSavingToLibrary] = useState(false)
   const askStream = useStreamingChat()
   const [cache, setCache] = useState<TranslationCacheEntry[]>([])
   const panelRef = useRef<HTMLElement>(null)
@@ -236,6 +238,21 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
     } catch (caught) { messageApi.error(caught instanceof Error ? caught.message :t("保存失败"))}
   }
 
+  async function savePageToLibrary() {
+    if (savingToLibrary) return
+    setSavingToLibrary(true)
+    try {
+      // The caller may live in another window; ask it to stay quiet and show
+      // the outcome here, where the user is actually looking.
+      const outcome = await saveToLibrary({ notify: false })
+      if (outcome) messageApi.open({ type: outcome.type, content: outcome.message, duration: 3 })
+    } catch (caught) {
+      messageApi.error(caught instanceof Error ? caught.message : t("保存失败"))
+    } finally {
+      setSavingToLibrary(false)
+    }
+  }
+
   const currentProvider = providers.find(item => item.id === providerId)
   const noProvider = providers.length === 0
   const noArticle = !article?.markdown?.trim()
@@ -294,7 +311,7 @@ export function AssistantPanel({ close, saveToLibrary, currentUrl, currentTabId,
         </Card>
         <Space orientation="vertical" style={{width:'100%'}}>
           <Button block icon={<SaveOutlined/>} onClick={() => void saveAsDocumentSummary()} disabled={!summary}>{t("把摘要写回文档")}</Button>
-          <Button block onClick={() => void saveToLibrary()}>{t("保存到知识库")}</Button>
+          <Button block loading={savingToLibrary} disabled={savingToLibrary} onClick={() => void savePageToLibrary()}>{t("保存到知识库")}</Button>
         </Space>
       </>)
      }

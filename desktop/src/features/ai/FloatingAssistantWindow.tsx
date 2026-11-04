@@ -1,11 +1,11 @@
 import { t } from '@arcadia/i18n'
 import { useEffect, useState } from 'react'
-import { emitTo, listen } from '@tauri-apps/api/event'
+import { listen } from '@tauri-apps/api/event'
 import { AssistantPanel } from './AssistantPanel'
 import {
-  FLOATING_ASSISTANT_SAVE_EVENT,
   closeFloatingAssistant,
   readFloatingAssistantPayload,
+  requestFloatingAssistantSave,
   type FloatingAssistantPayload,
 } from '@arcadia/ai-core/floatingAssistant'
 
@@ -24,7 +24,7 @@ export function FloatingAssistantWindow() {
       {...payload}
       nativeWindow
       close={() => void closeFloatingAssistant(true)}
-      saveToLibrary={async () => { await emitTo('main', FLOATING_ASSISTANT_SAVE_EVENT) }}
+      saveToLibrary={options => requestFloatingAssistantSave(options?.notify ?? true)}
     />
   </div>
 }

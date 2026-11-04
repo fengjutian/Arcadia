@@ -32,8 +32,8 @@ import { emitLittleArcResult, listenLittleArcCapture, listenLittleArcOpenMain, o
 import { clipFromImage, clipFromLink, clipFromPage, clipFromSelection } from '../../features/clips/clips'
 import { scheduleExtrasSync } from '../../features/search/extrasSync'
 import { AssistantPanel } from '../../features/ai/AssistantPanel'
-import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, openFloatingAssistant } from '@arcadia/ai-core/floatingAssistant'
-import { listen } from '@tauri-apps/api/event'
+import { closeFloatingAssistant, FLOATING_ASSISTANT_CLOSED_EVENT, FLOATING_ASSISTANT_SAVE_EVENT, FLOATING_ASSISTANT_SAVE_RESULT_EVENT, openFloatingAssistant, type FloatingAssistantSaveRequest, type FloatingAssistantSaveResult, type SaveToLibraryOutcome } from '@arcadia/ai-core/floatingAssistant'
+import { emitTo, listen } from '@tauri-apps/api/event'
 import { renderSearchTemplate, resolveNavigationInput } from '@arcadia/browser-core/navigation'
 import { useDownloads } from '../../features/downloads/useDownloads'
 import { useDownloadQueue } from '../../features/downloads/useDownloadQueue'
@@ -237,6 +237,9 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
   const lastAdBlockCountRef = useRef<Record<string, number>>({})
   const lruSweepRunningRef = useRef(false)
   const floatingAssistantOpenedRef = useRef(false)
+  // Tauri listeners registered once must not close over the first render's
+  // `save`, otherwise the floating assistant archives a stale tab.
+  const saveRef = useRef<(options?: { notify?: boolean }) => Promise<SaveToLibraryOutcome>>(save)
   const active = tabs.find(tab => tab.id === activeTabId) ?? tabs[0]
   const [readerStyleVersion, setReaderStyleVersion] = useState(0)
   const readerSiteStyle = useMemo(() => readerStyleFor(active.url), [active.url, readerArticle, readerStyleVersion])
@@ -452,9 +455,26 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       setAiOpen(false)
       diagnosticLog('assistant.floating.closed', 'info')
     }).then(fn => { unlistenClosed = fn })
-    void listen(FLOATING_ASSISTANT_SAVE_EVENT, () => { void save() }).then(fn => { unlistenSave = fn })
+    void listen<FloatingAssistantSaveRequest | undefined>(FLOATING_ASSISTANT_SAVE_EVENT, event => {
+      const request = event.payload
+      const requestId = request?.requestId ?? ''
+      const notify = request?.notify ?? true
+      void saveRef.current({ notify }).then(outcome => {
+        if (!requestId) return
+        void emitTo('ai-assistant', FLOATING_ASSISTANT_SAVE_RESULT_EVENT, {
+          requestId,
+          outcome,
+        } satisfies FloatingAssistantSaveResult).catch(error => {
+          diagnosticLog('assistant.floating.save-result-failed', 'error', { error })
+        })
+      })
+    }).then(fn => { unlistenSave = fn })
     return () => { unlistenClosed?.(); unlistenSave?.() }
   }, [])
+
+  useEffect(() => {
+    saveRef.current = save
+  })
 
   useEffect(() => {
     if (!aiOpen) return
@@ -2898,11 +2918,16 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
     })
   }
 
-  async function save() {
+  async function save(options: { notify?: boolean } = {}): Promise<SaveToLibraryOutcome> {
+    const notify = options.notify ?? true
     const key = 'save-document'
+    const report = (outcome: SaveToLibraryOutcome) => {
+      if (notify) messageApi.open({ key, type: outcome.type, content: outcome.message })
+      return outcome
+    }
     try {
-      messageApi.open({ key, type: 'loading', content:translate("正在保存并提取\u2026"),duration:0})
-      let article = readerArticle ?? aiArticle
+      if (notify) messageApi.open({ key, type: 'loading', content:translate("正在保存并提取\u2026"),duration:0})
+      let article = readerArticle ?? aiArticle ?? pdfArticle
       if (!article && hasNativeTab(active.id)) article = extractArticle(await captureNativePage(active.id))
       if (!article?.markdown?.trim()) throw new Error('reader_content_not_found')
       const created = await saveDocument({ title: article.title || active.title, url: active.url || 'about:blank', markdown: article.markdown, tags: ['Inbox'] })
@@ -2914,15 +2939,17 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
       void dequeueUrl(active.url)
       for (let attempt = 0; attempt < 30; attempt++) {
         const document = await getDocument(created.id)
-        if (document.status === 'READY') { messageApi.open({ key, type: 'success', content:translate("已收藏并完成索引")});return}
+        if (document.status === 'READY') return report({ type: 'success', message: translate("已收藏并完成索引") })
         if (document.status === 'FAILED') throw new Error('processing failed')
         await new Promise(resolve => window.setTimeout(resolve, 200))
       }
-      messageApi.open({ key, type: 'info', content:translate("已收藏，后台仍在处理中")})
+      return report({ type: 'info', message: translate("已收藏，后台仍在处理中") })
     } catch (error) {
       const kind = classifySaveError(error)
       const contentEmpty = kind === 'reader_content_not_found'
-      messageApi.open({ key, type: contentEmpty ? 'error' : 'warning', content: contentEmpty ?translate("无法识别该页面正文，已取消保存"):translate("后端离线或处理失败，请稍后重试")})
+      return report(contentEmpty
+        ? { type: 'error', message: translate("无法识别该页面正文，已取消保存") }
+        : { type: 'warning', message: translate("后端离线或处理失败，请稍后重试") })
     }
   }
 

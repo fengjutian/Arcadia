@@ -180,6 +180,7 @@ export const assistant: Messages = {
   '知识助手回答': 'Knowledge assistant answer',
   '中文（简体）': 'Chinese (Simplified)',
   '中英对照': 'Bilingual',
+  '主窗口没有响应；请回到浏览器窗口后重试。': 'The main window did not respond. Return to the browser window and try again.',
   '重命名': 'Rename',
   '重命名对话': 'Rename chat',
   '重新生成': 'Regenerate',
