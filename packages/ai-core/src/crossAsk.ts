@@ -35,6 +35,35 @@ export interface CrossAskOptions {
   rankedDocumentIds?: readonly string[]
 }
 
+const RECENT_SAVED_QUERY = /(?:最近|近期|最新|刚刚|刚才).{0,12}(?:保存|收藏|收录)|(?:保存|收藏|收录).{0,12}(?:最近|近期|最新)|\b(?:recent(?:ly)?|latest|last)\b.{0,40}\b(?:saved|bookmarked|collected)\b|\b(?:saved|bookmarked|collected)\b.{0,40}\b(?:recent(?:ly)?|latest|last)\b/iu
+
+/**
+ * Resolve requests such as "summarize my recently saved content" without
+ * treating the intent words as full-text search terms. `null` means this is a
+ * normal knowledge query; an array means the query explicitly targets recent
+ * saves and contains document ids ordered newest first.
+ */
+export function recentSavedDocumentIds(
+  query: string,
+  documents: readonly KnowledgeDocument[],
+  limit = DEFAULT_TOP_K,
+): string[] | null {
+  if (!RECENT_SAVED_QUERY.test(query.trim())) return null
+  return documents
+    .map((document, index) => ({
+      document,
+      index,
+      createdAt: Date.parse(document.createdAt ?? ''),
+    }))
+    .sort((a, b) => {
+      const aTime = Number.isFinite(a.createdAt) ? a.createdAt : Number.NEGATIVE_INFINITY
+      const bTime = Number.isFinite(b.createdAt) ? b.createdAt : Number.NEGATIVE_INFINITY
+      return bTime - aTime || a.index - b.index
+    })
+    .slice(0, Math.max(0, limit))
+    .map(item => item.document.id)
+}
+
 /**
  * Fall back to the model's general knowledge when local retrieval has no
  * useful evidence. This is deliberately a separate request: it keeps the RAG

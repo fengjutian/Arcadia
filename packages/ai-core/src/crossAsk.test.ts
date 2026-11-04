@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_CHARS_PER_DOC, buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from './crossAsk'
+import { MAX_CHARS_PER_DOC, buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer, recentSavedDocumentIds } from './crossAsk'
 import type { KnowledgeDocument } from './types'
 
 type TestDoc = KnowledgeDocument & { wordCount: number; status: string; tags: string[]; createdAt: string; starred: boolean }
@@ -20,6 +20,20 @@ function makeDoc(partial: Partial<TestDoc>): TestDoc {
 }
 
 describe('crossAsk helpers', () => {
+  it('recognizes recent-save requests and orders matching documents newest first', () => {
+    const docs = [
+      makeDoc({ id: 'old', createdAt: '2026-01-01T00:00:00Z' }),
+      makeDoc({ id: 'newest', createdAt: '2026-11-04T08:00:00Z' }),
+      makeDoc({ id: 'middle', createdAt: '2026-06-01T00:00:00Z' }),
+    ]
+    expect(recentSavedDocumentIds('总结我最近保存的内容', docs, 2)).toEqual(['newest', 'middle'])
+    expect(recentSavedDocumentIds('Summarize my recently saved articles', docs, 2)).toEqual(['newest', 'middle'])
+  })
+
+  it('leaves ordinary knowledge queries on the normal retrieval path', () => {
+    expect(recentSavedDocumentIds('Loki 如何存储日志？', [makeDoc({ id: 'loki' })])).toBeNull()
+  })
+
   it('numbers every kept document and includes its URL', () => {
     const docs = [
       makeDoc({ id: 'a', title: 'Alpha', url: 'https://a', markdown: 'alpha body' }),

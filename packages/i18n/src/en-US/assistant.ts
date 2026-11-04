@@ -192,4 +192,5 @@ export const assistant: Messages = {
   'MCP 不可用，已跳过': 'MCP unavailable; skipped',
   'OpenAI 兼容': 'OpenAI-compatible',
   'PDF 文本': 'PDF text',
+  '知识库中没有可总结的已保存内容。': 'There is no saved content to summarize in the knowledge base.',
 }

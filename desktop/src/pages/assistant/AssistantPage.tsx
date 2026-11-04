@@ -49,12 +49,12 @@ import {
 } from '@assistant-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listDocuments, ragAnswer, saveDocument, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse, type RagCitation } from '../../api'
+import { aiChat, aiEmbed, getAssistantTask, getSession, listAIProviders, listCollectionDocumentIds, listDocuments, ragAnswer, saveDocument, searchDocuments, searchSimilarEmbeddings, setSession, startAssistantTask, type RagAnswerResponse, type RagCitation } from '../../api'
 import type { RagQuery } from '../../api'
 import { activeCollectionId } from '@arcadia/browser-core/spaces'
 import { DocumentDetailDrawer } from '../../features/documents/DocumentDetailDrawer'
 import { PeekDrawer, type PeekTarget } from '../../features/peek/PeekDrawer'
-import { buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer } from '@arcadia/ai-core/crossAsk'
+import { buildCitationRepairPrompt, buildCrossAskPrompt, buildGeneralAnswerPrompt, citationIdsInRequest, parseCrossAnswer, recentSavedDocumentIds } from '@arcadia/ai-core/crossAsk'
 import type { AIProvider, Document, View } from '../../types'
 import { compactChatHistory, restoreConversation } from '@arcadia/ai-core/conversation'
 import { hasUsableAnswerCitations, reciprocalRankFusion, stripModelReasoning, stripSourceBlocks, validateAnswerCitations } from '@arcadia/ai-core/rag'
@@ -507,12 +507,69 @@ export function AssistantPage({ onNavigate, initialQuestion = '', autoSubmit = f
 
          )        =>( {role:turn.role as'user'|'assistant',content:turn.role==='assistant'?stripSourceBlocks(turn.content):turn.content,})),12_000)
       const provider = providers.find(item => item.id === providerId)
+      const scopedCollection = activeCollectionId()
+      const recentIntentDocumentIds = recentSavedDocumentIds(prompt, documents, 8)
+      const scopedDocuments = recentIntentDocumentIds && scopedCollection
+        ? await listCollectionDocumentIds(scopedCollection)
+          .then(ids => {
+            const allowed = new Set(ids)
+            return documents.filter(document => allowed.has(document.id))
+          })
+          .catch(() => [])
+        : documents
+      const recentDocumentIds = recentIntentDocumentIds
+        ? recentSavedDocumentIds(prompt, scopedDocuments, 8)
+        : null
+      if (recentDocumentIds) {
+        if (recentDocumentIds.length === 0) {
+          patchTurn(pendingId, {
+            content: t("知识库中没有可总结的已保存内容。"),
+            documentIds: [],
+            docIds: undefined,
+            notFound: true,
+            pending: false,
+            backgroundTaskId: undefined,
+          })
+          return
+        }
+
+        // "Recent saves" is a temporal selection, not a lexical query. Feed
+        // the newest documents directly to the strict citation prompt instead
+        // of searching their bodies for words such as "recent" or "saved".
+        const request = buildCrossAskPrompt(
+          scopedDocuments,
+          prompt,
+          history.map(entry => ({ role: entry.role as 'user' | 'assistant', content: entry.content })),
+          { topK: 8, rankedDocumentIds: recentDocumentIds },
+        )
+        const response = await aiChat(providerId, request)
+        let parsed = parseCrossAnswer(stripModelReasoning(response.content))
+        let validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
+        if (!parsed.notFound && !validation.valid) {
+          const repairResponse = await aiChat(providerId, buildCitationRepairPrompt(request, parsed.answer))
+          parsed = parseCrossAnswer(stripModelReasoning(repairResponse.content))
+          validation = validateAnswerCitations(parsed.answer, citationIdsInRequest(request))
+        }
+        if (!parsed.notFound && !hasUsableAnswerCitations(validation)) {
+          throw new Error(t("模型未能按资料生成有效引用，请换一种问法或重试"))
+        }
+        patchTurn(pendingId, {
+          content: parsed.answer,
+          documentIds: parsed.docIds
+            .map(index => scopedDocuments[index - 1]?.id)
+            .filter((id): id is string => Boolean(id)),
+          docIds: undefined,
+          notFound: parsed.notFound,
+          pending: false,
+          backgroundTaskId: undefined,
+        })
+        return
+      }
       // Prefer the Rust `rag_answer` pipeline: it builds the evidence pack,
       // calls the model, validates citations, and applies one repair pass on
       // the Rust side.
       // Respect the active Space's knowledge scope: a Space bound to a
       // collection answers from that collection only.
-      const scopedCollection = activeCollectionId()
       const ragQuery: RagQuery = {
         query: prompt,
         topK: 8,

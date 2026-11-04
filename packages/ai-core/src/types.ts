@@ -76,4 +76,5 @@ export interface KnowledgeDocument {
   url: string
   markdown?: string
   summary?: string
+  createdAt?: string
 }
