@@ -18,6 +18,13 @@ export default defineConfig({
       '@tauri-apps/api/window',
     ],
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern-compiler',
+      },
+    },
+  },
   build: {
     // Keep Vite's advisory threshold aligned with the enforced bundle budget.
     // `npm run check:bundle` remains the source of truth and fails above 600 KiB.
