@@ -68,3 +68,4 @@ export function SkillHubPage({ onOpenUrl }: { onOpenUrl: (url: string) => void }
     <p className="skillhub-disclaimer">{t("技能内容来自 SkillHub 公开 API。安装或使用第三方 Skill 前，请检查其权限、文件内容和安全评测。")}</p>
   </section>
 }
+import '../../styles/skillhub.scss'

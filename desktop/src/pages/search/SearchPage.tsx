@@ -750,3 +750,5 @@ function stripMarkdown(md: string): string {
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/[*_`>]+/g, '')
 }
+import '../../styles/library.scss'
+import '../../styles/search.scss'

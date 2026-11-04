@@ -871,3 +871,4 @@ export function McpPage({ onOpenUrl, onAskAssistant }: {
     </Modal>
   </section>
 }
+import '../../styles/mcp.scss'

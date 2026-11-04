@@ -846,3 +846,4 @@ export function LibraryPage({ onOpenBrowser }: { onOpenBrowser?: () => void }) {
     <DocumentDetailDrawer document={selected} onClose={() => setSelected(null)} onDeleted={id => setDocuments(items => items.filter(item => item.id !== id))} onExported={onExported} onUpdated={handleDocumentUpdated}/>
   </section>
 }
+import '../../styles/library.scss'

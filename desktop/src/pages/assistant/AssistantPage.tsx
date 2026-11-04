@@ -1,4 +1,6 @@
 import { t } from '@arcadia/i18n'
+import '../../styles/library.scss'
+import '../../styles/mcp.scss'
 import {
   Alert,
   Button,

@@ -1905,3 +1905,4 @@ export function SettingsPage({ onOpenUrl }: { onOpenUrl?: (url: string) => void 
     <Tabs className="settings-tabs" tabPosition="left" items={items} defaultActiveKey={t("通用")}/>
   </section>
 }
+import '../../styles/settings.scss'

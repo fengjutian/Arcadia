@@ -19,17 +19,23 @@ const escapeName = (name: string) => name
 async function extractPdf(file: File): Promise<string> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   const data = new Uint8Array(await file.arrayBuffer())
-  const pdf = await pdfjs.getDocument({ data }).promise
+  const loadingTask = pdfjs.getDocument({ data, verbosity: 0 })
+  const pdf = await loadingTask.promise
   const pages: string[] = []
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-    const page = await pdf.getPage(pageNumber)
-    const content = await page.getTextContent()
-    const text = content.items
-      .map(item => ('str' in item ? item.str : ''))
-      .filter(Boolean)
-      .join(' ')
-    if (text) pages.push(`--- 第 ${pageNumber} 页 ---\n${text}`)
-    if (pages.join('\n\n').length >= MAX_TEXT_CHARS) break
+  let extractedChars = 0
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages && extractedChars < MAX_TEXT_CHARS; pageNumber++) {
+      const page = await pdf.getPage(pageNumber)
+      const content = await page.getTextContent()
+      const text = content.items
+        .map(item => ('str' in item ? item.str : ''))
+        .filter(Boolean)
+        .join(' ')
+      if (text) pages.push(`--- 第 ${pageNumber} 页 ---\n${text}`)
+      if (text) extractedChars += text.length + 24
+    }
+  } finally {
+    await loadingTask.destroy()
   }
   return pages.join('\n\n')
 }
