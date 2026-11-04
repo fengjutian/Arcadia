@@ -2823,7 +2823,6 @@ export function BrowserPage({ visible = true, onSearchKnowledge, onOpenLibrary }
 
   async function runBulkSummary(urls: string[], kind: 'one-sentence' | 'short' | 'detailed' | 'key-points') {
     const { aiChat: sendChat } = await import('../../api')
-    const { extractArticle } = await import('@arcadia/reader')
     const { buildSummaryPrompt } = await import('@arcadia/ai-core/summarize')
     const { listAIProviders } = await import('../../api')
     const providers = await listAIProviders().catch(() => [])

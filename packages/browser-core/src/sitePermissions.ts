@@ -16,15 +16,21 @@
  */
 
 import { replaceSitePermissions } from './browserApi'
+import type {
+  LegacySitePermissionRule,
+  SitePermissionKind,
+  SitePermissionRule,
+  SitePermissionValue,
+} from './sitePermissionTypes'
+
+export type {
+  LegacySitePermissionRule,
+  SitePermissionKind,
+  SitePermissionRule,
+  SitePermissionValue,
+} from './sitePermissionTypes'
 
 export const SITE_PERMISSIONS_KEY = 'browser.sitePermissions.v2'
-
-export type SitePermissionKind =
-  | 'camera'
-  | 'microphone'
-  | 'location'
-  | 'notifications'
-  | 'clipboard'
 
 export const SITE_PERMISSION_KINDS: SitePermissionKind[] = [
   'camera',
@@ -33,26 +39,6 @@ export const SITE_PERMISSION_KINDS: SitePermissionKind[] = [
   'notifications',
   'clipboard',
 ]
-
-export type SitePermissionValue = 'allow' | 'deny' | 'ask'
-
-export interface SitePermissionRule {
-  origin: string
-  camera: SitePermissionValue
-  microphone: SitePermissionValue
-  location: SitePermissionValue
-  notifications: SitePermissionValue
-  clipboard: SitePermissionValue
-}
-
-export interface LegacySitePermissionRule {
-  origin: string
-  camera?: boolean
-  microphone?: boolean
-  location?: boolean
-  notifications?: boolean
-  clipboard?: boolean
-}
 
 const DEFAULT_RULE: Omit<SitePermissionRule, 'origin'> = {
   camera: 'ask',

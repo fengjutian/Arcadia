@@ -6,7 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import type { SitePermissionRule, SitePermissionKind } from './sitePermissions'
+import type { SitePermissionRule, SitePermissionKind } from './sitePermissionTypes'
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
