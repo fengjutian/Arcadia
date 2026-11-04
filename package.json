@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "npm run dev -w @arcadia/desktop",
     "build": "npm run build -w @arcadia/desktop",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
     "test": "npm run test --workspaces --if-present",
     "test:rust": "npm run test:rust -w @arcadia/desktop",
     "tauri:dev": "npm run tauri:dev -w @arcadia/desktop",

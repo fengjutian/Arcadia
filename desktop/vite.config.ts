@@ -21,9 +21,15 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          markdown: ['react-markdown', 'remark-gfm'],
-          tauri: ['@tauri-apps/api'],
+        manualChunks(id) {
+          const moduleId = id.replaceAll('\\', '/')
+          if (!moduleId.includes('/node_modules/')) return undefined
+          if (moduleId.includes('/@assistant-ui/')) return 'assistant-ui'
+          if (/\/(react|react-dom|scheduler)\//.test(moduleId)) return 'react-vendor'
+          if (moduleId.includes('/lucide-react/')) return 'icons'
+          if (/\/(react-markdown|remark-|rehype-|unified|micromark|mdast-|hast-|unist-)/.test(moduleId)) return 'markdown'
+          if (moduleId.includes('/@tauri-apps/')) return 'tauri'
+          return undefined
         },
       },
     },
